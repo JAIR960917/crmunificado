@@ -294,6 +294,28 @@ export default function SalesReportPage() {
   const totalItensGeral = grouped.reduce((a, g) => a + g.totalItens, 0);
   const totalVendasGeral = grouped.reduce((a, g) => a + g.vendas.length, 0);
 
+  // Resume as categorias de UM vendedor (apenas categorias com qtd > 0)
+  function categoriasDoVendedor(vendasDoVendedor: Venda[]) {
+    const map = new Map<Categoria, { quantidade: number; valorTotal: number }>();
+    for (const cat of CATEGORIAS) map.set(cat, { quantidade: 0, valorTotal: 0 });
+    map.set("Outros", { quantidade: 0, valorTotal: 0 });
+
+    vendasDoVendedor.forEach((v) => {
+      v.itens.forEach((it) => {
+        const cat = classificarItem(it.produto?.grupo, it.produto?.descricao);
+        const cur = map.get(cat)!;
+        cur.quantidade += Number(it.quantidade || 0);
+        cur.valorTotal += Number(it.valor_total_liquido || 0);
+      });
+    });
+
+    const order: Categoria[] = [...CATEGORIAS, "Outros"];
+    return order
+      .map((c) => ({ categoria: c, ...map.get(c)! }))
+      .filter((g) => g.quantidade > 0);
+  }
+
+
   const exportPDF = () => {
     if (!vendas || vendas.length === 0) {
       toast.error("Nenhum dado para exportar");
