@@ -607,6 +607,44 @@ export default function SalesReportPage() {
               </Card>
             </div>
 
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Layers className="h-4 w-4" />
+                  Resumo por Categoria
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {groupedByCategoria.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    Nenhum produto categorizado no período.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {groupedByCategoria.map((c) => (
+                      <div
+                        key={c.categoria}
+                        className="rounded-lg border bg-card p-4 flex flex-col gap-1"
+                      >
+                        <div className="text-xs text-muted-foreground uppercase tracking-wide">
+                          {c.categoria}
+                        </div>
+                        <div className="text-3xl font-bold leading-none">
+                          {c.quantidade}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          produto(s) vendido(s)
+                        </div>
+                        <div className="text-xs font-medium text-primary mt-1">
+                          {fmtBRL(c.valorTotal)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <div className="flex justify-end">
               <Button
                 onClick={exportPDF}
