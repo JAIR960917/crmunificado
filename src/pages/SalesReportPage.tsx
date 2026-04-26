@@ -20,7 +20,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Loader2, FileDown, RefreshCw, Calendar, CalendarIcon, Package, Users, ShoppingBag } from "lucide-react";
+import { Loader2, FileDown, RefreshCw, Calendar, CalendarIcon, Package, Users, ShoppingBag, Layers } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -175,6 +175,92 @@ export default function SalesReportPage() {
     }
   };
 
+  // Categorias agregadas (independente do modelo/marca específica)
+  const CATEGORIAS = [
+    "Armação",
+    "Óculos Solar",
+    "Lentes",
+    "Consulta A 50",
+    "Consulta A 100",
+  ] as const;
+  type Categoria = typeof CATEGORIAS[number] | "Outros";
+
+  const norm = (s: string) =>
+    (s || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+  function classificarItem(
+    grupo: string | null | undefined,
+    descricao: string | null | undefined,
+  ): Categoria {
+    const g = norm(grupo || "");
+    const d = norm(descricao || "");
+    const t = `${g} ${d}`;
+
+    // Consultas (verificar antes de "armação" para evitar falsos positivos)
+    if (/consulta/.test(t) && /\b(a\s*100|a100|100)\b/.test(t)) return "Consulta A 100";
+    if (/consulta/.test(t) && /\b(a\s*50|a50|50)\b/.test(t)) return "Consulta A 50";
+
+    // Óculos Solar (verificar antes de "armação" porque solar pode conter armação)
+    if (/solar/.test(t) || /\bsol\b/.test(t)) return "Óculos Solar";
+
+    // Lentes (oftálmicas, de contato, etc.)
+    if (/lente/.test(t)) return "Lentes";
+
+    // Armação (grau)
+    if (/armaca/.test(t) || /\barma\b/.test(t)) return "Armação";
+
+    return "Outros";
+  }
+
+  // Agrupa por categoria de produto (somando quantidades)
+  const groupedByCategoria = useMemo(() => {
+    const map = new Map<
+      Categoria,
+      { categoria: Categoria; quantidade: number; valorTotal: number; vendasUnicas: Set<number> }
+    >();
+    for (const cat of CATEGORIAS) {
+      map.set(cat, {
+        categoria: cat,
+        quantidade: 0,
+        valorTotal: 0,
+        vendasUnicas: new Set(),
+      });
+    }
+    map.set("Outros", {
+      categoria: "Outros",
+      quantidade: 0,
+      valorTotal: 0,
+      vendasUnicas: new Set(),
+    });
+
+    (vendas || []).forEach((v) => {
+      v.itens.forEach((it) => {
+        const cat = classificarItem(it.produto?.grupo, it.produto?.descricao);
+        const cur = map.get(cat)!;
+        cur.quantidade += Number(it.quantidade || 0);
+        cur.valorTotal += Number(it.valor_total_liquido || 0);
+        cur.vendasUnicas.add(v.id);
+      });
+    });
+
+    // Mostra apenas categorias com pelo menos 1 produto vendido,
+    // mantendo a ordem fixa das CATEGORIAS e "Outros" no fim.
+    const order: Categoria[] = [...CATEGORIAS, "Outros"];
+    return order
+      .map((c) => map.get(c)!)
+      .filter((g) => g.quantidade > 0)
+      .map((g) => ({
+        categoria: g.categoria,
+        quantidade: g.quantidade,
+        valorTotal: g.valorTotal,
+        vendas: g.vendasUnicas.size,
+      }));
+  }, [vendas]);
+
   // Agrupa por vendedor (funcionario.nome). Vendas sem funcionário vão em "Sem vendedor".
   const grouped = useMemo(() => {
     const map = new Map<
@@ -238,6 +324,33 @@ export default function SalesReportPage() {
     );
 
     let y = 120;
+
+    // Resumo por Categoria (visão consolidada de produtos vendidos)
+    if (groupedByCategoria.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("Resumo por Categoria", 40, y);
+      y += 10;
+      autoTable(doc, {
+        startY: y,
+        head: [["Categoria", "Qtd vendida", "Valor total"]],
+        body: groupedByCategoria.map((c) => [
+          c.categoria,
+          String(c.quantidade),
+          fmtBRL(c.valorTotal),
+        ]),
+        theme: "grid",
+        styles: { fontSize: 9, cellPadding: 5 },
+        headStyles: { fillColor: [60, 60, 60], textColor: 255 },
+        columnStyles: {
+          0: { cellWidth: 220 },
+          1: { cellWidth: 90, halign: "center" },
+          2: { cellWidth: 120, halign: "right" },
+        },
+        margin: { left: 40, right: 40 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 24;
+    }
 
     grouped.forEach((g, idx) => {
       // Sub-cabeçalho do vendedor
@@ -520,6 +633,44 @@ export default function SalesReportPage() {
                 </CardContent>
               </Card>
             </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Layers className="h-4 w-4" />
+                  Resumo por Categoria
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {groupedByCategoria.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    Nenhum produto categorizado no período.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {groupedByCategoria.map((c) => (
+                      <div
+                        key={c.categoria}
+                        className="rounded-lg border bg-card p-4 flex flex-col gap-1"
+                      >
+                        <div className="text-xs text-muted-foreground uppercase tracking-wide">
+                          {c.categoria}
+                        </div>
+                        <div className="text-3xl font-bold leading-none">
+                          {c.quantidade}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          produto(s) vendido(s)
+                        </div>
+                        <div className="text-xs font-medium text-primary mt-1">
+                          {fmtBRL(c.valorTotal)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             <div className="flex justify-end">
               <Button
