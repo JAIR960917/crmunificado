@@ -325,6 +325,33 @@ export default function SalesReportPage() {
 
     let y = 120;
 
+    // Resumo por Categoria (visão consolidada de produtos vendidos)
+    if (groupedByCategoria.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("Resumo por Categoria", 40, y);
+      y += 10;
+      autoTable(doc, {
+        startY: y,
+        head: [["Categoria", "Qtd vendida", "Valor total"]],
+        body: groupedByCategoria.map((c) => [
+          c.categoria,
+          String(c.quantidade),
+          fmtBRL(c.valorTotal),
+        ]),
+        theme: "grid",
+        styles: { fontSize: 9, cellPadding: 5 },
+        headStyles: { fillColor: [60, 60, 60], textColor: 255 },
+        columnStyles: {
+          0: { cellWidth: 220 },
+          1: { cellWidth: 90, halign: "center" },
+          2: { cellWidth: 120, halign: "right" },
+        },
+        margin: { left: 40, right: 40 },
+      });
+      y = (doc as any).lastAutoTable.finalY + 24;
+    }
+
     grouped.forEach((g, idx) => {
       // Sub-cabeçalho do vendedor
       if (y > 720) {
