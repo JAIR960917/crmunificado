@@ -294,6 +294,28 @@ export default function SalesReportPage() {
   const totalItensGeral = grouped.reduce((a, g) => a + g.totalItens, 0);
   const totalVendasGeral = grouped.reduce((a, g) => a + g.vendas.length, 0);
 
+  // Resume as categorias de UM vendedor (apenas categorias com qtd > 0)
+  function categoriasDoVendedor(vendasDoVendedor: Venda[]) {
+    const map = new Map<Categoria, { quantidade: number; valorTotal: number }>();
+    for (const cat of CATEGORIAS) map.set(cat, { quantidade: 0, valorTotal: 0 });
+    map.set("Outros", { quantidade: 0, valorTotal: 0 });
+
+    vendasDoVendedor.forEach((v) => {
+      v.itens.forEach((it) => {
+        const cat = classificarItem(it.produto?.grupo, it.produto?.descricao);
+        const cur = map.get(cat)!;
+        cur.quantidade += Number(it.quantidade || 0);
+        cur.valorTotal += Number(it.valor_total_liquido || 0);
+      });
+    });
+
+    const order: Categoria[] = [...CATEGORIAS, "Outros"];
+    return order
+      .map((c) => ({ categoria: c, ...map.get(c)! }))
+      .filter((g) => g.quantidade > 0);
+  }
+
+
   const exportPDF = () => {
     if (!vendas || vendas.length === 0) {
       toast.error("Nenhum dado para exportar");
@@ -369,53 +391,24 @@ export default function SalesReportPage() {
       doc.setTextColor(0, 0, 0);
       y += 28;
 
-      // Tabela de produtos do vendedor
-      const rows: any[] = [];
-      g.vendas.forEach((v) => {
-        v.itens.forEach((it) => {
-          rows.push([
-            v.data
-              ? format(new Date(v.data + "T00:00:00"), "dd/MM/yy")
-              : "—",
-            String(v.numero),
-            v.cliente?.nome || "—",
-            it.produto?.descricao || "—",
-            it.produto?.grupo || "—",
-            String(it.quantidade),
-            fmtBRL(it.valor_total_liquido),
-          ]);
-        });
-        // Vendas sem itens detalhados
-        if (v.itens.length === 0) {
-          rows.push([
-            v.data
-              ? format(new Date(v.data + "T00:00:00"), "dd/MM/yy")
-              : "—",
-            String(v.numero),
-            v.cliente?.nome || "—",
-            "(sem itens detalhados)",
-            "—",
-            "—",
-            fmtBRL(v.valor_liquido),
-          ]);
-        }
-      });
+      // Resumo por categoria do vendedor
+      const catRows = categoriasDoVendedor(g.vendas).map((c) => [
+        c.categoria,
+        String(c.quantidade),
+        fmtBRL(c.valorTotal),
+      ]);
 
       autoTable(doc, {
         startY: y,
-        head: [["Data", "Venda", "Cliente", "Produto", "Grupo", "Qtd", "Valor"]],
-        body: rows,
+        head: [["Categoria", "Qtd vendida", "Valor total"]],
+        body: catRows.length > 0 ? catRows : [["Sem produtos", "0", fmtBRL(0)]],
         theme: "grid",
-        styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
-        headStyles: { fillColor: [60, 60, 60], textColor: 255, fontSize: 8 },
+        styles: { fontSize: 9, cellPadding: 5 },
+        headStyles: { fillColor: [60, 60, 60], textColor: 255, fontSize: 9 },
         columnStyles: {
-          0: { cellWidth: 50 },
-          1: { cellWidth: 40 },
-          2: { cellWidth: 90 },
-          3: { cellWidth: 130 },
-          4: { cellWidth: 60 },
-          5: { cellWidth: 30, halign: "center" },
-          6: { cellWidth: 60, halign: "right" },
+          0: { cellWidth: 260 },
+          1: { cellWidth: 100, halign: "center" },
+          2: { cellWidth: 130, halign: "right" },
         },
         margin: { left: 40, right: 40 },
       });
@@ -726,85 +719,39 @@ export default function SalesReportPage() {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-4 pb-4">
-                      <div className="border rounded-md overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead className="bg-muted/50">
-                            <tr className="text-left">
-                              <th className="px-3 py-2 font-medium">Data</th>
-                              <th className="px-3 py-2 font-medium">Venda</th>
-                              <th className="px-3 py-2 font-medium">Cliente</th>
-                              <th className="px-3 py-2 font-medium">Produto</th>
-                              <th className="px-3 py-2 font-medium">Grupo</th>
-                              <th className="px-3 py-2 font-medium text-center">
-                                Qtd
-                              </th>
-                              <th className="px-3 py-2 font-medium text-right">
-                                Valor
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {g.vendas.flatMap((v) =>
-                              v.itens.length > 0
-                                ? v.itens.map((it) => (
-                                    <tr key={`${v.id}-${it.id}`}>
-                                      <td className="px-3 py-2 whitespace-nowrap">
-                                        {v.data
-                                          ? format(
-                                              new Date(v.data + "T00:00:00"),
-                                              "dd/MM/yy",
-                                              { locale: ptBR },
-                                            )
-                                          : "—"}
-                                      </td>
-                                      <td className="px-3 py-2">#{v.numero}</td>
-                                      <td className="px-3 py-2 truncate max-w-[180px]">
-                                        {v.cliente?.nome || "—"}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {it.produto?.descricao || "—"}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {it.produto?.grupo || "—"}
-                                      </td>
-                                      <td className="px-3 py-2 text-center">
-                                        {it.quantidade}
-                                      </td>
-                                      <td className="px-3 py-2 text-right font-medium">
-                                        {fmtBRL(it.valor_total_liquido)}
-                                      </td>
-                                    </tr>
-                                  ))
-                                : [
-                                    <tr key={`${v.id}-empty`}>
-                                      <td className="px-3 py-2 whitespace-nowrap">
-                                        {v.data
-                                          ? format(
-                                              new Date(v.data + "T00:00:00"),
-                                              "dd/MM/yy",
-                                              { locale: ptBR },
-                                            )
-                                          : "—"}
-                                      </td>
-                                      <td className="px-3 py-2">#{v.numero}</td>
-                                      <td className="px-3 py-2 truncate max-w-[180px]">
-                                        {v.cliente?.nome || "—"}
-                                      </td>
-                                      <td
-                                        className="px-3 py-2 italic text-muted-foreground"
-                                        colSpan={3}
-                                      >
-                                        (sem itens detalhados)
-                                      </td>
-                                      <td className="px-3 py-2 text-right font-medium">
-                                        {fmtBRL(v.valor_liquido)}
-                                      </td>
-                                    </tr>,
-                                  ],
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
+                      {(() => {
+                        const cats = categoriasDoVendedor(g.vendas);
+                        if (cats.length === 0) {
+                          return (
+                            <div className="text-sm text-muted-foreground italic px-1 py-2">
+                              Sem produtos categorizados.
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                            {cats.map((c) => (
+                              <div
+                                key={c.categoria}
+                                className="rounded-lg border bg-muted/30 p-3 flex flex-col gap-1"
+                              >
+                                <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                  {c.categoria}
+                                </div>
+                                <div className="text-2xl font-bold leading-none">
+                                  {c.quantidade}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground">
+                                  produto(s)
+                                </div>
+                                <div className="text-xs font-medium text-primary mt-1">
+                                  {fmtBRL(c.valorTotal)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </AccordionContent>
                   </AccordionItem>
                 ))}
