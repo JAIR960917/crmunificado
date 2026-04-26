@@ -391,53 +391,24 @@ export default function SalesReportPage() {
       doc.setTextColor(0, 0, 0);
       y += 28;
 
-      // Tabela de produtos do vendedor
-      const rows: any[] = [];
-      g.vendas.forEach((v) => {
-        v.itens.forEach((it) => {
-          rows.push([
-            v.data
-              ? format(new Date(v.data + "T00:00:00"), "dd/MM/yy")
-              : "—",
-            String(v.numero),
-            v.cliente?.nome || "—",
-            it.produto?.descricao || "—",
-            it.produto?.grupo || "—",
-            String(it.quantidade),
-            fmtBRL(it.valor_total_liquido),
-          ]);
-        });
-        // Vendas sem itens detalhados
-        if (v.itens.length === 0) {
-          rows.push([
-            v.data
-              ? format(new Date(v.data + "T00:00:00"), "dd/MM/yy")
-              : "—",
-            String(v.numero),
-            v.cliente?.nome || "—",
-            "(sem itens detalhados)",
-            "—",
-            "—",
-            fmtBRL(v.valor_liquido),
-          ]);
-        }
-      });
+      // Resumo por categoria do vendedor
+      const catRows = categoriasDoVendedor(g.vendas).map((c) => [
+        c.categoria,
+        String(c.quantidade),
+        fmtBRL(c.valorTotal),
+      ]);
 
       autoTable(doc, {
         startY: y,
-        head: [["Data", "Venda", "Cliente", "Produto", "Grupo", "Qtd", "Valor"]],
-        body: rows,
+        head: [["Categoria", "Qtd vendida", "Valor total"]],
+        body: catRows.length > 0 ? catRows : [["Sem produtos", "0", fmtBRL(0)]],
         theme: "grid",
-        styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
-        headStyles: { fillColor: [60, 60, 60], textColor: 255, fontSize: 8 },
+        styles: { fontSize: 9, cellPadding: 5 },
+        headStyles: { fillColor: [60, 60, 60], textColor: 255, fontSize: 9 },
         columnStyles: {
-          0: { cellWidth: 50 },
-          1: { cellWidth: 40 },
-          2: { cellWidth: 90 },
-          3: { cellWidth: 130 },
-          4: { cellWidth: 60 },
-          5: { cellWidth: 30, halign: "center" },
-          6: { cellWidth: 60, halign: "right" },
+          0: { cellWidth: 260 },
+          1: { cellWidth: 100, halign: "center" },
+          2: { cellWidth: 130, halign: "right" },
         },
         margin: { left: 40, right: 40 },
       });
