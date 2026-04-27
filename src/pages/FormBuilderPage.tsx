@@ -150,8 +150,15 @@ export default function FormBuilderPage() {
     setShowOnCard(field.show_on_card);
     setParentFieldId(field.parent_field_id || "__none__");
     setParentTriggerValues(parseTriggerValues(field.parent_trigger_value));
-    setIsStatusField(!!field.status_mapping);
-    setStatusMapping(field.status_mapping || {});
+    const mapping = field.status_mapping || {};
+    const anyKey = mapping["__any__"];
+    setIsAnyAnswerRedirect(!!anyKey);
+    setAnyAnswerStatusKey(anyKey || "");
+    // Mapeamento por valor: ignora a chave especial __any__
+    const valueMapping: Record<string, string> = {};
+    Object.entries(mapping).forEach(([k, v]) => { if (k !== "__any__") valueMapping[k] = v; });
+    setIsStatusField(Object.keys(valueMapping).length > 0);
+    setStatusMapping(valueMapping);
     setIsDateStatusField(!!field.date_status_ranges);
     if (field.date_status_ranges) {
       setDateStatusRanges(field.date_status_ranges as DateStatusConfig);
