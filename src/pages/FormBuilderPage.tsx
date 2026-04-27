@@ -307,12 +307,13 @@ export default function FormBuilderPage() {
           depth > 0 ? "ml-6 sm:ml-10 border-l-2 border-l-primary/30" : ""
         }`}
       >
-        <span {...(dragHandleProps || {})} className="shrink-0 cursor-grab active:cursor-grabbing">
-          {depth === 0 ? (
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <CornerDownRight className="h-4 w-4 text-primary/50" />
-          )}
+        <span
+          {...(dragHandleProps || {})}
+          className="shrink-0 cursor-grab active:cursor-grabbing flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
+          title="Arraste para reordenar"
+        >
+          <GripVertical className="h-4 w-4" />
+          {depth > 0 && <CornerDownRight className="h-3.5 w-3.5 text-primary/50" />}
         </span>
         <div className="flex-1 min-w-0">
           <p className="font-medium text-sm truncate">
