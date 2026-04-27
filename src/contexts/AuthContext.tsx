@@ -54,15 +54,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted) return;
 
+      // INITIAL_SESSION é tratado pelo restoreSession()
       if (event === "INITIAL_SESSION") {
         return;
       }
 
-      setSession(nextSession);
-      if (!nextSession) {
+      // Só limpa a sessão em logout explícito ou usuário removido.
+      // TOKEN_REFRESHED com falha temporária pode emitir nextSession=null
+      // sem que o usuário tenha realmente saído — ignorar evita "fechar" o CRM.
+      if (event === "SIGNED_OUT") {
+        setSession(null);
         setRoles([]);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+
+      // Para SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED, etc. só atualiza se houver sessão.
+      if (nextSession) {
+        setSession(nextSession);
+        setLoading(false);
+      }
     });
 
     return () => {
