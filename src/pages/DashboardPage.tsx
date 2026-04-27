@@ -345,11 +345,19 @@ export default function DashboardPage() {
     Promise.all([
       fetchTotals(companyFilter),
       fetchReport(start, end),
-      fetchCobrancaReport(start, end),
     ]).finally(() => setLoading(false));
   }, [canSee, user, dateMode, selectedDate, startDate, endDate, companyFilter]);
 
-  // Realtime: refresh report when opens or notes change
+  // Relatório de Cobranças usa filtros de período próprios
+  useEffect(() => {
+    if (!canSee || !user) return;
+    setLoadingCob(true);
+    const start = cobDateMode === "day" ? cobSelectedDate : cobStartDate;
+    const end = cobDateMode === "day" ? cobSelectedDate : cobEndDate;
+    fetchCobrancaReport(start, end).finally(() => setLoadingCob(false));
+  }, [canSee, user, cobDateMode, cobSelectedDate, cobStartDate, cobEndDate]);
+
+  // Realtime: refresh reports when opens or notes change
   useEffect(() => {
     if (!canSee || !user) return;
 
@@ -357,13 +365,14 @@ export default function DashboardPage() {
     const refresh = () => {
       if (scheduled) return;
       scheduled = true;
-      // Debounce burst of events into a single refresh
       setTimeout(() => {
         scheduled = false;
         const start = dateMode === "day" ? selectedDate : startDate;
         const end = dateMode === "day" ? selectedDate : endDate;
+        const cobStart = cobDateMode === "day" ? cobSelectedDate : cobStartDate;
+        const cobEnd = cobDateMode === "day" ? cobSelectedDate : cobEndDate;
         fetchReport(start, end);
-        fetchCobrancaReport(start, end);
+        fetchCobrancaReport(cobStart, cobEnd);
         fetchTotals(companyFilter);
       }, 400);
     };
@@ -379,7 +388,7 @@ export default function DashboardPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [canSee, user, dateMode, selectedDate, startDate, endDate, companyFilter]);
+  }, [canSee, user, dateMode, selectedDate, startDate, endDate, companyFilter, cobDateMode, cobSelectedDate, cobStartDate, cobEndDate]);
 
   // Reset seller filter when company changes
   useEffect(() => {
