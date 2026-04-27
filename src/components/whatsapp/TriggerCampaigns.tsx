@@ -562,7 +562,7 @@ export default function TriggerCampaigns({ instances }: Props) {
                         {c.company_id ? (
                           <Badge variant="secondary" className="text-[10px]">{getCompanyName(c.company_id)}</Badge>
                         ) : (
-                          <Badge variant="destructive" className="text-[10px]">Sem empresa</Badge>
+                          <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-500 border-blue-500/30">🌐 Global (todas as empresas)</Badge>
                         )}
                         {c.instance_id && (
                           <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
