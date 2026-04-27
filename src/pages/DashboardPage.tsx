@@ -357,6 +357,7 @@ export default function DashboardPage() {
         const start = dateMode === "day" ? selectedDate : startDate;
         const end = dateMode === "day" ? selectedDate : endDate;
         fetchReport(start, end);
+        fetchCobrancaReport(start, end);
         fetchTotals(companyFilter);
       }, 400);
     };
@@ -366,6 +367,7 @@ export default function DashboardPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "lead_card_opens" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_lead_notes" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_renovacao_notes" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "crm_cobranca_notes" }, refresh)
       .subscribe();
 
     return () => {
