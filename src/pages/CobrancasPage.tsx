@@ -406,6 +406,16 @@ export default function CobrancasPage() {
         })()}
 
         <div className="pt-2 border-t">
+          {renegociou === "sim" && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-600 px-2 py-0.5 rounded-full uppercase mr-1">
+              ✅ Renegociou
+            </span>
+          )}
+          {renegociou === "nao" && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-red-600 px-2 py-0.5 rounded-full uppercase mr-1">
+              ❌ Não renegociou
+            </span>
+          )}
           {hasOverdue && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full uppercase">
               <AlertTriangle className="h-3 w-3" />Atrasada
