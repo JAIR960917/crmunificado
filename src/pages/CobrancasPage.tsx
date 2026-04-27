@@ -120,21 +120,34 @@ export default function CobrancasPage() {
   });
 
   const loadMeta = useCallback(async () => {
-    const [{ data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }, { data: notes }] = await Promise.all([
+    const [
+      { data: sts }, { data: profs }, { data: comps }, { data: roles },
+      { data: acts }, { data: notes }, { data: checklist }, { data: comps2 }
+    ] = await Promise.all([
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("user_roles").select("user_id, role").eq("role", "financeiro"),
       supabase.from("cobranca_activities").select("id, cobranca_id, title, scheduled_date, completed_at"),
       supabase.from("crm_cobranca_notes").select("cobranca_id"),
+      supabase.from("crm_cobranca_status_checklist" as any).select("*").order("position"),
+      supabase.from("crm_cobranca_checklist_completions" as any).select("id, cobranca_id, status_id, checklist_item_id"),
     ]);
-    setStatuses((sts || []) as CrmStatus[]);
+    const allSts = ((sts || []) as unknown) as CrmStatus[];
+    setAllStatuses(allSts);
+    // Financeiro só vê colunas marcadas como visíveis
+    const visible = isFinanceiro && !isAdmin && !isGerente
+      ? allSts.filter(s => s.financeiro_visible !== false)
+      : allSts;
+    setStatuses(visible);
     setProfiles((profs || []) as Profile[]);
     setCompanies((comps || []) as Company[]);
     setFinanceiroIds(new Set((roles || []).map((r: any) => r.user_id)));
     setActivities((acts || []) as CobrancaActivity[]);
     setNoteIds(new Set((notes || []).map((n: any) => n.cobranca_id)));
-  }, []);
+    setChecklistItems(((checklist || []) as unknown) as ChecklistItem[]);
+    setCompletions(((comps2 || []) as unknown) as ChecklistCompletion[]);
+  }, [isFinanceiro, isAdmin, isGerente]);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
 
