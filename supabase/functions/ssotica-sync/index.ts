@@ -1903,7 +1903,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, results, started_at: new Date().toISOString() }), {
+    // ===== Consolidação cross-loja =====
+    // Depois que todas as integrações sincronizaram, mescla cards do mesmo cliente
+    // (por CPF/telefone) que estejam em lojas diferentes. Mantém o card da loja
+    // que possui a parcela mais antiga e une todas as parcelas em atraso ali.
+    let consolidation: { groups_merged: number; cards_removed: number } = { groups_merged: 0, cards_removed: 0 };
+    try {
+      consolidation = await consolidateCrossStoreCobrancas(supabase);
+      console.log(`[ssotica-sync][consolidation] groups_merged=${consolidation.groups_merged} cards_removed=${consolidation.cards_removed}`);
+    } catch (e) {
+      console.error("[ssotica-sync][consolidation] erro:", e instanceof Error ? e.message : String(e));
+    }
+
+    return new Response(JSON.stringify({ ok: true, results, consolidation, started_at: new Date().toISOString() }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
