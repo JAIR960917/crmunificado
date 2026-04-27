@@ -80,6 +80,42 @@ export default function AppSidebar({ onNavigate }: Props) {
     }
   };
 
+  const handleUpdateSystem = async () => {
+    if (updating) return;
+    setUpdating(true);
+    toast.loading("Atualizando sistema...", { id: "update-system" });
+    try {
+      // Limpa todos os caches do navegador (Service Worker / PWA)
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      // Atualiza/desregistra service workers para forçar nova versão
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(
+          regs.map(async (r) => {
+            try {
+              await r.update();
+            } catch {}
+            try {
+              await r.unregister();
+            } catch {}
+          })
+        );
+      }
+      toast.success("Recarregando...", { id: "update-system" });
+      // Pequeno delay para o toast aparecer antes do reload
+      setTimeout(() => {
+        // Força bypass de cache
+        window.location.reload();
+      }, 400);
+    } catch (e) {
+      toast.error("Falha ao atualizar. Tente novamente.", { id: "update-system" });
+      setUpdating(false);
+    }
+  };
+
   return (
     <aside className="flex h-screen w-60 flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-5 py-5 flex-shrink-0">
