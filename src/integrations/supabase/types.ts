@@ -178,6 +178,55 @@ export type Database = {
           },
         ]
       }
+      crm_cobranca_checklist_completions: {
+        Row: {
+          checklist_item_id: string
+          cobranca_id: string
+          completed_at: string
+          completed_by: string
+          id: string
+          status_id: string
+        }
+        Insert: {
+          checklist_item_id: string
+          cobranca_id: string
+          completed_at?: string
+          completed_by: string
+          id?: string
+          status_id: string
+        }
+        Update: {
+          checklist_item_id?: string
+          cobranca_id?: string
+          completed_at?: string
+          completed_by?: string
+          id?: string
+          status_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_cobranca_checklist_completions_checklist_item_id_fkey"
+            columns: ["checklist_item_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobranca_status_checklist"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_cobranca_checklist_completions_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_cobranca_checklist_completions_status_id_fkey"
+            columns: ["status_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobranca_statuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_cobranca_notes: {
         Row: {
           cobranca_id: string
@@ -210,10 +259,43 @@ export type Database = {
           },
         ]
       }
+      crm_cobranca_status_checklist: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          position: number
+          status_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          position?: number
+          status_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          position?: number
+          status_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_cobranca_status_checklist_status_id_fkey"
+            columns: ["status_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobranca_statuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_cobranca_statuses: {
         Row: {
           color: string
           created_at: string
+          financeiro_visible: boolean
           id: string
           key: string
           label: string
@@ -222,6 +304,7 @@ export type Database = {
         Insert: {
           color?: string
           created_at?: string
+          financeiro_visible?: boolean
           id?: string
           key: string
           label: string
@@ -230,6 +313,7 @@ export type Database = {
         Update: {
           color?: string
           created_at?: string
+          financeiro_visible?: boolean
           id?: string
           key?: string
           label?: string
