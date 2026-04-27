@@ -24,6 +24,8 @@ type ItemVenda = {
 
 type Venda = {
   id: number;
+  ssotica_company_id?: string | null;
+  loja_nome?: string | null;
   data: string;
   hora: string;
   numero: number;
@@ -38,6 +40,8 @@ type Venda = {
 type Props = {
   ssoticaClienteId: number | null | undefined;
   ssoticaCompanyId: string | null | undefined;
+  /** CPF do cliente — quando informado, busca vendas em todas as lojas do mesmo CPF */
+  cpf?: string | null;
 };
 
 const fmtBRL = (v: number) =>
@@ -54,10 +58,10 @@ const groupColor = (grupo: string | null) => {
   return "bg-muted text-muted-foreground";
 };
 
-const cacheKey = (cli: number | string, comp: string, months: number) =>
-  `ssotica-vendas:${comp}:${cli}:${months}m`;
+const cacheKey = (cli: number | string, comp: string, months: number, cpf?: string | null) =>
+  `ssotica-vendas:${comp}:${cli}:${months}m${cpf ? `:cpf=${cpf}` : ""}`;
 
-export default function ClientProductsTab({ ssoticaClienteId, ssoticaCompanyId }: Props) {
+export default function ClientProductsTab({ ssoticaClienteId, ssoticaCompanyId, cpf }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [vendas, setVendas] = useState<Venda[] | null>(null);
@@ -68,7 +72,7 @@ export default function ClientProductsTab({ ssoticaClienteId, ssoticaCompanyId }
       setError("Cliente sem vínculo SSótica — não é possível buscar produtos.");
       return;
     }
-    const key = cacheKey(ssoticaClienteId, ssoticaCompanyId, months);
+    const key = cacheKey(ssoticaClienteId, ssoticaCompanyId, months, cpf);
     if (!force) {
       try {
         const cached = sessionStorage.getItem(key);
@@ -83,7 +87,7 @@ export default function ClientProductsTab({ ssoticaClienteId, ssoticaCompanyId }
     setError(null);
     try {
       const { data, error: invErr } = await supabase.functions.invoke("ssotica-cliente-vendas", {
-        body: { ssoticaClienteId, ssoticaCompanyId, monthsBack: months },
+        body: { ssoticaClienteId, ssoticaCompanyId, monthsBack: months, cpf: cpf ?? null },
       });
       if (invErr) throw invErr;
       if (data?.error) throw new Error(data.error);
@@ -104,7 +108,7 @@ export default function ClientProductsTab({ ssoticaClienteId, ssoticaCompanyId }
       fetchVendas(monthsBack);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ssoticaClienteId, ssoticaCompanyId]);
+  }, [ssoticaClienteId, ssoticaCompanyId, cpf]);
 
   if (!ssoticaClienteId || !ssoticaCompanyId) {
     return (
@@ -180,12 +184,17 @@ export default function ClientProductsTab({ ssoticaClienteId, ssoticaCompanyId }
           {!loading && vendas && vendas.length > 0 && vendas.map((v) => (
             <div key={v.id} className="border rounded-lg overflow-hidden">
               <div className="bg-muted/40 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-3 text-xs flex-wrap">
                   <div className="flex items-center gap-1.5 font-medium">
                     <Calendar className="h-3.5 w-3.5" />
                     {v.data ? format(new Date(v.data + "T00:00:00"), "dd 'de' MMM 'de' yyyy", { locale: ptBR }) : "—"}
                   </div>
                   <span className="text-muted-foreground">Venda #{v.numero}</span>
+                  {v.loja_nome && (
+                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                      Loja: {v.loja_nome}
+                    </Badge>
+                  )}
                   {v.funcionario?.nome && (
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <User className="h-3 w-3" />

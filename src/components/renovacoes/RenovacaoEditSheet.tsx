@@ -416,10 +416,18 @@ export default function RenovacaoEditSheet(props: Props) {
               Salve a renovação primeiro para adicionar comentários e tarefas.
             </div>
           ) : tab === "produtos" ? (
-            <ClientProductsTab
-              ssoticaClienteId={ssoticaClienteId ?? null}
-              ssoticaCompanyId={ssoticaCompanyId ?? null}
-            />
+            (() => {
+              const cpfField = fields.find((f: any) => f.is_cpf_field);
+              const cpfFromForm = cpfField ? String(formData[`field_${cpfField.id}`] || "") : "";
+              const cpfFallback = String(formData?.documento ?? formData?.cpf ?? "");
+              return (
+                <ClientProductsTab
+                  ssoticaClienteId={ssoticaClienteId ?? null}
+                  ssoticaCompanyId={ssoticaCompanyId ?? null}
+                  cpf={cpfFromForm || cpfFallback || null}
+                />
+              );
+            })()
           ) : (
             <>
               <div className="px-5 py-3 border-b flex items-center gap-2">

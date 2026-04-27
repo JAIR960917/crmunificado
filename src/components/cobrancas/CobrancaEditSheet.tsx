@@ -41,6 +41,7 @@ type ParcelaInfo = {
   dias_atraso: number | null;
   status: string;
   is_current: boolean;
+  loja_nome?: string | null;
 };
 
 type Props = {
@@ -134,6 +135,8 @@ export default function CobrancaEditSheet(props: Props) {
       const lista = (card as any)?.data?.parcelas_atrasadas as any[] | undefined;
       const currentParcelaId = (card as any)?.ssotica_parcela_id;
       if (!error && Array.isArray(lista) && lista.length > 0) {
+        // Mapa de empresas para mostrar a loja em cada parcela quando o card foi mesclado entre lojas
+        const companiesById = new Map((companies ?? []).map((c: any) => [String(c.id), c.name as string]));
         const parcelasInfo: ParcelaInfo[] = lista.map((p: any, idx: number) => ({
           id: String(p.parcela_id ?? `${p.titulo_id ?? "tit"}-${p.numero_parcela ?? idx}`),
           numero_parcela: p.numero_parcela != null ? Number(p.numero_parcela) : null,
@@ -142,6 +145,7 @@ export default function CobrancaEditSheet(props: Props) {
           dias_atraso: p.dias_atraso ?? null,
           status: null,
           is_current: currentParcelaId != null && String(p.parcela_id) === String(currentParcelaId),
+          loja_nome: p.ssotica_company_id ? (companiesById.get(String(p.ssotica_company_id)) ?? null) : null,
         }));
         // Ordena por vencimento (mais antiga primeiro)
         parcelasInfo.sort((a, b) =>
@@ -582,6 +586,11 @@ export default function CobrancaEditSheet(props: Props) {
                                     <div className="text-xs text-muted-foreground">
                                       Venceu em {venc} · <span className="text-red-500 font-semibold">{p.dias_atraso} dia(s) em atraso</span>
                                     </div>
+                                    {p.loja_nome && (
+                                      <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground/80 mt-0.5">
+                                        Loja: {p.loja_nome}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="text-right shrink-0">
@@ -607,6 +616,11 @@ export default function CobrancaEditSheet(props: Props) {
                                       <div className="min-w-0">
                                         <div className="text-sm font-semibold text-foreground">Parcela {p.numero_parcela ?? "—"}</div>
                                         <div className="text-xs text-muted-foreground">Vence em {venc}</div>
+                                        {p.loja_nome && (
+                                          <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground/80 mt-0.5">
+                                            Loja: {p.loja_nome}
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                     <div className="text-sm font-bold text-foreground">
@@ -629,6 +643,7 @@ export default function CobrancaEditSheet(props: Props) {
                 <ClientProductsTab
                   ssoticaClienteId={ssoticaClienteId ?? null}
                   ssoticaCompanyId={ssoticaCompanyId ?? null}
+                  cpf={formData?.documento ?? formData?.cpf ?? null}
                 />
               )}
 

@@ -1263,6 +1263,131 @@ async function syncVendas(
 // Reconciliação: para uma loja, encontra todas as renovações cujo cliente tem cobrança
 // aberta (status != pago/cancelado) e as remove, registrando a transição reversa.
 // É uma rede de segurança contra cards mal posicionados durante backfill por chunks.
+// ============================================================
+// Consolida cards de cobrança de UM MESMO cliente em LOJAS DIFERENTES.
+// Quando um cliente tem compras (e parcelas em atraso) em duas ou mais lojas,
+// cada sync por loja cria/atualiza um card próprio. Esta função roda DEPOIS
+// que todas as integrações terminaram e funde os cards num único, escolhendo
+// como "dona" a loja com a parcela MAIS ANTIGA. Todas as parcelas em atraso
+// (de todas as lojas) ficam visíveis num único card.
+//
+// Identificação do mesmo cliente:
+//  1) Mesmo CPF/documento normalizado (somente dígitos, >= 11)
+//  2) Fallback: mesmo telefone normalizado (somente dígitos, >= 10)
+// ============================================================
+function normalizeDigits(s: string | null | undefined): string {
+  return String(s ?? "").replace(/\D/g, "");
+}
+
+async function consolidateCrossStoreCobrancas(supabase: any): Promise<{ groups_merged: number; cards_removed: number }> {
+  // Busca TODAS as cobranças ativas com vínculo SSótica.
+  const { data: rows } = await supabase
+    .from("crm_cobrancas")
+    .select("id, ssotica_cliente_id, ssotica_company_id, vencimento, valor, dias_atraso, status, data, assigned_to, created_by, scheduled_date, ssotica_parcela_id, ssotica_titulo_id")
+    .not("ssotica_company_id", "is", null);
+  const cards = (rows ?? []) as any[];
+  if (cards.length === 0) return { groups_merged: 0, cards_removed: 0 };
+
+  // Agrupa por chave de identidade do cliente (CPF preferencial, telefone como fallback).
+  const groups = new Map<string, any[]>();
+  for (const c of cards) {
+    const data = c.data ?? {};
+    const cpf = normalizeDigits(data.documento ?? data.cpf);
+    const tel = normalizeDigits(data.telefone);
+    let key: string | null = null;
+    if (cpf.length >= 11) key = `cpf:${cpf}`;
+    else if (tel.length >= 10) key = `tel:${tel}`;
+    if (!key) continue;
+    const arr = groups.get(key) ?? [];
+    arr.push(c);
+    groups.set(key, arr);
+  }
+
+  let groupsMerged = 0;
+  let cardsRemoved = 0;
+
+  for (const [_key, list] of groups.entries()) {
+    if (list.length < 2) continue; // só mescla se houver 2+ cards (lojas diferentes)
+    // Garante que envolve mais de uma loja (se for tudo da mesma loja, deixa o sync por loja resolver).
+    const lojas = new Set(list.map((c) => String(c.ssotica_company_id)));
+    if (lojas.size < 2) continue;
+
+    // Junta todas as parcelas em atraso de todos os cards (dedup por parcela_id).
+    const parcelasMap = new Map<string, any>();
+    for (const c of list) {
+      const arr = (c.data?.parcelas_atrasadas ?? []) as any[];
+      const company = c.ssotica_company_id;
+      for (const p of arr) {
+        const pid = p.parcela_id != null ? `pid:${p.parcela_id}` : `tit:${p.titulo_id ?? ""}-num:${p.numero_parcela ?? ""}-venc:${p.vencimento ?? ""}`;
+        if (!parcelasMap.has(pid)) {
+          parcelasMap.set(pid, { ...p, ssotica_company_id: company });
+        }
+      }
+    }
+    const todasParcelas = Array.from(parcelasMap.values()).sort((a, b) =>
+      (a.vencimento ?? "") < (b.vencimento ?? "") ? -1 : (a.vencimento ?? "") > (b.vencimento ?? "") ? 1 : 0,
+    );
+    if (todasParcelas.length === 0) continue;
+
+    // Loja "vencedora" = loja da parcela mais antiga.
+    const maisAntiga = todasParcelas[0];
+    const winnerCompany = String(maisAntiga.ssotica_company_id ?? "");
+    if (!winnerCompany) continue;
+
+    // Card vencedor = card cuja loja é a vencedora (se houver mais de um na mesma loja, mantém o de menor vencimento).
+    const winnerCandidates = list.filter((c) => String(c.ssotica_company_id) === winnerCompany);
+    winnerCandidates.sort((a, b) => (a.vencimento ?? "") < (b.vencimento ?? "") ? -1 : 1);
+    const winner = winnerCandidates[0];
+    const losers = list.filter((c) => c.id !== winner.id);
+
+    // Merge dos dados: mantém o "data" do winner, atualiza parcelas e totais, e indica que é cross-loja.
+    const totalAtraso = todasParcelas.reduce((s, p) => s + Number(p.valor ?? 0), 0);
+    const winnerData = { ...(winner.data ?? {}) };
+    winnerData.parcelas_atrasadas = todasParcelas;
+    winnerData.total_atraso = totalAtraso;
+    winnerData.qtd_parcelas_atrasadas = todasParcelas.length;
+    winnerData.lojas_envolvidas = Array.from(lojas);
+    winnerData.cross_store_merged_at = new Date().toISOString();
+
+    await supabase
+      .from("crm_cobrancas")
+      .update({
+        ssotica_parcela_id: maisAntiga.parcela_id ?? null,
+        ssotica_titulo_id: maisAntiga.titulo_id ?? null,
+        data: winnerData,
+        valor: totalAtraso,
+        vencimento: maisAntiga.vencimento,
+        dias_atraso: maisAntiga.dias_atraso,
+        scheduled_date: maisAntiga.vencimento,
+      })
+      .eq("id", winner.id);
+
+    // Remove os cards perdedores. Loga transição "cobranca → none" como auto/merge.
+    for (const loser of losers) {
+      const cliId = loser.ssotica_cliente_id;
+      const nome = String(loser.data?.nome ?? winnerData.nome ?? "Cliente SSótica");
+      await supabase.from("crm_cobrancas").delete().eq("id", loser.id);
+      cardsRemoved++;
+      await supabase.from("crm_module_transition_logs").insert({
+        cliente_nome: nome,
+        from_module: "cobranca",
+        to_module: "none",
+        to_status_key: null,
+        to_status_label: null,
+        source_record_id: loser.id,
+        target_record_id: winner.id,
+        ssotica_cliente_id: cliId,
+        company_id: loser.ssotica_company_id,
+        triggered_by: null,
+        trigger_source: "auto_cross_store_merge",
+      });
+    }
+    groupsMerged++;
+  }
+
+  return { groups_merged: groupsMerged, cards_removed: cardsRemoved };
+}
+
 async function reconcileRenovacoesVsCobrancas(
   supabase: any,
   companyId: string,
@@ -1778,7 +1903,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, results, started_at: new Date().toISOString() }), {
+    // ===== Consolidação cross-loja =====
+    // Depois que todas as integrações sincronizaram, mescla cards do mesmo cliente
+    // (por CPF/telefone) que estejam em lojas diferentes. Mantém o card da loja
+    // que possui a parcela mais antiga e une todas as parcelas em atraso ali.
+    let consolidation: { groups_merged: number; cards_removed: number } = { groups_merged: 0, cards_removed: 0 };
+    try {
+      consolidation = await consolidateCrossStoreCobrancas(supabase);
+      console.log(`[ssotica-sync][consolidation] groups_merged=${consolidation.groups_merged} cards_removed=${consolidation.cards_removed}`);
+    } catch (e) {
+      console.error("[ssotica-sync][consolidation] erro:", e instanceof Error ? e.message : String(e));
+    }
+
+    return new Response(JSON.stringify({ ok: true, results, consolidation, started_at: new Date().toISOString() }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
