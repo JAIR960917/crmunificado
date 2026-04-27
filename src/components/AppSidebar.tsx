@@ -3,7 +3,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare, CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart, History, BarChart3, FileBarChart } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare, CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart, History, BarChart3, FileBarChart, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 type Role = "admin" | "gerente" | "financeiro" | "vendedor";
@@ -46,6 +47,7 @@ export default function AppSidebar({ onNavigate }: Props) {
   const { settings } = useSystemSettings();
   
   const [signingOut, setSigningOut] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -75,6 +77,42 @@ export default function AppSidebar({ onNavigate }: Props) {
       navigate("/login", { replace: true });
     } finally {
       setSigningOut(false);
+    }
+  };
+
+  const handleUpdateSystem = async () => {
+    if (updating) return;
+    setUpdating(true);
+    toast.loading("Atualizando sistema...", { id: "update-system" });
+    try {
+      // Limpa todos os caches do navegador (Service Worker / PWA)
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      // Atualiza/desregistra service workers para forçar nova versão
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(
+          regs.map(async (r) => {
+            try {
+              await r.update();
+            } catch {}
+            try {
+              await r.unregister();
+            } catch {}
+          })
+        );
+      }
+      toast.success("Recarregando...", { id: "update-system" });
+      // Pequeno delay para o toast aparecer antes do reload
+      setTimeout(() => {
+        // Força bypass de cache
+        window.location.reload();
+      }, 400);
+    } catch (e) {
+      toast.error("Falha ao atualizar. Tente novamente.", { id: "update-system" });
+      setUpdating(false);
     }
   };
 
@@ -112,6 +150,14 @@ export default function AppSidebar({ onNavigate }: Props) {
       </nav>
 
       <div className="space-y-2 border-t border-sidebar-border px-3 py-4 flex-shrink-0">
+        <button
+          onClick={handleUpdateSystem}
+          disabled={updating}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-emerald-400 transition-colors hover:bg-sidebar-accent/50 disabled:pointer-events-none disabled:opacity-60"
+        >
+          <RefreshCw className={cn("h-4 w-4", updating && "animate-spin")} />
+          {updating ? "Atualizando..." : "Atualizar Sistema"}
+        </button>
         <button
           onClick={() => handleNav("/instalar")}
           className={cn(
