@@ -452,14 +452,14 @@ export default function FormBuilderPage() {
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <Droppable droppableId="fields">
+        <Droppable droppableId="root">
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-1">
               {rootFields.map((field, index) => (
                 <Draggable key={field.id} draggableId={field.id} index={index}>
-                  {(provided) => (
-                    <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                      {renderField(field)}
+                  {(prov) => (
+                    <div ref={prov.innerRef} {...prov.draggableProps}>
+                      {renderField(field, 0, prov.dragHandleProps)}
                     </div>
                   )}
                 </Draggable>
