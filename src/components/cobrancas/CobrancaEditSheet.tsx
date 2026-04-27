@@ -319,7 +319,7 @@ export default function CobrancaEditSheet(props: Props) {
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleSheetOpenChange}>
       <SheetContent
         side="right"
         className="w-full sm:max-w-[1100px] p-0 flex flex-col sm:flex-row gap-0 overflow-y-auto sm:overflow-hidden"
