@@ -19,6 +19,7 @@ import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTria
 import { cn } from "@/lib/utils";
 import ClientProductsTab from "@/components/ClientProductsTab";
 import CobrancaContactAttemptForm from "@/components/cobrancas/CobrancaContactAttemptForm";
+import { recordCardOpen } from "@/lib/cardOpens";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type Company = { id: string; name: string };
@@ -196,6 +197,14 @@ export default function CobrancaEditSheet(props: Props) {
       setNewComment("");
       setTaskOpen(false);
       setContactRegisteredInSession(false);
+      // Registra abertura do card de cobrança (atualiza dashboard em tempo real)
+      if (user?.id) {
+        recordCardOpen({
+          userId: user.id,
+          cardType: "cobranca",
+          cobrancaId,
+        });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, cobrancaId, ssoticaClienteId, ssoticaCompanyId]);
