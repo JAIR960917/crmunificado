@@ -1,7 +1,7 @@
 // Custom service worker additions for push notifications
 
 self.addEventListener("push", (event) => {
-  let data = { title: "CRM Joonker", body: "Nova notificação" };
+  let data = { title: "CRM Óticas Joonker", body: "Nova notificação" };
   try {
     data = event.data.json();
   } catch {}
@@ -15,7 +15,7 @@ self.addEventListener("push", (event) => {
     actions: [{ action: "open", title: "Abrir" }],
   };
 
-  event.waitUntil(self.registration.showNotification(data.title || "CRM Joonker", options));
+  event.waitUntil(self.registration.showNotification(data.title || "CRM Óticas Joonker", options));
 });
 
 self.addEventListener("notificationclick", (event) => {

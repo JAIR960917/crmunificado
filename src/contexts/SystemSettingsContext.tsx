@@ -12,7 +12,7 @@ type Settings = {
 };
 
 const defaults: Settings = {
-  system_name: "CRM Ótica Joonker",
+  system_name: "CRM Óticas Joonker",
   primary_color: "220 72% 50%",
   background_color: "222 47% 6%",
   text_color: "210 20% 92%",
