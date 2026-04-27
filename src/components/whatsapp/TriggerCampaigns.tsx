@@ -220,7 +220,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     setSaving(true);
 
     try {
-      const payload: any = {
+      const basePayload: any = {
         name: name.trim(),
         module: moduleKey,
         status_id: statusId,
@@ -228,33 +228,64 @@ export default function TriggerCampaigns({ instances }: Props) {
         end_time: endTime,
         created_by: user.id,
         instance_id: instanceId || null,
-        company_id: companyId,
       };
 
-      let campaignId = editingId;
+      const buildSteps = (campaignId: string) =>
+        steps.map((s, i) => ({
+          campaign_id: campaignId,
+          position: i,
+          delay_days: s.delay_days,
+          message: s.message.trim(),
+          image_url: s.image_url || null,
+        }));
 
       if (editingId) {
-        const { error } = await supabase.from("whatsapp_trigger_campaigns").update(payload).eq("id", editingId);
+        // Edição: mantém comportamento de uma única campanha
+        const { error } = await supabase
+          .from("whatsapp_trigger_campaigns")
+          .update({ ...basePayload, company_id: companyId === "__ALL__" ? null : companyId })
+          .eq("id", editingId);
         if (error) throw error;
         await supabase.from("whatsapp_trigger_steps").delete().eq("campaign_id", editingId);
+        const { error: stepsError } = await supabase
+          .from("whatsapp_trigger_steps")
+          .insert(buildSteps(editingId));
+        if (stepsError) throw stepsError;
+        toast.success("Campanha atualizada!");
+      } else if (companyId === "__ALL__") {
+        // Criar uma campanha para CADA empresa disponível
+        if (companies.length === 0) {
+          toast.error("Nenhuma empresa disponível");
+          setSaving(false);
+          return;
+        }
+        for (const c of companies) {
+          const { data, error } = await supabase
+            .from("whatsapp_trigger_campaigns")
+            .insert({ ...basePayload, name: `${basePayload.name} — ${c.name}`, company_id: c.id })
+            .select("id")
+            .single();
+          if (error) throw error;
+          const { error: stepsError } = await supabase
+            .from("whatsapp_trigger_steps")
+            .insert(buildSteps(data.id));
+          if (stepsError) throw stepsError;
+        }
+        toast.success(`${companies.length} campanhas criadas (uma por empresa)!`);
       } else {
-        const { data, error } = await supabase.from("whatsapp_trigger_campaigns").insert(payload).select("id").single();
+        const { data, error } = await supabase
+          .from("whatsapp_trigger_campaigns")
+          .insert({ ...basePayload, company_id: companyId })
+          .select("id")
+          .single();
         if (error) throw error;
-        campaignId = data.id;
+        const { error: stepsError } = await supabase
+          .from("whatsapp_trigger_steps")
+          .insert(buildSteps(data.id));
+        if (stepsError) throw stepsError;
+        toast.success("Campanha criada!");
       }
 
-      const stepsPayload = steps.map((s, i) => ({
-        campaign_id: campaignId!,
-        position: i,
-        delay_days: s.delay_days,
-        message: s.message.trim(),
-        image_url: s.image_url || null,
-      }));
-
-      const { error: stepsError } = await supabase.from("whatsapp_trigger_steps").insert(stepsPayload);
-      if (stepsError) throw stepsError;
-
-      toast.success(editingId ? "Campanha atualizada!" : "Campanha criada!");
       resetForm();
       fetchData();
     } catch (e: any) {
@@ -343,6 +374,9 @@ export default function TriggerCampaigns({ instances }: Props) {
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
+                  {!editingId && (
+                    <SelectItem value="__ALL__">🏢 Todas as empresas (cria uma por empresa)</SelectItem>
+                  )}
                   {companies.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}

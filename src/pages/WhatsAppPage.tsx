@@ -316,7 +316,7 @@ export default function WhatsAppPage() {
     if (!user) return;
     setSaving(true);
 
-    const payload: any = {
+    const basePayload: any = {
       name: name.trim(), message: message.trim(),
       module: moduleKey,
       status_id: statusId,
@@ -326,19 +326,45 @@ export default function WhatsAppPage() {
       end_time: endTime,
       created_by: user.id,
       instance_id: instanceId || null,
-      company_id: companyId,
       image_url: imageUrl,
     };
 
-    let error;
+    let error: any = null;
     if (editingId) {
-      ({ error } = await supabase.from("whatsapp_campaigns").update(payload).eq("id", editingId));
+      // Edição: mantém comportamento de uma única campanha
+      ({ error } = await supabase
+        .from("whatsapp_campaigns")
+        .update({ ...basePayload, company_id: companyId === "__ALL__" ? null : companyId })
+        .eq("id", editingId));
+    } else if (companyId === "__ALL__") {
+      // Criar uma campanha para CADA empresa disponível
+      if (companies.length === 0) {
+        toast.error("Nenhuma empresa disponível");
+        setSaving(false);
+        return;
+      }
+      const rows = companies.map(c => ({
+        ...basePayload,
+        name: `${basePayload.name} — ${c.name}`,
+        company_id: c.id,
+      }));
+      ({ error } = await supabase.from("whatsapp_campaigns").insert(rows));
     } else {
-      ({ error } = await supabase.from("whatsapp_campaigns").insert(payload));
+      ({ error } = await supabase.from("whatsapp_campaigns").insert({ ...basePayload, company_id: companyId }));
     }
 
     if (error) { toast.error("Erro ao salvar campanha"); console.error(error); }
-    else { toast.success(editingId ? "Campanha atualizada!" : "Campanha criada!"); resetForm(); fetchData(); }
+    else {
+      toast.success(
+        editingId
+          ? "Campanha atualizada!"
+          : companyId === "__ALL__"
+            ? `${companies.length} campanhas criadas (uma por empresa)!`
+            : "Campanha criada!"
+      );
+      resetForm();
+      fetchData();
+    }
     setSaving(false);
   };
 
@@ -549,6 +575,9 @@ export default function WhatsAppPage() {
                   <Select value={companyId} onValueChange={setCompanyId}>
                     <SelectTrigger><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
                     <SelectContent>
+                      {!editingId && (
+                        <SelectItem value="__ALL__">🏢 Todas as empresas (cria uma por empresa)</SelectItem>
+                      )}
                       {companies.map(c => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
