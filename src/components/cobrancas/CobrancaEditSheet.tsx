@@ -387,7 +387,22 @@ export default function CobrancaEditSheet(props: Props) {
                 <Textarea rows={3} value={formData.descricao || ""}
                   onChange={e => setFormData({ ...formData, descricao: e.target.value })} />
               </div>
-              <Button type="submit" form="cobranca-form" className="w-full" disabled={saving || !formData.nome?.trim()}>
+              {requiresContactRegistration && !contactRegisteredInSession && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>
+                    Antes de salvar ou fechar este card, registre uma{" "}
+                    <strong>tentativa de contato</strong> na aba <strong>Atividade</strong>.
+                  </span>
+                </div>
+              )}
+              <Button
+                type="submit"
+                form="cobranca-form"
+                className="w-full"
+                disabled={saving || !formData.nome?.trim() || !canCloseOrSave}
+                title={!canCloseOrSave ? "Registre uma tentativa de contato antes de salvar" : undefined}
+              >
                 {saving ? "Salvando..." : isEditing ? "Atualizar" : "Criar"}
               </Button>
             </form>
