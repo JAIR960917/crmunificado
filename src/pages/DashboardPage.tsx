@@ -269,12 +269,78 @@ export default function DashboardPage() {
     setAllRows(rows);
   };
 
+  const fetchCobrancaReport = async (startStr: string, endStr: string) => {
+    const { startISO, endISO } = rangeBounds(startStr, endStr);
+
+    const [{ data: profilesData }, { data: companiesData }, { data: adminRoles }] = await Promise.all([
+      supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
+      supabase.from("companies").select("id, name").order("name"),
+      supabase.from("user_roles").select("user_id").eq("role", "admin"),
+    ]);
+    const profs = (profilesData || []) as Profile[];
+    const comps = (companiesData || []) as Company[];
+    const adminSet = new Set<string>((adminRoles || []).map((r: any) => r.user_id));
+    const compById = new Map(comps.map((c) => [c.id, c.name]));
+
+    const { data: notes } = await supabase
+      .from("crm_cobranca_notes")
+      .select("user_id, cobranca_id, content, created_at")
+      .gte("created_at", startISO)
+      .lte("created_at", endISO);
+
+    type Stats = { contatos: number; atendeu: number; naoAtendeu: number; renegociou: number; naoRenegociou: number };
+    const byUser = new Map<string, Stats>();
+
+    (notes || []).forEach((n: any) => {
+      if (adminSet.has(n.user_id)) return;
+      const content: string = n.content || "";
+      if (!content.startsWith("📞 Tentativa de contato")) return;
+
+      if (!byUser.has(n.user_id)) {
+        byUser.set(n.user_id, { contatos: 0, atendeu: 0, naoAtendeu: 0, renegociou: 0, naoRenegociou: 0 });
+      }
+      const s = byUser.get(n.user_id)!;
+      s.contatos += 1;
+
+      if (content.includes("NÃO ATENDEU")) {
+        s.naoAtendeu += 1;
+      } else if (content.includes("ATENDEU")) {
+        s.atendeu += 1;
+        if (content.includes("✅ Cliente RENEGOCIOU")) s.renegociou += 1;
+        else if (content.includes("❌ Cliente NÃO renegociou")) s.naoRenegociou += 1;
+      }
+    });
+
+    const rows: CobrancaRow[] = Array.from(byUser.entries()).map(([uid, s]) => {
+      const p = profs.find((x) => x.user_id === uid);
+      return {
+        user_id: uid,
+        full_name: p?.full_name || "(usuário desconhecido)",
+        avatar_url: p?.avatar_url || null,
+        company_id: p?.company_id || null,
+        company_name: p?.company_id ? compById.get(p.company_id) || "—" : "—",
+        contatos: s.contatos,
+        atendeu: s.atendeu,
+        naoAtendeu: s.naoAtendeu,
+        renegociou: s.renegociou,
+        naoRenegociou: s.naoRenegociou,
+      };
+    });
+
+    rows.sort((a, b) => b.contatos - a.contatos);
+    setCobrancaRows(rows);
+  };
+
   useEffect(() => {
     if (!canSee || !user) return;
     setLoading(true);
     const start = dateMode === "day" ? selectedDate : startDate;
     const end = dateMode === "day" ? selectedDate : endDate;
-    Promise.all([fetchTotals(companyFilter), fetchReport(start, end)]).finally(() => setLoading(false));
+    Promise.all([
+      fetchTotals(companyFilter),
+      fetchReport(start, end),
+      fetchCobrancaReport(start, end),
+    ]).finally(() => setLoading(false));
   }, [canSee, user, dateMode, selectedDate, startDate, endDate, companyFilter]);
 
   // Realtime: refresh report when opens or notes change
