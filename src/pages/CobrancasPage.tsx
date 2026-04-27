@@ -326,6 +326,7 @@ export default function CobrancasPage() {
 
   const renderCard = (cobranca: Cobranca) => {
     const d = cobranca.data as Record<string, any>;
+    const renegociou = (d?.renegociou as string | undefined) || null;
     const cobActivities = activities.filter(a => a.cobranca_id === cobranca.id);
     const pending = cobActivities.filter(a => !a.completed_at);
     const overdue = pending.filter(a => new Date(a.scheduled_date) < new Date());
@@ -339,7 +340,10 @@ export default function CobrancasPage() {
     const hasPending = pending.length > 0 && !hasOverdue && !hasToday;
 
     let cardBorderClass = "";
-    if (hasOverdue) cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
+    // Renegociação tem prioridade visual sobre tarefas
+    if (renegociou === "sim") cardBorderClass = "border-emerald-500 bg-emerald-500/10 shadow-emerald-500/20 shadow-md";
+    else if (renegociou === "nao") cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
+    else if (hasOverdue) cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
     else if (hasToday) cardBorderClass = "border-amber-400 bg-amber-500/5";
     else if (hasPending) cardBorderClass = "border-blue-400/50 bg-blue-500/5";
 
