@@ -575,6 +575,9 @@ export default function WhatsAppPage() {
                   <Select value={companyId} onValueChange={setCompanyId}>
                     <SelectTrigger><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
                     <SelectContent>
+                      {!editingId && (
+                        <SelectItem value="__ALL__">🏢 Todas as empresas (cria uma por empresa)</SelectItem>
+                      )}
                       {companies.map(c => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
