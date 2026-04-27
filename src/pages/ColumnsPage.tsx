@@ -298,42 +298,14 @@ export default function ColumnsPage() {
                 <Switch checked={finVisible} onCheckedChange={toggleFinVisible} />
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-sm flex items-center gap-2">
-                  <Eye className="h-4 w-4" />
-                  Critérios para liberar o lead
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  O financeiro precisa marcar todos os itens abaixo antes de mover um lead desta coluna para outra.
-                  Se nenhum item for cadastrado, o lead pode ser movido livremente pelo financeiro.
-                </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </AppLayout>
+  );
+}
 
-                <div className="space-y-1.5 mt-2">
-                  {checklistItems.length === 0 && (
-                    <p className="text-xs text-muted-foreground italic py-2">Nenhum critério cadastrado.</p>
-                  )}
-                  {checklistItems.map(item => (
-                    <div key={item.id} className="flex items-center gap-2 rounded-md border bg-card px-3 py-2">
-                      <span className="flex-1 text-sm">{item.label}</span>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeChecklistItem(item.id)}>
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex gap-2 pt-1">
-                  <Input
-                    placeholder="Ex: Cliente foi contactado"
-                    value={newChecklistLabel}
-                    onChange={e => setNewChecklistLabel(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); } }}
-                  />
-                  <Button onClick={addChecklistItem} disabled={savingFin || !newChecklistLabel.trim()}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
             </div>
           )}
         </DialogContent>
