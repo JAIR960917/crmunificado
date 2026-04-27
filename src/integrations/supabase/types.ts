@@ -863,6 +863,7 @@ export type Database = {
       lead_card_opens: {
         Row: {
           card_type: string
+          cobranca_id: string | null
           id: string
           lead_id: string | null
           opened_at: string
@@ -871,6 +872,7 @@ export type Database = {
         }
         Insert: {
           card_type: string
+          cobranca_id?: string | null
           id?: string
           lead_id?: string | null
           opened_at?: string
@@ -879,6 +881,7 @@ export type Database = {
         }
         Update: {
           card_type?: string
+          cobranca_id?: string | null
           id?: string
           lead_id?: string | null
           opened_at?: string
