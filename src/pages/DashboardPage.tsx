@@ -862,7 +862,7 @@ export default function DashboardPage() {
               <Skeleton className="h-40 w-full" />
             ) : filteredCobrancaRows.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
-                Nenhuma tentativa de contato em cobranças no período selecionado.
+                Nenhuma abertura de card ou tentativa de contato em cobranças no período selecionado.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -936,8 +936,10 @@ export default function DashboardPage() {
             )}
 
             <p className="text-[11px] text-muted-foreground mt-4">
-              <Phone className="h-3 w-3 inline mr-1" />
-              Cada "Contato" é uma tentativa registrada na cobrança. "Renegociaram" e "Não renegociaram"
+              <FolderOpen className="h-3 w-3 inline mr-1" />
+              "Aberturas" conta cards de cobrança únicos abertos no dia.{" "}
+              <Phone className="h-3 w-3 inline mx-1" />
+              Cada "Contato" é uma tentativa registrada. "Renegociaram" e "Não renegociaram"
               são contadas apenas quando o cliente atendeu.
             </p>
           </CardContent>
