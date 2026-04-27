@@ -74,7 +74,7 @@ export default function CobrancaEditSheet(props: Props) {
     formValor, setFormValor, formCompanyId, setFormCompanyId,
     statuses, profiles, companies, saving, onSave, canReassign,
   } = props;
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isFinanceiro } = useAuth();
 
   const [tab, setTab] = useState("atividade");
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -83,6 +83,9 @@ export default function CobrancaEditSheet(props: Props) {
   const [loadingParcelas, setLoadingParcelas] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [postingComment, setPostingComment] = useState(false);
+  // Tracks whether a contact attempt was registered during this open session.
+  // Required for "financeiro" role to be able to close / save the card.
+  const [contactRegisteredInSession, setContactRegisteredInSession] = useState(false);
 
   // Task creation
   const [taskOpen, setTaskOpen] = useState(false);
