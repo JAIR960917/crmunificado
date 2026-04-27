@@ -374,6 +374,9 @@ export default function TriggerCampaigns({ instances }: Props) {
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
+                  {!editingId && (
+                    <SelectItem value="__ALL__">🏢 Todas as empresas (cria uma por empresa)</SelectItem>
+                  )}
                   {companies.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
