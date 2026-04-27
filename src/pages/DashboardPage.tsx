@@ -296,13 +296,15 @@ export default function DashboardPage() {
       .order("created_at", { ascending: true });
 
     type LeadOutcome = {
+      lastAt: number;
       atendeu: boolean;
       naoAtendeu: boolean;
       renegociou: boolean;
       naoRenegociou: boolean;
     };
-    // Por (user_id|cobranca_id) consolidamos o desfecho do lead no período.
-    // Assim, abrir o mesmo lead várias vezes e mudar o status não infla os números.
+    // Por (user_id|cobranca_id) consolidamos o desfecho do lead no período
+    // usando SEMPRE o registro mais recente (última tratativa do dia/período).
+    // As notas vêm em ordem ascendente, então o último parse vence.
     const byUserLead = new Map<string, LeadOutcome>();
 
     (notes || []).forEach((n: any) => {
@@ -311,23 +313,28 @@ export default function DashboardPage() {
       const content: string = n.content || "";
       if (!content.startsWith("📞 Tentativa de contato")) return;
 
+      const ts = new Date(n.created_at).getTime();
       const key = `${n.user_id}|${n.cobranca_id}`;
-      const cur = byUserLead.get(key) || {
+      const prev = byUserLead.get(key);
+      if (prev && prev.lastAt > ts) return; // mantém o mais recente
+
+      const outcome: LeadOutcome = {
+        lastAt: ts,
         atendeu: false,
         naoAtendeu: false,
         renegociou: false,
         naoRenegociou: false,
       };
 
-      if (content.includes("ATENDEU") && !content.includes("NÃO ATENDEU")) {
-        cur.atendeu = true;
-        if (content.includes("✅ Cliente RENEGOCIOU")) cur.renegociou = true;
-        else if (content.includes("❌ Cliente NÃO renegociou")) cur.naoRenegociou = true;
-      } else if (content.includes("NÃO ATENDEU")) {
-        cur.naoAtendeu = true;
+      if (content.includes("NÃO ATENDEU")) {
+        outcome.naoAtendeu = true;
+      } else if (content.includes("ATENDEU")) {
+        outcome.atendeu = true;
+        if (content.includes("✅ Cliente RENEGOCIOU")) outcome.renegociou = true;
+        else if (content.includes("❌ Cliente NÃO renegociou")) outcome.naoRenegociou = true;
       }
 
-      byUserLead.set(key, cur);
+      byUserLead.set(key, outcome);
     });
 
     type Stats = { contatos: number; atendeu: number; naoAtendeu: number; renegociou: number; naoRenegociou: number };
@@ -344,7 +351,7 @@ export default function DashboardPage() {
       const s = ensure(uid);
       // Cada lead único conta como 1 contato
       s.contatos += 1;
-      // Prioridade: se atendeu em algum momento, conta como atendido (sobrepõe não atendeu)
+      // Usa o desfecho mais recente registrado para esse lead
       if (outcome.atendeu) {
         s.atendeu += 1;
         if (outcome.renegociou) s.renegociou += 1;
