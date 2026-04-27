@@ -1,0 +1,1 @@
+UPDATE public.system_settings SET setting_value = 'CRM Óticas Joonker' WHERE setting_key = 'system_name';
