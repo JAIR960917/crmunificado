@@ -169,6 +169,39 @@ function filterCardsByCompany(cards: any[], companyUserIds: Set<string>): any[] 
   });
 }
 
+// Para campanhas globais: descobre o company_id de um lead pelos seus user ids (assigned_to/created_by → profiles.company_id)
+async function buildUserToCompanyMap(supabase: any): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("user_id, company_id");
+  for (const p of (profs || []) as { user_id: string; company_id: string | null }[]) {
+    if (p.user_id && p.company_id) map.set(p.user_id, p.company_id);
+  }
+  return map;
+}
+
+// Para campanhas globais: cache de instância ativa por empresa
+async function buildCompanyToSessionMap(supabase: any): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const { data: insts } = await supabase
+    .from("whatsapp_instances")
+    .select("company_id, session, is_active")
+    .eq("is_active", true);
+  for (const i of (insts || []) as { company_id: string | null; session: string }[]) {
+    if (i.company_id && i.session && !map.has(i.company_id)) {
+      map.set(i.company_id, i.session);
+    }
+  }
+  return map;
+}
+
+function resolveCardCompanyId(card: any, userToCompany: Map<string, string>): string | null {
+  if (card.assigned_to && userToCompany.has(card.assigned_to)) return userToCompany.get(card.assigned_to)!;
+  if (card.created_by && userToCompany.has(card.created_by)) return userToCompany.get(card.created_by)!;
+  return null;
+}
+
 async function resolveStatusKey(supabase: any, statusTable: string, statusId: string): Promise<string> {
   const { data } = await supabase.from(statusTable).select("key").eq("id", statusId).single();
   return data?.key || "";
@@ -208,16 +241,17 @@ serve(async (req) => {
       return companyUsersCache.get(companyId)!;
     };
 
+    // Pré-carregados para campanhas globais (company_id IS NULL)
+    const userToCompany = await buildUserToCompanyMap(supabase);
+    const companyToSession = await buildCompanyToSessionMap(supabase);
+
     // ========== PERIOD CAMPAIGNS ==========
     const { data: campaigns } = await supabase.from("whatsapp_campaigns")
       .select("*").eq("is_active", true).lte("start_date", today).gte("end_date", today);
 
     if (campaigns && campaigns.length > 0) {
       for (const campaign of campaigns) {
-        if (!campaign.company_id) {
-          skippedNoCompany++;
-          continue;
-        }
+        const isGlobal = !campaign.company_id;
 
         // Daily time window (Brasília)
         if (!isWithinDailyWindow(campaign.start_time, campaign.end_time)) {
@@ -229,8 +263,10 @@ serve(async (req) => {
         const cfg = MODULE_CONFIG[moduleKey];
         if (!cfg) continue;
 
-        const session = await resolveSession(supabase, campaign.instance_id);
-        if (!session) continue;
+        // Para global, a sessão é resolvida por card (instância da empresa do lead).
+        // Para não-global, resolvemos uma sessão fixa.
+        const fixedSession = isGlobal ? null : await resolveSession(supabase, campaign.instance_id);
+        if (!isGlobal && !fixedSession) continue;
 
         const statusKey = await resolveStatusKey(supabase, cfg.statusTable, campaign.status_id);
         if (!statusKey) continue;
@@ -239,14 +275,20 @@ serve(async (req) => {
           .select("id, data, created_by, assigned_to").eq("status", statusKey);
         if (!cards) continue;
 
-        const companyUsers = await getUsers(campaign.company_id);
-        const companyCards = filterCardsByCompany(cards, companyUsers);
-        if (companyCards.length === 0) continue;
+        let scopedCards: any[];
+        if (isGlobal) {
+          // Pega todos os cards da coluna (sem filtrar por empresa)
+          scopedCards = cards;
+        } else {
+          const companyUsers = await getUsers(campaign.company_id);
+          scopedCards = filterCardsByCompany(cards, companyUsers);
+        }
+        if (scopedCards.length === 0) continue;
 
         const { data: existingSends } = await supabase.from("whatsapp_campaign_sends")
           .select("lead_id, status").eq("campaign_id", campaign.id);
         const sentIds = new Set((existingSends || []).filter((s: any) => s.status === "sent").map((s: any) => s.lead_id));
-        const pendingCards = companyCards.filter((l: any) => !sentIds.has(l.id));
+        const pendingCards = scopedCards.filter((l: any) => !sentIds.has(l.id));
 
         for (const card of pendingCards) {
           // Re-check window mid-batch (in case we cross end_time)
@@ -259,13 +301,28 @@ serve(async (req) => {
           const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
           if (!phone) continue;
 
+          // Resolve sessão por card quando global
+          let session = fixedSession;
+          if (isGlobal) {
+            const cardCompanyId = resolveCardCompanyId(card, userToCompany);
+            if (!cardCompanyId) {
+              skippedNoCompany++;
+              continue;
+            }
+            session = companyToSession.get(cardCompanyId) || null;
+            if (!session) {
+              skippedNoCompany++;
+              continue;
+            }
+          }
+
           const messageBody = campaign.message.replace(/\{nome\}/gi, name);
           const cp = cleanPhone(phone);
 
           try {
             if (!isFirstSend) await sleep(SEND_DELAY_MS);
             isFirstSend = false;
-            const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, campaign.image_url);
+            const result = await sendMessage(session!, APIFULL_API_KEY, cp, messageBody, campaign.image_url);
             if (result.ok) {
               await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
               totalSent++;
@@ -287,10 +344,7 @@ serve(async (req) => {
 
     if (triggerCampaigns && triggerCampaigns.length > 0) {
       for (const tc of triggerCampaigns) {
-        if (!tc.company_id) {
-          skippedNoCompany++;
-          continue;
-        }
+        const isGlobal = !tc.company_id;
 
         if (!isWithinDailyWindow(tc.start_time, tc.end_time)) {
           skippedOutOfWindow++;
@@ -301,8 +355,9 @@ serve(async (req) => {
         const cfg = MODULE_CONFIG[moduleKey];
         if (!cfg) continue;
 
-        const session = await resolveSession(supabase, tc.instance_id);
-        if (!session) continue;
+        // Para global, sessão é resolvida por card. Para não-global, sessão fixa.
+        const fixedSession = isGlobal ? null : await resolveSession(supabase, tc.instance_id);
+        if (!isGlobal && !fixedSession) continue;
 
         const steps = ((tc as any).whatsapp_trigger_steps || []).sort((a: any, b: any) => a.position - b.position);
         if (steps.length === 0) continue;
@@ -314,8 +369,13 @@ serve(async (req) => {
           .select("id, data, status, updated_at, created_by, assigned_to").eq("status", statusKey);
         if (!cardsRaw || cardsRaw.length === 0) continue;
 
-        const companyUsers = await getUsers(tc.company_id);
-        const cards = filterCardsByCompany(cardsRaw, companyUsers);
+        let cards: any[];
+        if (isGlobal) {
+          cards = cardsRaw;
+        } else {
+          const companyUsers = await getUsers(tc.company_id);
+          cards = filterCardsByCompany(cardsRaw, companyUsers);
+        }
         if (cards.length === 0) continue;
 
         const { data: existingSends } = await supabase.from("whatsapp_trigger_sends")
@@ -339,6 +399,21 @@ serve(async (req) => {
           const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
           if (!phone) continue;
 
+          // Resolve sessão por card quando global
+          let session = fixedSession;
+          if (isGlobal) {
+            const cardCompanyId = resolveCardCompanyId(card, userToCompany);
+            if (!cardCompanyId) {
+              skippedNoCompany++;
+              continue;
+            }
+            session = companyToSession.get(cardCompanyId) || null;
+            if (!session) {
+              skippedNoCompany++;
+              continue;
+            }
+          }
+
           const sentStepIds = sendsByCard.get(card.id) || new Set();
           const enteredAt = new Date(card.updated_at);
           const now = new Date();
@@ -354,7 +429,7 @@ serve(async (req) => {
             try {
               if (!isFirstSend) await sleep(SEND_DELAY_MS);
               isFirstSend = false;
-              const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, step.image_url);
+              const result = await sendMessage(session!, APIFULL_API_KEY, cp, messageBody, step.image_url);
               if (result.ok) {
                 await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
                 totalSent++;

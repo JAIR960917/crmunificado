@@ -173,7 +173,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     setModuleKey((c.module || "leads") as ModuleKey);
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || "");
-    setCompanyId(c.company_id || "");
+    setCompanyId(c.company_id || "__GLOBAL__");
     setStartTime((c.start_time || "08:00").slice(0, 5));
     setEndTime((c.end_time || "18:00").slice(0, 5));
     const sorted = [...(c.whatsapp_trigger_steps || [])].sort((a, b) => a.position - b.position);
@@ -239,11 +239,14 @@ export default function TriggerCampaigns({ instances }: Props) {
           image_url: s.image_url || null,
         }));
 
+      const resolveCompanyId = (val: string) =>
+        val === "__ALL__" || val === "__GLOBAL__" ? null : val;
+
       if (editingId) {
-        // Edição: mantém comportamento de uma única campanha
+        // Edição: mantém comportamento de uma única campanha (global se __GLOBAL__)
         const { error } = await supabase
           .from("whatsapp_trigger_campaigns")
-          .update({ ...basePayload, company_id: companyId === "__ALL__" ? null : companyId })
+          .update({ ...basePayload, company_id: resolveCompanyId(companyId) })
           .eq("id", editingId);
         if (error) throw error;
         await supabase.from("whatsapp_trigger_steps").delete().eq("campaign_id", editingId);
@@ -272,6 +275,19 @@ export default function TriggerCampaigns({ instances }: Props) {
           if (stepsError) throw stepsError;
         }
         toast.success(`${companies.length} campanhas criadas (uma por empresa)!`);
+      } else if (companyId === "__GLOBAL__") {
+        // Uma única campanha global (company_id = null) — usa instância da empresa do lead
+        const { data, error } = await supabase
+          .from("whatsapp_trigger_campaigns")
+          .insert({ ...basePayload, company_id: null, instance_id: null })
+          .select("id")
+          .single();
+        if (error) throw error;
+        const { error: stepsError } = await supabase
+          .from("whatsapp_trigger_steps")
+          .insert(buildSteps(data.id));
+        if (stepsError) throw stepsError;
+        toast.success("Campanha global criada (rodará para todas as empresas)!");
       } else {
         const { data, error } = await supabase
           .from("whatsapp_trigger_campaigns")
@@ -377,6 +393,7 @@ export default function TriggerCampaigns({ instances }: Props) {
                   {!editingId && (
                     <SelectItem value="__ALL__">🏢 Todas as empresas (cria uma por empresa)</SelectItem>
                   )}
+                  <SelectItem value="__GLOBAL__">🌐 Global (uma única para todas as empresas)</SelectItem>
                   {companies.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
@@ -419,18 +436,24 @@ export default function TriggerCampaigns({ instances }: Props) {
             </div>
             <div className="space-y-2">
               <Label>Instância WhatsApp</Label>
-              <Select value={instanceId} onValueChange={setInstanceId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableInstances.map((i) => (
-                    <SelectItem key={i.id} value={i.id}>
-                      {i.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {companyId === "__GLOBAL__" ? (
+                <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-border text-xs text-muted-foreground">
+                  🌐 Será usada a instância da empresa de cada lead
+                </div>
+              ) : (
+                <Select value={instanceId} onValueChange={setInstanceId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableInstances.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Horário início diário *</Label>
@@ -539,7 +562,7 @@ export default function TriggerCampaigns({ instances }: Props) {
                         {c.company_id ? (
                           <Badge variant="secondary" className="text-[10px]">{getCompanyName(c.company_id)}</Badge>
                         ) : (
-                          <Badge variant="destructive" className="text-[10px]">Sem empresa</Badge>
+                          <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-500 border-blue-500/30">🌐 Global (todas as empresas)</Badge>
                         )}
                         {c.instance_id && (
                           <Badge variant="secondary" className="text-[10px] flex items-center gap-1">

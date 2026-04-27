@@ -298,7 +298,7 @@ export default function WhatsAppPage() {
     setName(c.name); setMessage(c.message); setImageUrl(c.image_url || null);
     setModuleKey((c.module || "leads") as ModuleKey);
     setStatusId(c.status_id);
-    setInstanceId(c.instance_id || ""); setCompanyId(c.company_id || "");
+    setInstanceId(c.instance_id || ""); setCompanyId(c.company_id || "__GLOBAL__");
     setStartTime((c.start_time || "08:00").slice(0, 5));
     setEndTime((c.end_time || "18:00").slice(0, 5));
     setStartDate(c.start_date); setEndDate(c.end_date); setEditingId(c.id); setShowForm(true);
@@ -331,10 +331,10 @@ export default function WhatsAppPage() {
 
     let error: any = null;
     if (editingId) {
-      // Edição: mantém comportamento de uma única campanha
+      // Edição: mantém comportamento de uma única campanha (global se __GLOBAL__)
       ({ error } = await supabase
         .from("whatsapp_campaigns")
-        .update({ ...basePayload, company_id: companyId === "__ALL__" ? null : companyId })
+        .update({ ...basePayload, company_id: companyId === "__ALL__" || companyId === "__GLOBAL__" ? null : companyId })
         .eq("id", editingId));
     } else if (companyId === "__ALL__") {
       // Criar uma campanha para CADA empresa disponível
@@ -349,6 +349,9 @@ export default function WhatsAppPage() {
         company_id: c.id,
       }));
       ({ error } = await supabase.from("whatsapp_campaigns").insert(rows));
+    } else if (companyId === "__GLOBAL__") {
+      // Uma única campanha global — usa instância da empresa do lead
+      ({ error } = await supabase.from("whatsapp_campaigns").insert({ ...basePayload, company_id: null, instance_id: null }));
     } else {
       ({ error } = await supabase.from("whatsapp_campaigns").insert({ ...basePayload, company_id: companyId }));
     }
@@ -360,7 +363,9 @@ export default function WhatsAppPage() {
           ? "Campanha atualizada!"
           : companyId === "__ALL__"
             ? `${companies.length} campanhas criadas (uma por empresa)!`
-            : "Campanha criada!"
+            : companyId === "__GLOBAL__"
+              ? "Campanha global criada (rodará para todas as empresas)!"
+              : "Campanha criada!"
       );
       resetForm();
       fetchData();
@@ -578,6 +583,7 @@ export default function WhatsAppPage() {
                       {!editingId && (
                         <SelectItem value="__ALL__">🏢 Todas as empresas (cria uma por empresa)</SelectItem>
                       )}
+                      <SelectItem value="__GLOBAL__">🌐 Global (uma única para todas as empresas)</SelectItem>
                       {companies.map(c => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
@@ -612,15 +618,21 @@ export default function WhatsAppPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Instância WhatsApp *</Label>
-                  <Select value={instanceId} onValueChange={setInstanceId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione a instância..." /></SelectTrigger>
-                    <SelectContent>
-                      {instances.filter(i => i.is_active).map(i => (
-                        <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Instância WhatsApp {companyId === "__GLOBAL__" ? "" : "*"}</Label>
+                  {companyId === "__GLOBAL__" ? (
+                    <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-border text-xs text-muted-foreground">
+                      🌐 Será usada a instância da empresa de cada lead
+                    </div>
+                  ) : (
+                    <Select value={instanceId} onValueChange={setInstanceId}>
+                      <SelectTrigger><SelectValue placeholder="Selecione a instância..." /></SelectTrigger>
+                      <SelectContent>
+                        {instances.filter(i => i.is_active).map(i => (
+                          <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Data início *</Label>
@@ -690,7 +702,7 @@ export default function WhatsAppPage() {
                             {c.company_id ? (
                               <Badge variant="secondary" className="text-[10px]">{getCompanyName(c.company_id)}</Badge>
                             ) : (
-                              <Badge variant="destructive" className="text-[10px]">Sem empresa</Badge>
+                              <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-500 border-blue-500/30">🌐 Global (todas as empresas)</Badge>
                             )}
                             {c.instance_id && (
                               <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
