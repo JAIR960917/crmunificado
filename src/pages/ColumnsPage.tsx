@@ -150,7 +150,7 @@ export default function ColumnsPage() {
       .select("*")
       .eq("status_id", status.id)
       .order("position");
-    setChecklistItems((data || []) as ChecklistItem[]);
+    setChecklistItems(((data || []) as unknown) as ChecklistItem[]);
     setNewChecklistLabel("");
     setFinDialogOpen(true);
   };
@@ -176,7 +176,7 @@ export default function ColumnsPage() {
       .single();
     if (error) toast.error("Erro ao adicionar item");
     else {
-      setChecklistItems(prev => [...prev, data as ChecklistItem]);
+      setChecklistItems(prev => [...prev, (data as unknown) as ChecklistItem]);
       setNewChecklistLabel("");
     }
     setSavingFin(false);
