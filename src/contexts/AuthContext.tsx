@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Só limpa a sessão em logout explícito ou usuário removido.
       // TOKEN_REFRESHED com falha temporária pode emitir nextSession=null
       // sem que o usuário tenha realmente saído — ignorar evita "fechar" o CRM.
-      if (event === "SIGNED_OUT" || event === "USER_DELETED") {
+      if (event === "SIGNED_OUT") {
         setSession(null);
         setRoles([]);
         setLoading(false);
