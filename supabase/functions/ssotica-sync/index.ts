@@ -411,11 +411,11 @@ async function syncContasReceber(
           (renegociacaoObj.id != null || renegociacaoObj.valor_renegociacao != null);
         const foiRenegociada = situacao.startsWith("renegoc") || temObjetoRenegociacao;
 
-        // Negativado SERASA = dívida AINDA ATIVA. A SSótica pode marcar
-        // cancelado_em/baixado_em/estornado_em quando negativa a parcela,
-        // mas a dívida continua válida e o cliente deve permanecer na cobrança
-        // na coluna correspondente à parcela mais antiga em aberto.
-        const isNegativada = situacao.startsWith("negativado");
+        // Negativado SERASA / Ajuizado(a) Saniely / Návde = dívida AINDA ATIVA.
+        // A SSótica pode marcar cancelado_em/baixado_em/estornado_em quando
+        // negativa ou ajuíza a parcela, mas a dívida continua válida e o
+        // cliente deve permanecer na cobrança na coluna correspondente.
+        const isNegativada = isNegativadoSerasa || isAjuizado;
 
         const foiBaixada = !isNegativada && !!parcela.baixado_em;
         const foiCancelada = !isNegativada && !!parcela.cancelado_em;
