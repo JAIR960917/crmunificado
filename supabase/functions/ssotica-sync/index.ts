@@ -86,6 +86,22 @@ const COBRANCA_LOCKED_KEYS = new Set<string>([
   "inadimplncia_sem_ajuizamento_manual",
 ]);
 
+// Colunas que ficam DEPOIS da COLUNA 8 ("60 dias de atraso — ligação / negativação").
+// Cards nessas colunas exigem situação "Negativado Serasa" para permanecerem.
+// Caso contrário, retornam para a COLUNA 8 aguardando tratativa.
+const COLUNAS_APOS_8 = new Set<string>([
+  "61_negativao",
+  "65_dias_de_atraso_receber_informe_de_negativao",
+  "75_dias_de_atraso_proposta_de_negociao_ps_negativao",
+  "90_dias_de_atraso_ligao_para_tentativa_de_negociao_ps_negativao",
+  "105_dias_de_atraso_notificao_extra_judicial_altomtico",
+  "120_dias_de_atraso_ligao_informe_judicial",
+  "135_dias_de_atraso_oferta_de_negativao_automatico",
+  "150_dias_de_atraso_enviar_para_o_advogado",
+  "180_dias_ajuizar_manualmente",
+  "inadimplncia_sem_ajuizamento_manual",
+]);
+
 // Quando o card é NOVO e a regra por dias indicaria uma coluna travada
 // (>= 31 dias), paramos no "31 dias de atraso — ligação". A partir daí o card
 // só avança via fluxo manual configurado pela Brenda.
@@ -614,7 +630,12 @@ async function syncContasReceber(
     let colunaKey = colunaKeyAlvo;
     if (existingCobranca && !hasAjuizado && !hasNegativadoSerasa) {
       if (COBRANCA_LOCKED_KEYS.has(existingCobranca.status)) {
-        colunaKey = existingCobranca.status; // mantém a coluna atual (travada)
+        // Cards após a COLUNA 8 (60 dias) só podem permanecer lá se houver
+        // parcela "Negativado Serasa". Como não há, voltam para a COLUNA 8
+        // e aguardam tratativa da Brenda.
+        colunaKey = COLUNAS_APOS_8.has(existingCobranca.status)
+          ? "60_dias_de_atraso_ligao_negativao"
+          : existingCobranca.status; // mantém a coluna atual (travada)
       }
     }
 
