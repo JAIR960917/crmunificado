@@ -288,8 +288,13 @@ async function syncContasReceber(
     semCliente: 0,
   };
   const situacoesVistas = new Map<string, number>();
-  // Contas a Receber: usa o Código de Licença se disponível, senão usa o CNPJ.
-  const empresaParam = normalizeIdentifier(integ.license_code || integ.cnpj);
+  // Contas a Receber: usamos `cnpj=` (e não `empresa=<license_code>`), pois o
+  // license_code é compartilhado entre lojas do mesmo grupo e o endpoint de
+  // contas-a-receber só retorna as parcelas filtradas corretamente quando o
+  // CNPJ específico da loja é informado. Sem isso, lojas "filhas" (ex.: Catolé
+  // do Rocha) acabam retornando 0 parcelas e os boletos do cliente em mais de
+  // uma loja não chegam ao CRM (impedindo a posterior consolidação cross-store).
+  const cnpjParam = normalizeIdentifier(integ.cnpj);
 
   // Atribui novas cobranças à Brenda automaticamente (responsável padrão por cobranças)
   const { data: brendaProfile } = await supabase
@@ -352,7 +357,7 @@ async function syncContasReceber(
     let page = 1;
     while (true) {
       const url =
-        `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?empresa=${encodeURIComponent(empresaParam)}&inicio_periodo=${w.start}&fim_periodo=${w.end}&page=${page}&perPage=100`;
+        `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?cnpj=${encodeURIComponent(cnpjParam)}&inicio_periodo=${w.start}&fim_periodo=${w.end}&page=${page}&perPage=100`;
       const json = await fetchSSotica(url, integ.bearer_token) as {
         currentPage?: number;
         totalPages?: number;
