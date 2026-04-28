@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { LogIn } from "lucide-react";
+import joonkerLogo from "@/assets/joonker-logo.png";
 
 export default function Login() {
   const { settings } = useSystemSettings();
@@ -50,14 +50,8 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm shadow-xl border-0">
         <CardHeader className="text-center pb-2">
-          {/* Logo dinâmica vinda de system_settings */}
-          {settings.logo_url ? (
-            <img src={settings.logo_url} alt="Logo" className="mx-auto mb-3 h-12 w-12 rounded-xl object-contain" />
-          ) : (
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-              <LogIn className="h-6 w-6 text-primary-foreground" />
-            </div>
-          )}
+          {/* Logo Joonker */}
+          <img src={joonkerLogo} alt="Joonker" className="mx-auto mb-3 h-20 object-contain" />
           <CardTitle className="text-2xl font-bold">{settings.system_name || "CRM"}</CardTitle>
           <p className="text-sm text-muted-foreground">Faça login para acessar o sistema</p>
         </CardHeader>
