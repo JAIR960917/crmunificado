@@ -125,7 +125,7 @@ export default function CobrancaContactAttemptForm({
           };
 
           const { error: renovErr } = await supabase.from("crm_renovacoes").insert({
-            status: "renegociado",
+            status: "novo",
             assigned_to: cob.assigned_to,
             created_by: userId,
             data: renovacaoData,
