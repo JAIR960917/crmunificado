@@ -265,7 +265,7 @@ export default function TriggerCampaigns({ instances }: Props) {
         for (const c of companies) {
           const { data, error } = await supabase
             .from("whatsapp_trigger_campaigns")
-            .insert({ ...basePayload, name: `${basePayload.name} — ${c.name}`, company_id: c.id })
+            .insert({ ...basePayload, name: `${basePayload.name} — ${c.name}`, company_id: c.id, is_active: false })
             .select("id")
             .single();
           if (error) throw error;
@@ -279,7 +279,7 @@ export default function TriggerCampaigns({ instances }: Props) {
         // Uma única campanha global (company_id = null) — usa instância da empresa do lead
         const { data, error } = await supabase
           .from("whatsapp_trigger_campaigns")
-          .insert({ ...basePayload, company_id: null, instance_id: null })
+          .insert({ ...basePayload, company_id: null, instance_id: null, is_active: false })
           .select("id")
           .single();
         if (error) throw error;
@@ -291,7 +291,7 @@ export default function TriggerCampaigns({ instances }: Props) {
       } else {
         const { data, error } = await supabase
           .from("whatsapp_trigger_campaigns")
-          .insert({ ...basePayload, company_id: companyId })
+          .insert({ ...basePayload, company_id: companyId, is_active: false })
           .select("id")
           .single();
         if (error) throw error;
