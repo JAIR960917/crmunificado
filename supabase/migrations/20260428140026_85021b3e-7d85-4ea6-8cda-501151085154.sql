@@ -1,0 +1,1 @@
+UPDATE public.ssotica_integrations SET sync_status = 'idle', last_error = NULL WHERE company_id IN ('30993132-b4b3-47d0-b0ab-045ecf1baf24', '7b32e05f-2747-4656-942d-d6481a8a4478') AND sync_status = 'running';
