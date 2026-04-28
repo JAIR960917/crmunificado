@@ -48,18 +48,18 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-black p-4">
-      <Card className="w-full max-w-sm shadow-xl border-0">
+      <Card className="w-full max-w-sm shadow-xl border-0 bg-neutral-900 text-white">
         <CardHeader className="text-center pb-2">
           {/* Logo Joonker */}
           <img src={joonkerLogo} alt="Joonker" className="mx-auto mb-3 h-20 object-contain" />
-          <CardTitle className="text-2xl font-bold">{settings.system_name || "CRM"}</CardTitle>
-          <p className="text-sm text-muted-foreground">Faça login para acessar o sistema</p>
+          <CardTitle className="text-2xl font-bold text-white">{settings.system_name || "CRM"}</CardTitle>
+          <p className="text-sm text-neutral-300">Faça login para acessar o sistema</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             {/* Campo: e-mail */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-white">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -67,12 +67,13 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="seu@email.com"
                 required
+                className="bg-neutral-800 border-neutral-700 text-white placeholder:text-neutral-500"
               />
             </div>
 
             {/* Campo: senha */}
             <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+              <Label htmlFor="password" className="text-white">Senha</Label>
               <Input
                 id="password"
                 type="password"
@@ -80,11 +81,12 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                className="bg-neutral-800 border-neutral-700 text-white placeholder:text-neutral-500"
               />
             </div>
 
             {/* Botão de envio (desabilita enquanto carrega) */}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white" disabled={loading}>
               {loading ? "Entrando..." : "Entrar"}
             </Button>
           </form>
