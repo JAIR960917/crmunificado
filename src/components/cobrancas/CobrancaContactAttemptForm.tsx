@@ -105,6 +105,57 @@ export default function CobrancaContactAttemptForm({
         },
       });
 
+      // 4) Se renegociou: cria card em Renovações e remove a cobrança
+      if (atendeu === "sim" && renegociou === "sim") {
+        // Busca dados completos da cobrança para migrar
+        const { data: cob } = await supabase
+          .from("crm_cobrancas")
+          .select("*")
+          .eq("id", cobrancaId)
+          .maybeSingle();
+
+        if (cob) {
+          const renovacaoData = {
+            ...(cob.data as any),
+            origem_cobranca_id: cobrancaId,
+            renegociado_em: nowIso,
+            renegociado_por: userId,
+            renegociado_por_nome: userName || null,
+            renegociado_observacao: observacao.trim(),
+          };
+
+          const { error: renovErr } = await supabase.from("crm_renovacoes").insert({
+            status: "renegociado",
+            assigned_to: cob.assigned_to,
+            created_by: userId,
+            data: renovacaoData,
+            data_ultima_compra: null,
+            ssotica_cliente_id: cob.ssotica_cliente_id,
+            ssotica_company_id: cob.ssotica_company_id || cob.company_id,
+            valor: cob.valor || 0,
+          } as any);
+          if (renovErr) {
+            console.error("Falha ao criar renovação:", renovErr);
+            toast.error("Renegociado salvo, mas falhou ao mover para Renovações: " + renovErr.message);
+          } else {
+            // Remove a cobrança da tela
+            const { error: delErr } = await supabase
+              .from("crm_cobrancas")
+              .delete()
+              .eq("id", cobrancaId);
+            if (delErr) {
+              console.error("Falha ao remover cobrança:", delErr);
+              toast.error("Renovação criada, mas cobrança permanece: " + delErr.message);
+            } else {
+              toast.success("Cliente renegociou — movido para Renovações!");
+              reset();
+              onSaved?.();
+              return;
+            }
+          }
+        }
+      }
+
       toast.success("Contato registrado!");
       reset();
       onSaved?.();
