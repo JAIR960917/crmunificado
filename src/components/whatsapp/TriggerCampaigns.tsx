@@ -408,7 +408,15 @@ export default function TriggerCampaigns({ instances }: Props) {
             </div>
             <div className="space-y-2">
               <Label>Página de origem *</Label>
-              <Select value={moduleKey} onValueChange={(v) => { setModuleKey(v as ModuleKey); setStatusId(""); }}>
+              <Select value={moduleKey} onValueChange={(v) => {
+                const next = v as ModuleKey;
+                setModuleKey(next);
+                setStatusId("");
+                if (next === "cobrancas") {
+                  const joonker = instances.find(i => i.is_active && i.name?.toLowerCase().includes("oticajoonker"));
+                  if (joonker) setInstanceId(joonker.id);
+                }
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
