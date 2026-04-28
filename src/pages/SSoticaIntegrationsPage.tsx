@@ -332,7 +332,7 @@ export default function SSoticaIntegrationsPage() {
     try {
       const body = forceFull
         ? { mode: "start_backfill", integration_id: integ.id }
-        : { integration_id: integ.id };
+        : { integration_id: integ.id, manual_recent: true };
       const { data, error } = await supabase.functions.invoke("ssotica-sync", { body });
       if (error) throw error;
 
