@@ -380,6 +380,113 @@ export default function TransitionLogsPage() {
             </div>
           )}
         </Card>
+          </TabsContent>
+
+          <TabsContent value="campanhas" className="space-y-6 mt-4">
+            <Card className="p-4">
+              <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
+                <Filter className="h-4 w-4" /> Filtros
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-1.5">
+                  <Label>Tipo</Label>
+                  <Select value={completionSourceFilter} onValueChange={(v: any) => setCompletionSourceFilter(v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="campaign">Campanhas</SelectItem>
+                      <SelectItem value="trigger">Gatilhos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Empresa</Label>
+                  <Select value={companyId} onValueChange={setCompanyId}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      {companies.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Data inicial</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Data final</Label>
+                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                </div>
+              </div>
+              <div className="flex justify-end mt-4">
+                <Button size="sm" onClick={loadCompletionLogs} disabled={completionLoading}>
+                  Aplicar filtros
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data / Hora</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Módulo</TableHead>
+                    <TableHead>Coluna</TableHead>
+                    <TableHead>Empresa</TableHead>
+                    <TableHead className="text-right">Cards</TableHead>
+                    <TableHead className="text-right">Enviados</TableHead>
+                    <TableHead className="text-right">Erros</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {completionLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        Carregando...
+                      </TableCell>
+                    </TableRow>
+                  ) : completionLogs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        Nenhuma campanha concluída registrada
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    completionLogs.map((cl) => (
+                      <TableRow key={cl.id}>
+                        <TableCell className="whitespace-nowrap text-sm">
+                          {format(new Date(cl.completed_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                        </TableCell>
+                        <TableCell>
+                          {cl.source_type === "campaign" ? (
+                            <Badge variant="outline" className="border-blue-300 bg-blue-500/10 text-blue-700">
+                              <MessageSquare className="h-3 w-3 mr-1" /> Campanha
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-purple-300 bg-purple-500/10 text-purple-700">
+                              <Zap className="h-3 w-3 mr-1" /> Gatilho
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium">{cl.source_name}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{moduleNiceLabel(cl.module)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{cl.status_label ?? cl.status_key ?? "—"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{companyName(cl.company_id)}</TableCell>
+                        <TableCell className="text-right text-sm">{cl.total_cards}</TableCell>
+                        <TableCell className="text-right text-sm text-emerald-600 font-medium">{cl.sent_count}</TableCell>
+                        <TableCell className="text-right text-sm text-red-600 font-medium">{cl.error_count}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );
