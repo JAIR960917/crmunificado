@@ -227,6 +227,134 @@ export type Database = {
           },
         ]
       }
+      crm_cobranca_column_flow: {
+        Row: {
+          column_type: string
+          created_at: string
+          days_to_advance: number
+          flow_enabled: boolean
+          id: string
+          next_status_id: string | null
+          status_id: string
+          updated_at: string
+          whatsapp_trigger_campaign_id: string | null
+        }
+        Insert: {
+          column_type?: string
+          created_at?: string
+          days_to_advance?: number
+          flow_enabled?: boolean
+          id?: string
+          next_status_id?: string | null
+          status_id: string
+          updated_at?: string
+          whatsapp_trigger_campaign_id?: string | null
+        }
+        Update: {
+          column_type?: string
+          created_at?: string
+          days_to_advance?: number
+          flow_enabled?: boolean
+          id?: string
+          next_status_id?: string | null
+          status_id?: string
+          updated_at?: string
+          whatsapp_trigger_campaign_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_cobranca_column_flow_next_status_id_fkey"
+            columns: ["next_status_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobranca_statuses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_cobranca_column_flow_status_id_fkey"
+            columns: ["status_id"]
+            isOneToOne: true
+            referencedRelation: "crm_cobranca_statuses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_cobranca_column_flow_whatsapp_trigger_campaign_id_fkey"
+            columns: ["whatsapp_trigger_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_trigger_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_cobranca_flow_events: {
+        Row: {
+          cobranca_id: string
+          created_at: string
+          created_by: string | null
+          details: Json
+          event_type: string
+          id: string
+          next_status_key: string | null
+          next_status_label: string | null
+          status_id: string | null
+          status_key: string | null
+          status_label: string | null
+          whatsapp_trigger_campaign_id: string | null
+          whatsapp_trigger_campaign_name: string | null
+        }
+        Insert: {
+          cobranca_id: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json
+          event_type: string
+          id?: string
+          next_status_key?: string | null
+          next_status_label?: string | null
+          status_id?: string | null
+          status_key?: string | null
+          status_label?: string | null
+          whatsapp_trigger_campaign_id?: string | null
+          whatsapp_trigger_campaign_name?: string | null
+        }
+        Update: {
+          cobranca_id?: string
+          created_at?: string
+          created_by?: string | null
+          details?: Json
+          event_type?: string
+          id?: string
+          next_status_key?: string | null
+          next_status_label?: string | null
+          status_id?: string | null
+          status_key?: string | null
+          status_label?: string | null
+          whatsapp_trigger_campaign_id?: string | null
+          whatsapp_trigger_campaign_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_cobranca_flow_events_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobrancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_cobranca_flow_events_status_id_fkey"
+            columns: ["status_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobranca_statuses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_cobranca_flow_events_whatsapp_trigger_campaign_id_fkey"
+            columns: ["whatsapp_trigger_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_trigger_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_cobranca_notes: {
         Row: {
           cobranca_id: string
