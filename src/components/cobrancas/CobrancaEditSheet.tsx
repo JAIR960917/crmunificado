@@ -19,6 +19,7 @@ import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTria
 import { cn } from "@/lib/utils";
 import ClientProductsTab from "@/components/ClientProductsTab";
 import CobrancaContactAttemptForm from "@/components/cobrancas/CobrancaContactAttemptForm";
+import CobrancaFlowEvents from "@/components/cobrancas/CobrancaFlowEvents";
 import { recordCardOpen } from "@/lib/cardOpens";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
@@ -679,14 +680,22 @@ export default function CobrancaEditSheet(props: Props) {
               <ScrollArea className="flex-1 max-sm:[&_[data-radix-scroll-area-viewport]]:!overflow-visible max-sm:[&>[data-radix-scroll-area-viewport]]:max-h-none">
                 <div className="p-5 space-y-3">
                   {tab === "atividade" && cobrancaId && user && (
-                    <CobrancaContactAttemptForm
-                      cobrancaId={cobrancaId}
-                      userId={user.id}
-                      userName={getProfile(user.id)?.full_name}
-                      cobrancaData={formData}
-                      cobrancaStatus={formStatus}
-                      onSaved={() => { setContactRegisteredInSession(true); fetchTimeline(); }}
-                    />
+                    <>
+                      <CobrancaContactAttemptForm
+                        cobrancaId={cobrancaId}
+                        userId={user.id}
+                        userName={getProfile(user.id)?.full_name}
+                        cobrancaData={formData}
+                        cobrancaStatus={formStatus}
+                        onSaved={() => { setContactRegisteredInSession(true); fetchTimeline(); }}
+                      />
+                      <CobrancaFlowEvents
+                        cobrancaId={cobrancaId}
+                        cobrancaData={formData}
+                        currentStatusKey={formStatus}
+                        refreshKey={contactRegisteredInSession ? 1 : 0}
+                      />
+                    </>
                   )}
                   {tab === "atividade" && timeline.length === 0 && (
                     <p className="text-center text-sm text-muted-foreground py-12">Nenhuma atividade registrada ainda.</p>
