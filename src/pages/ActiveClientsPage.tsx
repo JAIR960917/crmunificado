@@ -418,6 +418,12 @@ export default function ActiveClientsPage() {
     const fromStatus = result.source.droppableId;
     if (newStatus === fromStatus) return;
 
+    // Apenas administradores podem mover renovações manualmente entre colunas.
+    if (!isAdmin) {
+      toast.error("Apenas administradores podem mover renovações entre colunas.");
+      return;
+    }
+
     // find item in source column or search results
     const fromCol = paginatedColumns[fromStatus];
     const currentItem = fromCol?.items.find((it) => it.id === itemId)
