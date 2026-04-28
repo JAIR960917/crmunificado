@@ -245,6 +245,29 @@ export default function CobrancasPage() {
     const fromStatus = result.source.droppableId;
     const cobrancaId = result.draggableId;
     if (newStatus === fromStatus) return;
+
+    // Permissões de movimentação manual entre colunas:
+    //  • Admin: pode tudo.
+    //  • Financeiro: SOMENTE da coluna 16 ("180 dias — Ajuizar manualmente")
+    //    para "Inadimplência sem ajuizamento (Manual)".
+    //  • Gerente / vendedores / outros: bloqueado.
+    const FINANCEIRO_FROM = "180_dias_ajuizar_manualmente";
+    const FINANCEIRO_TO = "inadimplncia_sem_ajuizamento_manual";
+    if (!isAdmin) {
+      const financeiroAllowed =
+        isFinanceiro && fromStatus === FINANCEIRO_FROM && newStatus === FINANCEIRO_TO;
+      if (!financeiroAllowed) {
+        if (isFinanceiro) {
+          toast.error(
+            "O Financeiro só pode mover cards da coluna 16 para 'Inadimplência sem ajuizamento'.",
+          );
+        } else {
+          toast.error("Apenas administradores podem mover cobranças entre colunas.");
+        }
+        return;
+      }
+    }
+
     const item = paginatedColumns[fromStatus]?.items.find((it) => it.id === cobrancaId)
       || (searchResults || []).find((it) => it.id === cobrancaId);
 
