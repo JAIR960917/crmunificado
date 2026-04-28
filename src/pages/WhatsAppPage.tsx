@@ -347,13 +347,14 @@ export default function WhatsAppPage() {
         ...basePayload,
         name: `${basePayload.name} — ${c.name}`,
         company_id: c.id,
+        is_active: false,
       }));
       ({ error } = await supabase.from("whatsapp_campaigns").insert(rows));
     } else if (companyId === "__GLOBAL__") {
       // Uma única campanha global — usa instância da empresa do lead
-      ({ error } = await supabase.from("whatsapp_campaigns").insert({ ...basePayload, company_id: null, instance_id: null }));
+      ({ error } = await supabase.from("whatsapp_campaigns").insert({ ...basePayload, company_id: null, instance_id: null, is_active: false }));
     } else {
-      ({ error } = await supabase.from("whatsapp_campaigns").insert({ ...basePayload, company_id: companyId }));
+      ({ error } = await supabase.from("whatsapp_campaigns").insert({ ...basePayload, company_id: companyId, is_active: false }));
     }
 
     if (error) { toast.error("Erro ao salvar campanha"); console.error(error); }
