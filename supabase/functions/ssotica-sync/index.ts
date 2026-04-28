@@ -571,13 +571,72 @@ async function syncContasReceber(
   const chunksProcessed = 1;
   console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_em_atraso=${parcelasPorCliente.size} backfill_chunk=${isBackfillChunk}${manualRecentWindow ? " manual_recent=true" : incrementalWindow ? ` slot=${incrementalWindow.slot + 1}/${INCREMENTAL_COBRANCAS_SLICES}` : ""}`);
 
+  // Janela atual em formato YYYY-MM-DD para decidir quais parcelas existentes
+  // foram efetivamente revisadas neste slot (e portanto podem ser substituídas).
+  // Parcelas FORA dessa janela não foram consultadas agora — devem ser preservadas
+  // do que já estava no banco para evitar perder dados entre slots incrementais.
+  const windowStartStr = ymd(overallStart);
+  const windowEndStr = ymd(overallEnd);
+  const isParcelaInWindow = (venc: string | null | undefined): boolean => {
+    if (!venc) return false;
+    const v = String(venc).slice(0, 10);
+    return v >= windowStartStr && v <= windowEndStr;
+  };
+  const parcelaKey = (p: any): string =>
+    p?.parcela_id != null
+      ? `pid:${p.parcela_id}`
+      : `tit:${p?.titulo_id ?? ""}-num:${p?.numero_parcela ?? ""}-venc:${p?.vencimento ?? ""}`;
+
   // ===== Upsert por cliente: 1 card com a lista de TODAS as parcelas em atraso =====
   for (const [clienteIdNum, bucket] of parcelasPorCliente.entries()) {
     const { cliente, parcelas, hasNegativadoSerasa, hasAjuizado } = bucket;
+
+    // Upsert apenas do card desta própria loja. A consolidação cross-store roda
+    // ao final da sync e é ela quem decide qual loja vence e quais parcelas serão unificadas.
+    // Se apagarmos cards de outras lojas aqui, perdemos parcelas antes do merge final.
+    const { data: existingSameStore } = await supabase
+      .from("crm_cobrancas")
+      .select("id, assigned_to, created_by, scheduled_date, status, valor, vencimento, dias_atraso, data")
+      .eq("ssotica_cliente_id", clienteIdNum)
+      .eq("ssotica_company_id", integ.company_id)
+      .maybeSingle();
+
+    const existingCobranca = existingSameStore as ExistingCobranca | null;
+
+    // ===== MERGE com parcelas já existentes no banco =====
+    // Como o sync incremental cobre apenas ~92 dias por slot, parcelas de outros
+    // períodos do histórico (24 meses) precisam ser preservadas. Removemos do
+    // banco SOMENTE as parcelas cujo vencimento caiu DENTRO da janela atual e
+    // que não voltaram nesta execução (provavelmente foram pagas/baixadas).
+    // Parcelas FORA da janela atual ficam intactas até o slot que as cobre rodar.
+    const novasKeys = new Set(parcelas.map(parcelaKey));
+    const existingParcelas = ((existingCobranca?.data as any)?.parcelas_atrasadas ?? []) as any[];
+    const preservadas = existingParcelas.filter((p) => {
+      const k = parcelaKey(p);
+      // Se já vem nas novas, ignora (será substituída pela versão fresca).
+      if (novasKeys.has(k)) return false;
+      // Fora da janela atual → preserva (não temos evidência atualizada).
+      if (!isParcelaInWindow(p?.vencimento)) return true;
+      // Dentro da janela: se a API retornou status pago/cancelado/etc para essa
+      // parcela, removemos. Se não foi vista de jeito nenhum, também removemos
+      // (estava na janela revisada e sumiu).
+      return false;
+    });
+    const parcelasMerged = [...preservadas, ...parcelas];
     // Ordena parcelas pelo vencimento mais antigo primeiro
-    parcelas.sort((a, b) => (a.vencimento < b.vencimento ? -1 : a.vencimento > b.vencimento ? 1 : 0));
-    const maisAntiga = parcelas[0];
-    const totalAtraso = parcelas.reduce((s, p) => s + p.valor, 0);
+    parcelasMerged.sort((a, b) => (a.vencimento < b.vencimento ? -1 : a.vencimento > b.vencimento ? 1 : 0));
+    const maisAntiga = parcelasMerged[0];
+    const totalAtraso = parcelasMerged.reduce((s, p) => s + Number(p.valor ?? 0), 0);
+
+    // Recalcula flags especiais considerando TODAS as parcelas (preservadas + novas)
+    const hasNegativadoSerasaMerged = hasNegativadoSerasa || parcelasMerged.some((p) => {
+      const s = String(p?.situacao ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      return s.startsWith("negativado") && s.includes("serasa");
+    });
+    const hasAjuizadoMerged = hasAjuizado || parcelasMerged.some((p) => {
+      const s = String(p?.situacao ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      return s.startsWith("ajuizado") && (s.includes("saniely") || s.includes("navde"));
+    });
 
     // Regra de coluna:
     //  • Ajuizado(A) Saniely / Návde → COLUNA "Ajuizados (Manual)"
@@ -586,8 +645,8 @@ async function syncContasReceber(
     //    em coluna >= 9 (61_negativao em diante) é travado em "61_negativao"
     //    e só sai dali via tratativa + fluxo configurado.
     let colunaKeyAlvo: string;
-    if (hasAjuizado) colunaKeyAlvo = COBRANCA_AJUIZADO_KEY;
-    else if (hasNegativadoSerasa) colunaKeyAlvo = COBRANCA_NEGATIVADO_SERASA_KEY;
+    if (hasAjuizadoMerged) colunaKeyAlvo = COBRANCA_AJUIZADO_KEY;
+    else if (hasNegativadoSerasaMerged) colunaKeyAlvo = COBRANCA_NEGATIVADO_SERASA_KEY;
     else colunaKeyAlvo = clampToLockedEntry(statusKeyForDiasAtraso(maisAntiga.dias_atraso));
 
     const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
@@ -604,31 +663,19 @@ async function syncContasReceber(
       forma_pagamento: maisAntiga.forma_pagamento,
       boleto_nosso_numero: maisAntiga.boleto_nosso_numero,
       // Lista completa de parcelas em atraso desse cliente (consumida pela aba Parcelas no front)
-      parcelas_atrasadas: parcelas,
+      parcelas_atrasadas: parcelasMerged,
       total_atraso: totalAtraso,
-      qtd_parcelas_atrasadas: parcelas.length,
-      situacao_especial: hasAjuizado ? "ajuizado" : hasNegativadoSerasa ? "negativado_serasa" : null,
+      qtd_parcelas_atrasadas: parcelasMerged.length,
+      situacao_especial: hasAjuizadoMerged ? "ajuizado" : hasNegativadoSerasaMerged ? "negativado_serasa" : null,
       ssotica_raw: maisAntiga.ssotica_raw,
     };
-
-    // Upsert apenas do card desta própria loja. A consolidação cross-store roda
-    // ao final da sync e é ela quem decide qual loja vence e quais parcelas serão unificadas.
-    // Se apagarmos cards de outras lojas aqui, perdemos parcelas antes do merge final.
-    const { data: existingSameStore } = await supabase
-      .from("crm_cobrancas")
-      .select("id, assigned_to, created_by, scheduled_date, status, valor, vencimento, dias_atraso, data")
-      .eq("ssotica_cliente_id", clienteIdNum)
-      .eq("ssotica_company_id", integ.company_id)
-      .maybeSingle();
-
-    const existingCobranca = existingSameStore as ExistingCobranca | null;
 
     // Decide o status final que será gravado:
     //  • Casos especiais (Serasa / Ajuizado) sempre forçam a coluna fixa.
     //  • Card já existente em coluna travada (>= COLUNA 9) NÃO é movido pelo
     //    sync — quem move dali é o fluxo manual (cobranca-flow-advance).
     let colunaKey = colunaKeyAlvo;
-    if (existingCobranca && !hasAjuizado && !hasNegativadoSerasa) {
+    if (existingCobranca && !hasAjuizadoMerged && !hasNegativadoSerasaMerged) {
       if (COBRANCA_LOCKED_KEYS.has(existingCobranca.status)) {
         // Cards após a COLUNA 8 (60 dias) só podem permanecer lá se houver
         // parcela "Negativado Serasa". Como não há, voltam para a COLUNA 8
