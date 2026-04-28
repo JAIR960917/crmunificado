@@ -68,6 +68,33 @@ type Props = {
   canReassign: boolean;
 };
 
+function parseSafeDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    const [, year, month, day] = iso;
+    const parsed = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 12));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const dmy = value.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (dmy) {
+    let [, day, month, year] = dmy;
+    const yearNum = Number(year.length === 2 ? `20${year}` : year);
+    const parsed = new Date(Date.UTC(yearNum, Number(month) - 1, Number(day), 12));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatSafeDate(value: string | null | undefined): string {
+  const parsed = parseSafeDate(value);
+  return parsed ? format(parsed, "dd/MM/yyyy", { locale: ptBR }) : "—";
+}
+
 export default function CobrancaEditSheet(props: Props) {
   const {
     open, onOpenChange, cobrancaId, ssoticaClienteId, ssoticaCompanyId,
@@ -563,7 +590,7 @@ export default function CobrancaEditSheet(props: Props) {
                             <p className="text-sm text-muted-foreground italic">Nenhuma parcela em atraso.</p>
                           )}
                           {parcelas.filter(p => (p.dias_atraso ?? 0) > 0).map(p => {
-                            const venc = p.vencimento ? format(new Date(p.vencimento), "dd/MM/yyyy", { locale: ptBR }) : "—";
+                            const venc = formatSafeDate(p.vencimento);
                             return (
                               <div
                                 key={p.id}
@@ -606,7 +633,7 @@ export default function CobrancaEditSheet(props: Props) {
                             <>
                               <div className="text-xs font-semibold text-muted-foreground uppercase mt-4">Outras parcelas</div>
                               {parcelas.filter(p => (p.dias_atraso ?? 0) <= 0).map(p => {
-                                const venc = p.vencimento ? format(new Date(p.vencimento), "dd/MM/yyyy", { locale: ptBR }) : "—";
+                                const venc = formatSafeDate(p.vencimento);
                                 return (
                                   <div key={p.id} className="rounded-lg border border-border bg-card p-3 flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-3 min-w-0">
