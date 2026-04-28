@@ -220,6 +220,11 @@ export default function TriggerCampaigns({ instances }: Props) {
     setSaving(true);
 
     try {
+      // Para Cobranças, força a instância oticaJoonker mesmo se empresa for Global
+      const joonkerInstance = instances.find(i => i.is_active && i.name?.toLowerCase().includes("oticajoonker"));
+      const forcedInstanceId = moduleKey === "cobrancas" && joonkerInstance ? joonkerInstance.id : null;
+      const effectiveInstanceId = forcedInstanceId || instanceId || null;
+
       const basePayload: any = {
         name: name.trim(),
         module: moduleKey,
@@ -227,7 +232,7 @@ export default function TriggerCampaigns({ instances }: Props) {
         start_time: startTime,
         end_time: endTime,
         created_by: user.id,
-        instance_id: instanceId || null,
+        instance_id: effectiveInstanceId,
       };
 
       const buildSteps = (campaignId: string) =>
@@ -276,10 +281,10 @@ export default function TriggerCampaigns({ instances }: Props) {
         }
         toast.success(`${companies.length} campanhas criadas (uma por empresa)!`);
       } else if (companyId === "__GLOBAL__") {
-        // Uma única campanha global (company_id = null) — usa instância da empresa do lead
+        // Global: normalmente usa instância da empresa do lead, mas para Cobranças força oticaJoonker
         const { data, error } = await supabase
           .from("whatsapp_trigger_campaigns")
-          .insert({ ...basePayload, company_id: null, instance_id: null, is_active: false })
+          .insert({ ...basePayload, company_id: null, instance_id: forcedInstanceId, is_active: false })
           .select("id")
           .single();
         if (error) throw error;
@@ -444,7 +449,11 @@ export default function TriggerCampaigns({ instances }: Props) {
             </div>
             <div className="space-y-2">
               <Label>Instância WhatsApp</Label>
-              {companyId === "__GLOBAL__" ? (
+              {moduleKey === "cobrancas" ? (
+                <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-primary/40 text-xs text-muted-foreground">
+                  📌 Cobranças usa sempre a instância <span className="font-semibold ml-1">oticaJoonker</span>
+                </div>
+              ) : companyId === "__GLOBAL__" ? (
                 <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-border text-xs text-muted-foreground">
                   🌐 Será usada a instância da empresa de cada lead
                 </div>
