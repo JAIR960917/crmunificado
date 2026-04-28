@@ -180,11 +180,25 @@ export default function TransitionLogsPage() {
               </p>
             </div>
           </div>
-          <Button onClick={load} variant="outline" size="sm" disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          <Button onClick={() => { load(); loadCompletionLogs(); }} variant="outline" size="sm" disabled={loading || completionLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${(loading || completionLoading) ? "animate-spin" : ""}`} />
             Atualizar
           </Button>
         </header>
+
+        <Tabs defaultValue="movimentacao" className="w-full">
+          <TabsList>
+            <TabsTrigger value="movimentacao">
+              <ArrowRight className="h-4 w-4 mr-2" />
+              Movimentação de cards
+            </TabsTrigger>
+            <TabsTrigger value="campanhas">
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Campanhas concluídas
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="movimentacao" className="space-y-6 mt-4">
 
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-4 text-sm font-medium text-muted-foreground">
