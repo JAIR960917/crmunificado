@@ -387,16 +387,21 @@ async function syncContasReceber(
           .trim();
         situacoesVistas.set(situacao, (situacoesVistas.get(situacao) ?? 0) + 1);
 
-        const isAtiva =
-          situacao === "em aberto" ||
-          situacao === "vencido" ||
-          situacao === "vencida" ||
+        // ⚠️ REGRA: só puxamos para o CRM parcelas com situação "Em atraso"
+        // (e variantes), além dos casos especiais "Negativado Serasa" e
+        // "Ajuizado(A) Saniely / Návde", que têm coluna fixa.
+        // Situações como "em aberto", "vencido", "a vencer" NÃO entram mais.
+        const isAjuizado =
+          situacao.startsWith("ajuizado") &&
+          (situacao.includes("saniely") || situacao.includes("navde"));
+        const isNegativadoSerasa =
+          situacao.startsWith("negativado") && situacao.includes("serasa");
+        const isEmAtraso =
           situacao === "em atraso" ||
           situacao === "atrasado" ||
-          situacao === "atrasada" ||
-          situacao.startsWith("negativado") ||
-          situacao === "a vencer" ||
-          situacao === "vencer";
+          situacao === "atrasada";
+
+        const isAtiva = isEmAtraso || isNegativadoSerasa || isAjuizado;
 
         const renegociacaoObj = parcela.renegociacao ?? parcela.renegociacao_info ?? null;
         const temObjetoRenegociacao =
