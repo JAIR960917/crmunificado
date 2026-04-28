@@ -1616,6 +1616,57 @@ export type Database = {
           },
         ]
       }
+      whatsapp_completion_logs: {
+        Row: {
+          company_id: string | null
+          completed_at: string
+          created_at: string
+          error_count: number
+          id: string
+          module: string
+          sent_count: number
+          source_id: string
+          source_name: string
+          source_type: string
+          status_id: string | null
+          status_key: string | null
+          status_label: string | null
+          total_cards: number
+        }
+        Insert: {
+          company_id?: string | null
+          completed_at?: string
+          created_at?: string
+          error_count?: number
+          id?: string
+          module: string
+          sent_count?: number
+          source_id: string
+          source_name: string
+          source_type: string
+          status_id?: string | null
+          status_key?: string | null
+          status_label?: string | null
+          total_cards?: number
+        }
+        Update: {
+          company_id?: string | null
+          completed_at?: string
+          created_at?: string
+          error_count?: number
+          id?: string
+          module?: string
+          sent_count?: number
+          source_id?: string
+          source_name?: string
+          source_type?: string
+          status_id?: string | null
+          status_key?: string | null
+          status_label?: string | null
+          total_cards?: number
+        }
+        Relationships: []
+      }
       whatsapp_instances: {
         Row: {
           company_id: string | null
