@@ -526,41 +526,17 @@ async function syncContasReceber(
       ssotica_raw: maisAntiga.ssotica_raw,
     };
 
-    // Busca cards existentes do mesmo cliente em QUALQUER loja
-    // (regra: 1 card por cliente em todo o sistema, escolhido pela parcela mais antiga).
-    const { data: existingAll } = await supabase
+    // Upsert apenas do card desta própria loja. A consolidação cross-store roda
+    // ao final da sync e é ela quem decide qual loja vence e quais parcelas serão unificadas.
+    // Se apagarmos cards de outras lojas aqui, perdemos parcelas antes do merge final.
+    const { data: existingSameStore } = await supabase
       .from("crm_cobrancas")
-      .select("id, ssotica_company_id, vencimento")
-      .eq("ssotica_cliente_id", clienteIdNum);
-    const existingList = (existingAll ?? []) as Array<{ id: string; ssotica_company_id: string | null; vencimento: string | null }>;
+      .select("id, assigned_to, created_by, scheduled_date, status, valor, vencimento, dias_atraso, data")
+      .eq("ssotica_cliente_id", clienteIdNum)
+      .eq("ssotica_company_id", integ.company_id)
+      .maybeSingle();
 
-    // Card desta loja (se existir) tem prioridade para ser atualizado;
-    // cards de OUTRAS lojas com vencimento mais recente que `maisAntiga` são removidos
-    // (perdem a "disputa" para esta loja, que tem a parcela mais antiga).
-    const sameStoreCard = existingList.find((c) => c.ssotica_company_id === integ.company_id) ?? null;
-    const otherStoreCards = existingList.filter((c) => c.ssotica_company_id !== integ.company_id);
-
-    // Se outra loja já tem o cliente com vencimento MAIS ANTIGO que o desta loja,
-    // não criamos/atualizamos card aqui — esse cliente "pertence" à outra loja.
-    const outroMaisAntigo = otherStoreCards.find(
-      (c) => c.vencimento && maisAntiga.vencimento && c.vencimento < maisAntiga.vencimento,
-    );
-    if (outroMaisAntigo && !sameStoreCard) {
-      // Outra loja tem dívida mais antiga deste cliente → mantemos lá, ignoramos aqui.
-      continue;
-    }
-
-    // Esta loja tem a parcela mais antiga (ou empate): remove cards do mesmo cliente em OUTRAS lojas.
-    if (otherStoreCards.length > 0) {
-      const idsToRemove = otherStoreCards
-        .filter((c) => !c.vencimento || !maisAntiga.vencimento || c.vencimento >= maisAntiga.vencimento)
-        .map((c) => c.id);
-      if (idsToRemove.length > 0) {
-        await supabase.from("crm_cobrancas").delete().in("id", idsToRemove);
-      }
-    }
-
-    const existingCobranca = sameStoreCard as ExistingCobranca | null;
+    const existingCobranca = existingSameStore as ExistingCobranca | null;
 
     if (existingCobranca) {
       await supabase
