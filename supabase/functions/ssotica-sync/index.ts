@@ -833,6 +833,15 @@ async function syncContasReceber(
     if (storedCobrancas.length > 0) {
       for (const cob of storedCobrancas) {
         const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
+        const parcelasDoCard = Array.isArray((cob as any)?.data?.parcelas_atrasadas)
+          ? ((cob as any).data.parcelas_atrasadas as any[])
+          : [];
+        const parcelaIdsDoCard = Array.from(new Set([
+          ...(parcelaId ? [parcelaId] : []),
+          ...parcelasDoCard
+            .map((p) => (p?.parcela_id != null ? Number(p.parcela_id) : null))
+            .filter((id): id is number => Number.isFinite(id) && id > 0),
+        ]));
         const clienteId = Number(cob.ssotica_cliente_id);
 
         // Cliente AINDA tem parcelas em atraso na janela atual → mantém o card
@@ -842,16 +851,22 @@ async function syncContasReceber(
         // Mantém o card (a parcela pode estar fora da janela ou pode não ter sido paginada).
         if (!clientesAfetados.has(clienteId)) continue;
 
-        // Defesa extra: se a parcela específica está listada como ativa nesta sync,
-        // segura (race condition entre páginas).
-        if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
+        // Defesa extra: se QUALQUER parcela deste card apareceu como ativa nesta
+        // sync, segura (race condition entre páginas / card consolidado com mais
+        // de uma parcela em atraso).
+        if (parcelaIdsDoCard.some((id) => parcelasAtivasIds.has(id))) continue;
 
-        // CRÍTICO: só deleta se TEMOS EVIDÊNCIA DIRETA de que a parcela foi paga/cancelada.
-        // Isso significa que a parcela específica desse card foi retornada pela API
-        // com status pago/cancelado/renegociado/baixado.
-        // Se a parcela não foi vista (pode ter sumido por filtro de paginação ou janela),
+        // CRÍTICO: só deleta se TEMOS EVIDÊNCIA DIRETA de que TODAS as parcelas
+        // conhecidas desse card foram retornadas como pagas/canceladas/
+        // renegociadas/baixadas. Isso cobre cards cujo ssotica_parcela_id ficou
+        // desatualizado, mas a lista interna de parcelas_atrasadas já reflete o
+        // conjunto real de parcelas do lead.
+        // Se alguma parcela conhecida não foi vista como inativa nesta janela,
         // NÃO deletamos — preferimos manter um falso positivo do que migrar errado.
-        if (!parcelaId || !parcelasInativasIds.has(parcelaId)) continue;
+        if (
+          parcelaIdsDoCard.length === 0 ||
+          !parcelaIdsDoCard.every((id) => parcelasInativasIds.has(id))
+        ) continue;
 
         // OK, evidência confirmada de quitação DESTA parcela: remove só este card.
         const cobData = (cob as any).data ?? {};
