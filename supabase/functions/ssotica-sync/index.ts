@@ -539,12 +539,23 @@ async function syncContasReceber(
   console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_em_atraso=${parcelasPorCliente.size} backfill_chunk=${isBackfillChunk}${manualRecentWindow ? " manual_recent=true" : incrementalWindow ? ` slot=${incrementalWindow.slot + 1}/${INCREMENTAL_COBRANCAS_SLICES}` : ""}`);
 
   // ===== Upsert por cliente: 1 card com a lista de TODAS as parcelas em atraso =====
-  for (const [clienteIdNum, { cliente, parcelas }] of parcelasPorCliente.entries()) {
+  for (const [clienteIdNum, bucket] of parcelasPorCliente.entries()) {
+    const { cliente, parcelas, hasNegativadoSerasa, hasAjuizado } = bucket;
     // Ordena parcelas pelo vencimento mais antigo primeiro
     parcelas.sort((a, b) => (a.vencimento < b.vencimento ? -1 : a.vencimento > b.vencimento ? 1 : 0));
     const maisAntiga = parcelas[0];
     const totalAtraso = parcelas.reduce((s, p) => s + p.valor, 0);
-    const colunaKey = statusKeyForDiasAtraso(maisAntiga.dias_atraso);
+
+    // Regra de coluna:
+    //  • Ajuizado(A) Saniely / Návde → COLUNA "Ajuizados (Manual)"
+    //  • Negativado Serasa            → COLUNA 10 (informe de negativação)
+    //  • Demais ("Em atraso")         → coluna por dias, mas tudo que cairia
+    //    em coluna >= 9 (61_negativao em diante) é travado em "61_negativao"
+    //    e só sai dali via tratativa + fluxo configurado.
+    let colunaKeyAlvo: string;
+    if (hasAjuizado) colunaKeyAlvo = COBRANCA_AJUIZADO_KEY;
+    else if (hasNegativadoSerasa) colunaKeyAlvo = COBRANCA_NEGATIVADO_SERASA_KEY;
+    else colunaKeyAlvo = clampToLockedEntry(statusKeyForDiasAtraso(maisAntiga.dias_atraso));
 
     const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
     const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
@@ -563,6 +574,7 @@ async function syncContasReceber(
       parcelas_atrasadas: parcelas,
       total_atraso: totalAtraso,
       qtd_parcelas_atrasadas: parcelas.length,
+      situacao_especial: hasAjuizado ? "ajuizado" : hasNegativadoSerasa ? "negativado_serasa" : null,
       ssotica_raw: maisAntiga.ssotica_raw,
     };
 
@@ -577,6 +589,17 @@ async function syncContasReceber(
       .maybeSingle();
 
     const existingCobranca = existingSameStore as ExistingCobranca | null;
+
+    // Decide o status final que será gravado:
+    //  • Casos especiais (Serasa / Ajuizado) sempre forçam a coluna fixa.
+    //  • Card já existente em coluna travada (>= COLUNA 9) NÃO é movido pelo
+    //    sync — quem move dali é o fluxo manual (cobranca-flow-advance).
+    let colunaKey = colunaKeyAlvo;
+    if (existingCobranca && !hasAjuizado && !hasNegativadoSerasa) {
+      if (COBRANCA_LOCKED_KEYS.has(existingCobranca.status)) {
+        colunaKey = existingCobranca.status; // mantém a coluna atual (travada)
+      }
+    }
 
     if (existingCobranca) {
       await supabase
