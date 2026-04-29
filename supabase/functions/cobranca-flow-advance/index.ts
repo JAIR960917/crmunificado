@@ -228,6 +228,15 @@ serve(async (req) => {
       const elapsedDays = (now.getTime() - new Date(baseTs).getTime()) / 86400000;
       if (elapsedDays < (flow.days_to_advance || 0)) continue;
 
+      // Mínimo de parcelas em atraso para liberar o avanço.
+      // Se a coluna foi configurada com min_parcelas_atraso > 0, o card só sobe
+      // quando o cliente tiver pelo menos esse número de parcelas vencidas.
+      const minParcelas = Number(flow.min_parcelas_atraso ?? 1);
+      if (minParcelas > 0) {
+        const parcelasAtrasadas = Array.isArray(data.parcelas_atrasadas) ? data.parcelas_atrasadas : [];
+        if (parcelasAtrasadas.length < minParcelas) continue;
+      }
+
       // Avança o card e limpa marcas para que a próxima coluna conte do zero
       const newData = { ...data };
       delete newData.tratativa_em;

@@ -234,6 +234,7 @@ export type Database = {
           days_to_advance: number
           flow_enabled: boolean
           id: string
+          min_parcelas_atraso: number
           next_status_id: string | null
           status_id: string
           updated_at: string
@@ -245,6 +246,7 @@ export type Database = {
           days_to_advance?: number
           flow_enabled?: boolean
           id?: string
+          min_parcelas_atraso?: number
           next_status_id?: string | null
           status_id: string
           updated_at?: string
@@ -256,6 +258,7 @@ export type Database = {
           days_to_advance?: number
           flow_enabled?: boolean
           id?: string
+          min_parcelas_atraso?: number
           next_status_id?: string | null
           status_id?: string
           updated_at?: string
@@ -383,6 +386,35 @@ export type Database = {
             columns: ["cobranca_id"]
             isOneToOne: false
             referencedRelation: "crm_cobrancas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_cobranca_situacao_mapping: {
+        Row: {
+          created_at: string
+          situacao: string
+          status_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          situacao: string
+          status_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          situacao?: string
+          status_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_cobranca_situacao_mapping_status_id_fkey"
+            columns: ["status_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobranca_statuses"
             referencedColumns: ["id"]
           },
         ]
