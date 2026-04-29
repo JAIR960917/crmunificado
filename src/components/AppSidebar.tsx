@@ -22,7 +22,7 @@ import {
   LayoutDashboard, Users, LogOut, Columns3, Building2, FileText,
   Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare,
   CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart,
-  History, BarChart3, FileBarChart, RefreshCw, Workflow,
+  History, BarChart3, FileBarChart, RefreshCw, Workflow, Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,7 @@ const navItems: NavItem[] = [
   { path: "/whatsapp",             label: "WhatsApp",               icon: MessageSquare, roles: ["admin", "gerente"] },
   { path: "/importar",             label: "Importar Leads",         icon: Upload,       roles: ["admin"] },
   { path: "/integracoes-ssotica",  label: "Integrações SSótica",    icon: Plug,         roles: ["admin"] },
+  { path: "/status-ssotica",       label: "Status SSótica",         icon: Activity,     roles: ["admin"] },
   { path: "/logs-movimentacao",    label: "Logs Movimentação",      icon: History,      roles: ["admin"] },
 ];
 
