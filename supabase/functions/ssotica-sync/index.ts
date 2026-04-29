@@ -687,17 +687,35 @@ async function syncContasReceber(
       const s = String(p?.situacao ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       return s.startsWith("ajuizado") && (s.includes("saniely") || s.includes("navde"));
     });
+    let ajuizadoVariantMerged: string | null = ajuizadoVariant;
+    if (hasAjuizadoMerged && !ajuizadoVariantMerged) {
+      for (const p of parcelasMerged) {
+        const s = String(p?.situacao ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        if (s.startsWith("ajuizado") && s.includes("saniely")) { ajuizadoVariantMerged = "ajuizado_saniely"; break; }
+        if (s.startsWith("ajuizado") && s.includes("navde")) { ajuizadoVariantMerged = "ajuizado_navde"; break; }
+      }
+    }
+    const hasEmAtrasoMerged = hasEmAtraso || parcelasMerged.some((p) => {
+      const s = String(p?.situacao ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      return s === "em atraso" || s === "atrasado" || s === "atrasada";
+    });
 
-    // Regra de coluna:
-    //  • Ajuizado(A) Saniely / Návde → COLUNA "Ajuizados (Manual)"
-    //  • Negativado Serasa            → COLUNA 10 (informe de negativação)
-    //  • Demais ("Em atraso")         → coluna por dias, mas tudo que cairia
-    //    em coluna >= 9 (61_negativao em diante) é travado em "61_negativao"
-    //    e só sai dali via tratativa + fluxo configurado.
+    // Regra de coluna (configurável via tabela crm_cobranca_situacao_mapping):
+    //  • Ajuizado(A) Saniely / Návde → coluna mapeada para a variante (default: 180_dias_ajuizar_manualmente)
+    //  • Negativado Serasa            → coluna mapeada (default: COLUNA 10)
+    //  • Em atraso (situação SSÓtica) → coluna mapeada (default: COLUNA 8)
+    //  • Demais (a vencer / vencido)  → escala por dias com cap nas locked
     let colunaKeyAlvo: string;
-    if (hasAjuizadoMerged) colunaKeyAlvo = COBRANCA_AJUIZADO_KEY;
-    else if (hasNegativadoSerasaMerged) colunaKeyAlvo = COBRANCA_NEGATIVADO_SERASA_KEY;
-    else colunaKeyAlvo = clampToLockedEntry(statusKeyForDiasAtraso(maisAntiga.dias_atraso));
+    if (hasAjuizadoMerged) {
+      const variantKey = ajuizadoVariantMerged ?? "ajuizado_saniely";
+      colunaKeyAlvo = situacaoMapping[variantKey] ?? situacaoMapping["ajuizado_saniely"] ?? "180_dias_ajuizar_manualmente";
+    } else if (hasNegativadoSerasaMerged) {
+      colunaKeyAlvo = situacaoMapping["negativado_serasa"] ?? "65_dias_de_atraso_receber_informe_de_negativao";
+    } else if (hasEmAtrasoMerged) {
+      colunaKeyAlvo = situacaoMapping["em_atraso"] ?? "60_dias_de_atraso_ligao_negativao";
+    } else {
+      colunaKeyAlvo = clampToLockedEntry(statusKeyForDiasAtraso(maisAntiga.dias_atraso));
+    }
 
     const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
     const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
