@@ -82,8 +82,18 @@ function sqlEscape(v) {
   return `'${String(v).replace(/'/g, "''")}'`;
 }
 
+// Tabelas que NÃO têm coluna created_at — usar ordenação por id
+const TABLES_WITHOUT_CREATED_AT = new Set([
+  'user_roles',
+  'crm_cobranca_checklist_completions',
+  'lead_card_opens',
+  'ssotica_sync_logs',
+  'system_settings',
+]);
+
 async function fetchPage(table, from, to) {
-  const url = `${SOURCE_URL}/rest/v1/${table}?select=*&order=created_at.asc.nullslast`;
+  const orderCol = TABLES_WITHOUT_CREATED_AT.has(table) ? 'id' : 'created_at';
+  const url = `${SOURCE_URL}/rest/v1/${table}?select=*&order=${orderCol}.asc.nullslast`;
   const res = await fetch(url, {
     headers: {
       apikey: SOURCE_KEY,
