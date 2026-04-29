@@ -22,7 +22,7 @@ import {
   LayoutDashboard, Users, LogOut, Columns3, Building2, FileText,
   Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare,
   CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart,
-  History, BarChart3, FileBarChart, RefreshCw, Workflow,
+  History, BarChart3, FileBarChart, RefreshCw, Workflow, Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
