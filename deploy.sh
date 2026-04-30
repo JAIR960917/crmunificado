@@ -95,8 +95,12 @@ run_migrations() {
   local app_supabase_url="${SUPABASE_PUBLIC_URL:-${SUPABASE_URL:-}}"
   local app_supabase_anon="${SUPABASE_ANON_KEY:-${ANON_KEY:-}}"
   if [ -n "${app_supabase_url}" ] && [ -n "${app_supabase_anon}" ]; then
-    db_exec "ALTER DATABASE postgres SET \"app.settings.supabase_url\" = '${app_supabase_url}';"
-    db_exec "ALTER DATABASE postgres SET \"app.settings.supabase_anon_key\" = '${app_supabase_anon}';"
+    if ! db_exec "ALTER DATABASE postgres SET \"app.settings.supabase_url\" = '${app_supabase_url}';"; then
+      warn "Sem permissão para definir app.settings.supabase_url via ALTER DATABASE (continuando)."
+    fi
+    if ! db_exec "ALTER DATABASE postgres SET \"app.settings.supabase_anon_key\" = '${app_supabase_anon}';"; then
+      warn "Sem permissão para definir app.settings.supabase_anon_key via ALTER DATABASE (continuando)."
+    fi
   fi
 
   db_exec "
@@ -169,10 +173,19 @@ EOF
     bun install --frozen-lockfile
     log "Build do frontend (bun)..."
     bun run build
-  else
+  elif command -v npm >/dev/null 2>&1; then
     npm ci
     log "Build do frontend (npm)..."
     npm run build
+  elif command -v docker >/dev/null 2>&1; then
+    warn "bun/npm não encontrados na VPS; usando build do container crm-frontend via docker compose."
+    docker compose build crm-frontend
+    docker compose up -d crm-frontend
+    ok "Frontend rebuildado via docker compose"
+    return 0
+  else
+    err "Nem bun/npm/docker disponíveis para build do frontend."
+    return 1
   fi
   ok "Build concluído em ./dist"
 
