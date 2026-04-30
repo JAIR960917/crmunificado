@@ -1869,7 +1869,7 @@ async function runBackfillChunk(
   // 1 chunk em caso de timeout, mas evita loop infinito que trava 100% do backfill.
   const nextIdxOptimistic = idx + 1;
   const finishedOptimistic = nextIdxOptimistic >= total;
-  const nextRunAtOptimistic = finishedOptimistic ? null : new Date(Date.now() + 30 * 1000).toISOString();
+  const nextRunAtOptimistic = finishedOptimistic ? null : new Date().toISOString();
   await supabase.from("ssotica_integrations").update({
     backfill_chunk_index: nextIdxOptimistic,
     backfill_next_run_at: nextRunAtOptimistic,
@@ -1900,6 +1900,7 @@ async function runBackfillChunk(
       initial_sync_done: finished ? true : integ.initial_sync_done,
       last_sync_receber_at: finished ? finishedAt : integ.last_sync_receber_at,
       last_sync_vendas_at: finished ? finishedAt : integ.last_sync_vendas_at,
+      backfill_next_run_at: finished ? null : new Date().toISOString(),
       last_error: null,
     }).eq("id", integ.id);
 
@@ -1914,8 +1915,8 @@ async function runBackfillChunk(
       }).eq("id", logId);
     }
 
-    const nextRunAt = finished ? null : new Date(Date.now() + 30 * 1000).toISOString();
-    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. ${finished ? 'CONCLUÍDO!' : `próximo em 30s (${nextRunAt})`}`);
+    const nextRunAt = finished ? null : new Date().toISOString();
+    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. ${finished ? 'CONCLUÍDO!' : `próximo imediatamente (${nextRunAt})`}`);
 
     // RECONCILIAÇÃO: roda APENAS no chunk final (quando todos os dados já foram sincronizados).
     // Antes era a cada chunk, mas em lojas grandes (~7000 cobranças) isso causava timeout
@@ -1960,6 +1961,10 @@ async function runBackfillChunk(
       } catch (notifErr) {
         console.error(`[ssotica-sync][backfill] falha ao notificar conclusão:`, notifErr);
       }
+    }
+
+    if (!finished) {
+      triggerNextBackfillTick();
     }
 
     return { ok: true, chunk_index: idx, finished };
@@ -2023,13 +2028,21 @@ Deno.serve(async (req) => {
       }
       const results: any[] = [];
       for (const integ of list) {
+        const claimUntil = new Date(Date.now() + BACKFILL_CLAIM_WINDOW_MS).toISOString();
         // Promove "scheduled" → "running" para que runBackfillChunk processe normalmente
         if (integ.backfill_status === "scheduled") {
           await supabase
             .from("ssotica_integrations")
-            .update({ backfill_status: "running", sync_status: "running" })
+            .update({ backfill_status: "running", sync_status: "running", backfill_next_run_at: claimUntil, last_error: null })
             .eq("id", integ.id);
           (integ as any).backfill_status = "running";
+          (integ as any).backfill_next_run_at = claimUntil;
+        } else {
+          await supabase
+            .from("ssotica_integrations")
+            .update({ backfill_next_run_at: claimUntil })
+            .eq("id", integ.id);
+          (integ as any).backfill_next_run_at = claimUntil;
         }
         const r = await runBackfillChunk(supabase, integ);
         results.push({ integration_id: integ.id, ...r });
