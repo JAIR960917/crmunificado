@@ -62,9 +62,16 @@ export default defineConfig(({ mode }) => ({
     }),
   ].filter(Boolean),
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+    alias: [
+      {
+        find: "@/integrations/supabase/client",
+        replacement: path.resolve(__dirname, "./src/integrations/runtime-supabase-client.ts"),
+      },
+      {
+        find: "@",
+        replacement: path.resolve(__dirname, "./src"),
+      },
+    ],
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@radix-ui/react-tooltip"],
   },
 }));

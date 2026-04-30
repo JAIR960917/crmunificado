@@ -1,0 +1,1 @@
+window.__CRM_RUNTIME_CONFIG__ = window.__CRM_RUNTIME_CONFIG__ || {};

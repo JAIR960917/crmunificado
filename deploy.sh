@@ -127,6 +127,23 @@ run_functions() {
 # Frontend (build + restart do container que serve o app)
 # ---------------------------------------------------------------------------
 run_frontend() {
+  local runtime_config_path="${PROJECT_DIR}/public/runtime-config.js"
+  local frontend_backend_url="${FRONTEND_SUPABASE_URL:-${SUPABASE_URL:-https://api.joonker.com.br}}"
+  local frontend_publishable_key="${FRONTEND_SUPABASE_PUBLISHABLE_KEY:-${SUPABASE_ANON_KEY:-}}"
+
+  if [ -z "$frontend_publishable_key" ]; then
+    err "Defina FRONTEND_SUPABASE_PUBLISHABLE_KEY ou SUPABASE_ANON_KEY antes do build do frontend."
+    return 1
+  fi
+
+  log "Gravando config runtime do frontend para ${frontend_backend_url}..."
+  cat > "$runtime_config_path" <<EOF
+window.__CRM_RUNTIME_CONFIG__ = {
+  supabaseUrl: "${frontend_backend_url}",
+  supabasePublishableKey: "${frontend_publishable_key}"
+};
+EOF
+
   log "Instalando dependências..."
   if command -v bun >/dev/null 2>&1; then
     bun install --frozen-lockfile
