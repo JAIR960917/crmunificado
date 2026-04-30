@@ -34,15 +34,18 @@ run_migrations() {
   log "Aplicando migrations..."
   local use_docker_fallback=0
 
-  if command -v psql >/dev/null 2>&1 && [ -n "${SUPABASE_DB_URL:-}" ]; then
+  # Por padrão usamos o container do Postgres (mais confiável em self-hosted
+  # com Supavisor/pooler na porta 5432). Para forçar conexão direta via psql,
+  # exporte USE_PSQL_DIRECT=1 e SUPABASE_DB_URL apontando para o Postgres real.
+  if [ "${USE_PSQL_DIRECT:-0}" = "1" ] && command -v psql >/dev/null 2>&1 && [ -n "${SUPABASE_DB_URL:-}" ]; then
     if psql "$SUPABASE_DB_URL" -tAc "SELECT 1" >/dev/null 2>&1; then
       ok "Conexão direta com o banco OK via SUPABASE_DB_URL"
     else
-      warn "SUPABASE_DB_URL inválida ou inacessível; tentando aplicar via container ${DB_CONTAINER}..."
+      warn "SUPABASE_DB_URL inválida; usando fallback via container ${DB_CONTAINER}..."
       use_docker_fallback=1
     fi
   else
-    warn "SUPABASE_DB_URL não definida ou psql indisponível; tentando aplicar via container ${DB_CONTAINER}..."
+    log "Usando container ${DB_CONTAINER} para aplicar migrations (modo padrão self-hosted)"
     use_docker_fallback=1
   fi
 
