@@ -14,7 +14,7 @@ set -euo pipefail
 PROJECT_DIR="/opt/crm"
 SUPABASE_DIR="${PROJECT_DIR}/supabase"
 DB_CONTAINER="${SUPABASE_DB_CONTAINER:-supabase-db}"
-DB_USER="${SUPABASE_DB_USER:-supabase_admin}"
+DB_USER="${SUPABASE_DB_USER:-postgres}"
 
 # Cores
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; B='\033[0;34m'; N='\033[0m'
