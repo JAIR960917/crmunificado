@@ -22,6 +22,7 @@ const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
 // continua sendo 24 meses, agora distribuída em 8 ciclos de 3h (24h completas).
 const INCREMENTAL_COBRANCAS_SLICES = 8;
 const RUNNING_SYNC_STALE_MINUTES = 5;
+const BACKFILL_CLAIM_WINDOW_MS = 15 * 60 * 1000;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 function getRequiredEnv(name: string): string {
@@ -324,6 +325,23 @@ async function decryptIntegration<T extends { bearer_token?: string | null; lice
   if (!item) return item;
   await decryptIntegrations(supabase, [item]);
   return item;
+}
+
+async function enqueueSsoticaSyncJob(
+  supabase: any,
+  payload: Record<string, unknown>,
+  timeoutMilliseconds = 600000,
+): Promise<void> {
+  const { error } = await supabase.rpc("ssotica_enqueue_job", {
+    _url: `${getBaseUrlForFanout()}/functions/v1/ssotica-sync`,
+    _auth: `Bearer ${getRequiredEnv("SUPABASE_ANON_KEY")}`,
+    _payload: payload,
+    _timeout_milliseconds: timeoutMilliseconds,
+  });
+
+  if (error) {
+    throw new Error(`Falha ao enfileirar job SSÓtica: ${error.message}`);
+  }
 }
 
 // Calcula a janela de datas de um chunk específico (chunk 0 = mais recente).
