@@ -158,9 +158,8 @@ export default function CobrancaFlowPage() {
           <h1 className="text-2xl font-bold">Fluxo do Funil de Cobrança</h1>
         </div>
         <p className="text-sm text-muted-foreground mb-6">
-          Configure, por coluna, se a movimentação acontece após a tratativa do operador (manual)
-          ou após o envio de uma mensagem automática via WhatsApp (automática). Os dias são contados
-          a partir da tratativa (manual) ou do envio do gatilho (automática).
+          Cards entram automaticamente em <b>"1 Dia antes do vencimento"</b>, depois <b>"1 Dia de atraso"</b> e, ao completar 30 dias, em <b>"30 dias de atraso"</b>.
+          A partir daí, configure abaixo como cada coluna avança: por <b>dias</b> após a tratativa/gatilho, ou por <b>quantidade de parcelas em atraso</b> (preencha "Mín. parcelas" e deixe "Dias" em 0).
         </p>
 
         {loading ? (
