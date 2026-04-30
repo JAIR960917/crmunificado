@@ -48,7 +48,7 @@ services:
 
   supabase-rest:
     container_name: supabase-rest
-    image: postgrest/postgrest:v14.8.0
+    image: postgrest/postgrest:v14.7
     restart: unless-stopped
     depends_on:
       supabase-db:
