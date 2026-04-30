@@ -110,6 +110,10 @@ export default function CobrancasPage() {
     table: "crm_cobrancas",
     statusKeys,
     filter: columnFilter,
+    // Mais antigo no topo: ordena pelo vencimento da parcela. O sort do front
+    // ainda re-organiza para empurrar tratados/recentes para o final.
+    orderColumn: "vencimento",
+    orderAscending: true,
     searchQuery,
     buildSearchOr,
     refreshKey,
