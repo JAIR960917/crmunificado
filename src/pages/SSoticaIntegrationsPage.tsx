@@ -74,6 +74,11 @@ interface Integration {
   last_sync_receber_at: string | null;
   sync_status: string;
   last_error: string | null;
+  backfill_status?: string | null;
+  backfill_chunk_index?: number | null;
+  backfill_total_chunks?: number | null;
+  backfill_next_run_at?: string | null;
+  updated_at?: string | null;
 }
 
 interface SyncLog {
@@ -251,7 +256,26 @@ export default function SSoticaIntegrationsPage() {
   }
 
   useEffect(() => {
-    if (isAdmin) fetchAll();
+    if (!isAdmin) return;
+
+    fetchAll();
+
+    const interval = window.setInterval(() => {
+      fetchAll();
+    }, 10000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchAll();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [isAdmin]);
 
   if (authLoading) return <div className="p-8">Carregando...</div>;
@@ -337,10 +361,9 @@ export default function SSoticaIntegrationsPage() {
       if (error) throw error;
 
       if (forceFull) {
-        // Backfill iniciado: 1º chunk já rodou, próximos 7 vão automaticamente a cada 3 min
         toast({
           title: "Backfill de 96 meses iniciado",
-          description: "O 1º chunk (12 meses mais recentes) foi processado. Os próximos 7 chunks rodarão automaticamente, 1 a cada 3 minutos. Total estimado: ~25 min.",
+          description: "O progresso será atualizado automaticamente nesta tela conforme os próximos lotes forem concluídos.",
         });
       } else {
         const result = data?.results?.[0];
@@ -411,6 +434,14 @@ export default function SSoticaIntegrationsPage() {
   function statusBadge(integ?: Integration) {
     if (!integ) return <Badge variant="outline">Não configurada</Badge>;
     if (!integ.is_active) return <Badge variant="secondary">Desativada</Badge>;
+    if (integ.backfill_status === "scheduled") {
+      return <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />Na fila</Badge>;
+    }
+    if (integ.backfill_status === "running") {
+      const total = integ.backfill_total_chunks ?? 16;
+      const done = integ.backfill_chunk_index ?? 0;
+      return <Badge variant="secondary"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Backfill {done}/{total}</Badge>;
+    }
     if (integ.sync_status === "running")
       return <Badge variant="secondary"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sincronizando</Badge>;
     if (integ.sync_status === "error" || integ.last_error)
