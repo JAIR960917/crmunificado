@@ -74,6 +74,9 @@ interface Integration {
   last_sync_receber_at: string | null;
   sync_status: string;
   last_error: string | null;
+  backfill_status?: string | null;
+  backfill_chunk_index?: number | null;
+  backfill_total_chunks?: number | null;
 }
 
 interface SyncLog {
@@ -121,7 +124,7 @@ export default function SSoticaIntegrationsPage() {
     }
     if (!confirm(
       `Ressincronizar TUDO em ${active.length} loja(s)?\n\n` +
-      `• A 1ª loja inicia o Backfill 96m agora (8 chunks de 12 meses, ~25 min).\n` +
+        `• A 1ª loja inicia o Backfill 96m agora (16 chunks de 6 meses).\n` +
       `• As demais serão agendadas em sequência, espaçadas 30 min entre cada.\n` +
       `• Tempo total estimado: ~${Math.round((active.length * 30))} min.\n\n` +
       `Continuar?`
@@ -254,6 +257,12 @@ export default function SSoticaIntegrationsPage() {
     if (isAdmin) fetchAll();
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    const timer = setInterval(fetchAll, 10000);
+    return () => clearInterval(timer);
+  }, [isAdmin]);
+
   if (authLoading) return <div className="p-8">Carregando...</div>;
   if (!isAdmin) return <Navigate to="/" replace />;
 
@@ -337,10 +346,10 @@ export default function SSoticaIntegrationsPage() {
       if (error) throw error;
 
       if (forceFull) {
-        // Backfill iniciado: 1º chunk já rodou, próximos 7 vão automaticamente a cada 3 min
+        // Backfill iniciado: 1º chunk já rodou, próximos chunks seguem automaticamente
         toast({
           title: "Backfill de 96 meses iniciado",
-          description: "O 1º chunk (12 meses mais recentes) foi processado. Os próximos 7 chunks rodarão automaticamente, 1 a cada 3 minutos. Total estimado: ~25 min.",
+          description: "O 1º chunk foi processado e os próximos continuarão automaticamente até concluir.",
         });
       } else {
         const result = data?.results?.[0];
@@ -603,12 +612,12 @@ export default function SSoticaIntegrationsPage() {
                             size="sm"
                             variant="secondary"
                             onClick={() => {
-                              if (confirm("Iniciar backfill de 96 meses (8 anos)?\n\nO 1º chunk de 12 meses roda agora; os próximos 7 rodam automaticamente, 1 a cada 3 minutos.\nTotal estimado: ~25 minutos por loja.\n\nFaça uma loja por vez para evitar sobrecarga.")) {
+                              if (confirm("Iniciar backfill de 96 meses (8 anos)?\n\nO 1º chunk roda agora e os próximos continuam automaticamente até concluir.\n\nFaça uma loja por vez para evitar sobrecarga.")) {
                                 handleSyncNow(integ, true);
                               }
                             }}
                             disabled={syncingId === integ.id || !integ.is_active}
-                            title="Backfill completo de 96 meses em chunks de 12 meses, com 3 min entre cada"
+                            title="Backfill completo de 96 meses em chunks sequenciais automáticos"
                           >
                             <RefreshCw className="h-3 w-3 mr-1" />
                             Backfill 96m
