@@ -20,7 +20,9 @@ AS $$
     u.id, u.email::text, u.encrypted_password::text, NULLIF(to_jsonb(u)->>'email_confirmed_at', '')::timestamptz,
     u.raw_user_meta_data, u.raw_app_meta_data,
     u.created_at, u.updated_at,
-    u.phone::text, u.phone_confirmed_at, u.last_sign_in_at
+    NULLIF(to_jsonb(u)->>'phone', '')::text,
+    NULLIF(to_jsonb(u)->>'phone_confirmed_at', '')::timestamptz,
+    NULLIF(to_jsonb(u)->>'last_sign_in_at', '')::timestamptz
   FROM auth.users u
   WHERE public.has_role(auth.uid(), 'admin'::app_role) OR auth.uid() IS NULL;
 $$;
