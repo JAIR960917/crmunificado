@@ -13,6 +13,7 @@ set -euo pipefail
 
 PROJECT_DIR="/opt/crm"
 SUPABASE_DIR="${PROJECT_DIR}/supabase"
+DB_CONTAINER="${SUPABASE_DB_CONTAINER:-supabase-db}"
 
 # Cores
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; B='\033[0;34m'; N='\033[0m'
@@ -31,15 +32,51 @@ MODE="${1:-all}"
 # ---------------------------------------------------------------------------
 run_migrations() {
   log "Aplicando migrations..."
-  if ! command -v psql >/dev/null 2>&1; then
-    err "psql não encontrado. Instale postgresql-client."
+  local use_docker_fallback=0
+
+  if command -v psql >/dev/null 2>&1 && [ -n "${SUPABASE_DB_URL:-}" ]; then
+    if psql "$SUPABASE_DB_URL" -tAc "SELECT 1" >/dev/null 2>&1; then
+      ok "Conexão direta com o banco OK via SUPABASE_DB_URL"
+    else
+      warn "SUPABASE_DB_URL inválida ou inacessível; tentando aplicar via container ${DB_CONTAINER}..."
+      use_docker_fallback=1
+    fi
+  else
+    warn "SUPABASE_DB_URL não definida ou psql indisponível; tentando aplicar via container ${DB_CONTAINER}..."
+    use_docker_fallback=1
+  fi
+
+  if [ "$use_docker_fallback" -eq 1 ] && ! docker ps --format '{{.Names}}' | grep -q "^${DB_CONTAINER}$"; then
+    err "Container ${DB_CONTAINER} não está rodando. Defina SUPABASE_DB_URL válida ou ajuste SUPABASE_DB_CONTAINER."
     return 1
   fi
 
-  : "${SUPABASE_DB_URL:?SUPABASE_DB_URL não definida no ambiente (ex: postgresql://postgres:senha@127.0.0.1:5432/postgres)}"
+  db_exec() {
+    if [ "$use_docker_fallback" -eq 1 ]; then
+      docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "$1" >/dev/null
+    else
+      psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -c "$1" >/dev/null
+    fi
+  }
+
+  db_query() {
+    if [ "$use_docker_fallback" -eq 1 ]; then
+      docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -tAc "$1"
+    else
+      psql "$SUPABASE_DB_URL" -tAc "$1"
+    fi
+  }
+
+  db_file() {
+    if [ "$use_docker_fallback" -eq 1 ]; then
+      docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 >/dev/null < "$1"
+    else
+      psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$1" >/dev/null
+    fi
+  }
 
   local applied_table="public._lovable_migrations"
-  psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -c "
+  db_exec "
     CREATE TABLE IF NOT EXISTS ${applied_table} (
       filename TEXT PRIMARY KEY,
       applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -50,13 +87,13 @@ run_migrations() {
     [ -e "$f" ] || continue
     local name; name="$(basename "$f")"
     local already
-    already=$(psql "$SUPABASE_DB_URL" -tAc "SELECT 1 FROM ${applied_table} WHERE filename = '${name}'")
+    already=$(db_query "SELECT 1 FROM ${applied_table} WHERE filename = '${name}'")
     if [ "$already" = "1" ]; then
       continue
     fi
     log "  -> $name"
-    psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$f" >/dev/null
-    psql "$SUPABASE_DB_URL" -c "INSERT INTO ${applied_table}(filename) VALUES ('${name}')" >/dev/null
+    db_file "$f"
+    db_exec "INSERT INTO ${applied_table}(filename) VALUES ('${name}')"
     count=$((count+1))
   done
   ok "Migrations aplicadas: $count"
