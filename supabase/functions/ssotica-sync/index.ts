@@ -393,10 +393,11 @@ async function syncContasReceber(
   // Carrega mapeamento de "situação SSÓtica" → coluna do funil, configurado pelo admin
   // na tela de Fluxo. Cai em fallback caso a tabela esteja vazia.
   const situacaoMapping: Record<string, string> = {
-    em_atraso: "60_dias_de_atraso_ligao_negativao",
-    negativado_serasa: "65_dias_de_atraso_receber_informe_de_negativao",
-    ajuizado_saniely: "180_dias_ajuizar_manualmente",
-    ajuizado_navde: "180_dias_ajuizar_manualmente",
+    // 'em_atraso' não é mais mapeável: cards com essa situação seguem o fluxo
+    // por dias (1 antes / 1 atraso / 30 atraso) como qualquer outra parcela.
+    negativado_serasa: "coluna_9_negativacao",
+    ajuizado_saniely: "ajuizados_manual",
+    ajuizado_navde: "ajuizados_manual",
   };
   try {
     const { data: mapRows } = await supabase
