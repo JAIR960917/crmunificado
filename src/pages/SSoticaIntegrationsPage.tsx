@@ -257,11 +257,16 @@ export default function SSoticaIntegrationsPage() {
     if (isAdmin) fetchAll();
   }, [isAdmin]);
 
+  // Polling adaptativo: 5s quando há backfill ativo, 15s caso contrário
+  const hasActiveBackfill = integrations.some(
+    (i) => i.backfill_status === "running" || i.backfill_status === "scheduled" || i.sync_status === "running"
+  );
   useEffect(() => {
     if (!isAdmin) return;
-    const timer = setInterval(fetchAll, 10000);
+    const interval = hasActiveBackfill ? 5000 : 15000;
+    const timer = setInterval(fetchAll, interval);
     return () => clearInterval(timer);
-  }, [isAdmin]);
+  }, [isAdmin, hasActiveBackfill]);
 
   if (authLoading) return <div className="p-8">Carregando...</div>;
   if (!isAdmin) return <Navigate to="/" replace />;
