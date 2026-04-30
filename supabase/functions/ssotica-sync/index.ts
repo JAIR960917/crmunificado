@@ -24,6 +24,21 @@ const INCREMENTAL_COBRANCAS_SLICES = 8;
 const RUNNING_SYNC_STALE_MINUTES = 5;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
+function getRequiredEnv(name: string): string {
+  const value = Deno.env.get(name)?.trim();
+  if (!value) {
+    throw new Error(`Configuração ausente no backend: variável ${name} não definida`);
+  }
+  return value;
+}
+
+function getBaseUrlForFanout(): string {
+  return (
+    Deno.env.get("SUPABASE_PUBLIC_URL")?.trim().replace(/\/$/, "") ||
+    getRequiredEnv("SUPABASE_URL").replace(/\/$/, "")
+  );
+}
+
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
 
 function ymd(d: Date): string {
@@ -1958,12 +1973,10 @@ function isRunningSyncStale(integration: Pick<Integration, "sync_status" | "upda
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
   try {
+    const supabaseUrl = getRequiredEnv("SUPABASE_URL");
+    const serviceRoleKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
     const body = await req.json().catch(() => ({}));
     const mode: string = body.mode ?? (body.start_backfill ? "start_backfill" : "incremental");
     const onlyIntegrationId: string | undefined = body.integration_id;
@@ -2126,8 +2139,8 @@ Deno.serve(async (req) => {
     // próprio orçamento de tempo. Isso elimina os travamentos de Caicó/Jucurutu
     // que ocorriam quando o runtime pai era encerrado antes dos disparos paralelos.
     if (!onlyIntegrationId && integrations.length > 1) {
-      const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const fnUrl = `${getBaseUrlForFanout()}/functions/v1/ssotica-sync`;
+      const anonKey = getRequiredEnv("SUPABASE_ANON_KEY");
       const dispatched: string[] = [];
       const fanoutSkipped: any[] = [];
       const fanoutErrors: any[] = [];
