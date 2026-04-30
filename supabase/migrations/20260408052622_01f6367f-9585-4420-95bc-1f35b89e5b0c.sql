@@ -1,9 +1,21 @@
-ALTER TABLE storage.buckets
-  ADD COLUMN IF NOT EXISTS public boolean DEFAULT false;
-
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('logos', 'logos', true)
-ON CONFLICT (id) DO NOTHING;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'storage'
+      AND table_name = 'buckets'
+      AND column_name = 'public'
+  ) THEN
+    INSERT INTO storage.buckets (id, name, public)
+    VALUES ('logos', 'logos', true)
+    ON CONFLICT (id) DO NOTHING;
+  ELSE
+    INSERT INTO storage.buckets (id, name)
+    VALUES ('logos', 'logos')
+    ON CONFLICT (id) DO NOTHING;
+  END IF;
+END $$;
 
 CREATE POLICY "Anyone can view logos"
   ON storage.objects FOR SELECT

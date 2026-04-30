@@ -4,11 +4,24 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone text DEFAULT NULL;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url text DEFAULT NULL;
 
 -- Create avatars storage bucket
-ALTER TABLE storage.buckets
-  ADD COLUMN IF NOT EXISTS public boolean DEFAULT false;
-
-INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true)
-ON CONFLICT (id) DO NOTHING;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'storage'
+      AND table_name = 'buckets'
+      AND column_name = 'public'
+  ) THEN
+    INSERT INTO storage.buckets (id, name, public)
+    VALUES ('avatars', 'avatars', true)
+    ON CONFLICT (id) DO NOTHING;
+  ELSE
+    INSERT INTO storage.buckets (id, name)
+    VALUES ('avatars', 'avatars')
+    ON CONFLICT (id) DO NOTHING;
+  END IF;
+END $$;
 
 -- Storage RLS: anyone authenticated can upload their own avatar
 CREATE POLICY "Users can upload own avatar"
