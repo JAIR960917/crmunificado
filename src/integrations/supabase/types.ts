@@ -1891,6 +1891,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _export_auth_identities_full: {
+        Args: never
+        Returns: {
+          created_at: string
+          email: string
+          identity_data: Json
+          last_sign_in_at: string
+          provider: string
+          provider_id: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
       _export_auth_password_hashes: {
         Args: never
         Returns: {
@@ -1901,6 +1914,28 @@ export type Database = {
           id: string
           instance_id: string
           recovery_token: string
+        }[]
+      }
+      _export_auth_users_full: {
+        Args: never
+        Returns: {
+          aud: string
+          confirmation_token: string
+          created_at: string
+          email: string
+          email_change: string
+          email_change_token_new: string
+          email_confirmed_at: string
+          encrypted_password: string
+          id: string
+          instance_id: string
+          is_anonymous: boolean
+          is_sso_user: boolean
+          raw_app_meta_data: Json
+          raw_user_meta_data: Json
+          recovery_token: string
+          role: string
+          updated_at: string
         }[]
       }
       _get_encryption_key: { Args: never; Returns: string }
