@@ -50,6 +50,69 @@ type CrmStatus = {
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type Company = { id: string; name: string };
 
+type CobrancaGroup = {
+  groupId: string;            // chave de render (cpf normalizado ou id da cobrança quando sem CPF)
+  cpfKey: string | null;
+  items: Cobranca[];
+  representative: Cobranca;
+  representativeStatus: string;
+  valorTotal: number;
+  companies: string[];        // nomes das lojas únicos
+};
+
+const normalizeCpf = (raw: unknown): string | null => {
+  const digits = String(raw ?? "").replace(/\D+/g, "");
+  return digits.length > 0 ? digits : null;
+};
+
+function groupCobrancasByCpf(
+  items: Cobranca[],
+  statuses: CrmStatus[],
+  companyNameById: Map<string, string>,
+): CobrancaGroup[] {
+  const positionByKey = new Map<string, number>();
+  statuses.forEach((s) => positionByKey.set(s.key, s.position));
+
+  const buckets = new Map<string, Cobranca[]>();
+  for (const c of items) {
+    const cpf = normalizeCpf((c.data as any)?.documento ?? (c.data as any)?.cpf);
+    const key = cpf ? `cpf:${cpf}` : `id:${c.id}`;
+    const arr = buckets.get(key);
+    if (arr) arr.push(c);
+    else buckets.set(key, [c]);
+  }
+
+  const groups: CobrancaGroup[] = [];
+  buckets.forEach((arr, key) => {
+    const cpfKey = key.startsWith("cpf:") ? key.slice(4) : null;
+    // representante: status mais grave (maior position); empate → maior valor
+    const rep = [...arr].sort((a, b) => {
+      const pa = positionByKey.get(a.status) ?? -1;
+      const pb = positionByKey.get(b.status) ?? -1;
+      if (pa !== pb) return pb - pa;
+      return (Number(b.valor) || 0) - (Number(a.valor) || 0);
+    })[0];
+    const valorTotal = arr.reduce((acc, it) => acc + (Number(it.valor) || 0), 0);
+    const companies = Array.from(
+      new Set(
+        arr
+          .map((it) => (it.company_id ? companyNameById.get(it.company_id) || "" : ""))
+          .filter(Boolean),
+      ),
+    );
+    groups.push({
+      groupId: key,
+      cpfKey,
+      items: arr,
+      representative: rep,
+      representativeStatus: rep.status,
+      valorTotal,
+      companies,
+    });
+  });
+  return groups;
+}
+
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
   amber:   { header: "bg-amber-500",   badge: "bg-amber-500/15 text-amber-700 border-amber-300" },
