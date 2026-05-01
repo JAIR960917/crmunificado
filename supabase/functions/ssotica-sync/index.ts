@@ -1941,6 +1941,52 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ========== MODO 3.5: retomar backfill pendente sem reiniciar do zero ==========
+    if (mode === "resume_backfill") {
+      if (!onlyIntegrationId) {
+        return new Response(JSON.stringify({ ok: false, error: "integration_id obrigatório" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const { data: integ, error } = await supabase
+        .from("ssotica_integrations")
+        .update({
+          sync_status: "running",
+          backfill_status: "running",
+          backfill_next_run_at: nowIso,
+          last_error: null,
+        })
+        .eq("id", onlyIntegrationId)
+        .neq("backfill_status", "done")
+        .select("*")
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!integ) {
+        return new Response(JSON.stringify({ ok: false, error: "Nenhum backfill pendente para retomar" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const decrypted = await decryptIntegration(supabase, integ as any);
+      const resumed = await runBackfillChunk(supabase, (decrypted ?? integ) as Integration);
+
+      return new Response(JSON.stringify({
+        ok: true,
+        mode: "resume_backfill",
+        resumed,
+        message: resumed.ok
+          ? `Backfill retomado a partir do chunk ${(integ.backfill_chunk_index || 0) + 1}/${integ.backfill_total_chunks || 16}.`
+          : "Falha ao retomar backfill.",
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ========== MODO 4 (default): sync incremental ==========
     const query = supabase
       .from("ssotica_integrations")
@@ -2090,24 +2136,8 @@ Deno.serve(async (req) => {
         // clique manual em "Atualizar". =====
         const backfillChunkResults: any[] = [];
         if (integ.backfill_status === "running") {
-          let cur = integ as Integration;
-          let safety = 0;
-          while (cur.backfill_status === "running" && safety < 20) {
-            safety++;
-            const r = await runBackfillChunk(supabase, cur);
-            backfillChunkResults.push(r);
-            if (!r.ok) break;
-            const { data: refreshed } = await supabase
-              .from("ssotica_integrations")
-              .select("*")
-              .eq("id", integ.id)
-              .single();
-            if (!refreshed) break;
-            // ⚠️ CRÍTICO: descriptografa antes do próximo chunk, senão o token vai como "enc:..." pra API
-            const refreshedDecrypted = await decryptIntegration(supabase, refreshed as any);
-            cur = (refreshedDecrypted ?? refreshed) as Integration;
-            if (r.finished) break;
-          }
+          const r = await runBackfillChunk(supabase, integ);
+          backfillChunkResults.push(r);
         }
 
         const { data: log } = await supabase.from("ssotica_sync_logs").insert({

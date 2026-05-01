@@ -179,7 +179,12 @@ export default function SSoticaStatusPage() {
     setActionId(id);
     const { error } = await supabase
       .from("ssotica_integrations")
-      .update({ sync_status: "idle", last_error: null })
+      .update({
+        sync_status: "idle",
+        backfill_status: "idle",
+        backfill_next_run_at: null,
+        last_error: null,
+      })
       .eq("id", id);
     setActionId(null);
     if (error) {
@@ -196,11 +201,34 @@ export default function SSoticaStatusPage() {
 
   async function resync(id: string) {
     setActionId(id);
-    const { error } = await supabase.functions.invoke("ssotica-sync", {
-      body: { mode: "incremental", integration_id: id },
+    const current = items.find((item) => item.id === id);
+    const hasPendingBackfill =
+      !!current &&
+      current.backfill_status !== "done" &&
+      ((current.backfill_total_chunks ?? 0) === 0 || (current.backfill_chunk_index ?? 0) < (current.backfill_total_chunks ?? 16));
+
+    const { data, error } = await supabase.functions.invoke("ssotica-sync", {
+      body: {
+        mode: hasPendingBackfill ? "resume_backfill" : "incremental",
+        integration_id: id,
+        manual_recent: !hasPendingBackfill,
+      },
     });
     setActionId(null);
     if (error) {
+      const isAlreadyRunning =
+        error.message?.includes("non-2xx") &&
+        (String(data?.error ?? "").includes("already_running") || String(error.message).toLowerCase().includes("already running"));
+
+      if (isAlreadyRunning) {
+        toast({
+          title: "Sincronização já em andamento",
+          description: "Aguarde a conclusão do processamento atual antes de tentar novamente.",
+        });
+        load();
+        return;
+      }
+
       toast({
         title: "Erro ao sincronizar",
         description: error.message,
@@ -208,7 +236,13 @@ export default function SSoticaStatusPage() {
       });
       return;
     }
-    toast({ title: "Sincronização disparada" });
+
+    toast({
+      title: hasPendingBackfill ? "Backfill retomado" : "Sincronização disparada",
+      description: hasPendingBackfill
+        ? "A importação histórica continuou do ponto em que parou."
+        : undefined,
+    });
     load();
   }
 
@@ -223,7 +257,12 @@ export default function SSoticaStatusPage() {
     setBulkLoading(true);
     const { error } = await supabase
       .from("ssotica_integrations")
-      .update({ sync_status: "idle", last_error: null })
+      .update({
+        sync_status: "idle",
+        backfill_status: "idle",
+        backfill_next_run_at: null,
+        last_error: null,
+      })
       .in("id", stuckIds);
     setBulkLoading(false);
     if (error) {
