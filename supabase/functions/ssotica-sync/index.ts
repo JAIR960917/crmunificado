@@ -335,12 +335,15 @@ async function syncContasReceber(
     .maybeSingle();
   const defaultAssignee: string | null = (brendaProfile as any)?.user_id ?? null;
 
-  // Cache de labels das colunas de cobrança (key -> label) para registro de logs
+  // Cache de colunas de cobrança ordenadas por position. Usadas para mapear
+  // dias de atraso → coluna do funil sem keys hardcoded (o admin pode renomear).
   const { data: cobStatusRows } = await supabase
     .from("crm_cobranca_statuses")
-    .select("key,label");
+    .select("key,label,position")
+    .order("position", { ascending: true });
+  const cobStatusList = (cobStatusRows ?? []) as Array<{ key: string; label: string; position: number }>;
   const cobStatusLabelByKey = new Map<string, string>(
-    (cobStatusRows ?? []).map((s: any) => [s.key, s.label]),
+    cobStatusList.map((s) => [s.key, s.label]),
   );
 
   // Helper: registra movimentação automática entre Renovação e Cobrança
@@ -374,13 +377,9 @@ async function syncContasReceber(
   }
 
   // Carrega mapeamento de "situação SSÓtica" → coluna do funil, configurado pelo admin
-  // na tela de Fluxo. Cai em fallback caso a tabela esteja vazia.
-  const situacaoMapping: Record<string, string> = {
-    em_atraso: "60_dias_de_atraso_ligao_negativao",
-    negativado_serasa: "65_dias_de_atraso_receber_informe_de_negativao",
-    ajuizado_saniely: "180_dias_ajuizar_manualmente",
-    ajuizado_navde: "180_dias_ajuizar_manualmente",
-  };
+  // na tela de Fluxo de Cobrança (1 dia antes do vencimento, 1 dia de atraso,
+  // negativado Serasa, ajuizados, etc.).
+  const situacaoMapping: Record<string, string> = {};
   try {
     const { data: mapRows } = await supabase
       .from("crm_cobranca_situacao_mapping")
@@ -390,7 +389,35 @@ async function syncContasReceber(
       if (row?.situacao && key) situacaoMapping[row.situacao] = key;
     }
   } catch (_e) {
-    // mantém defaults se a tabela ainda não existir
+    // tabela vazia/ausente — usa apenas position
+  }
+
+  // Resolve a key da coluna do funil pela posição lógica (0..14), respeitando
+  // mapeamentos configuráveis para 1_dia_antes_vencimento e 1_dia_atraso.
+  function resolveColunaKeyByLogicalIndex(idx: number): string | null {
+    if (idx === 0 && situacaoMapping["1_dia_antes_vencimento"]) return situacaoMapping["1_dia_antes_vencimento"];
+    if (idx === 1 && situacaoMapping["1_dia_atraso"]) return situacaoMapping["1_dia_atraso"];
+    const col = cobStatusList[idx];
+    return col?.key ?? cobStatusList[cobStatusList.length - 1]?.key ?? null;
+  }
+  function lockedEntryKey(): string {
+    return resolveColunaKeyByLogicalIndex(LOGICAL_INDEX_31_DIAS) ?? cobStatusList[0]?.key ?? "";
+  }
+  const lockedKeys = new Set<string>();
+  for (let i = LOCKED_LOGICAL_INDEX_FROM; i < cobStatusList.length; i++) {
+    if (cobStatusList[i]?.key) lockedKeys.add(cobStatusList[i].key);
+  }
+  const colunasApos8 = new Set<string>();
+  for (let i = LOGICAL_INDEX_COLUNA_8 + 1; i < cobStatusList.length; i++) {
+    if (cobStatusList[i]?.key) colunasApos8.add(cobStatusList[i].key);
+  }
+  const coluna8Key = resolveColunaKeyByLogicalIndex(LOGICAL_INDEX_COLUNA_8) ?? lockedEntryKey();
+  function clampToLockedEntryDyn(key: string): string {
+    return lockedKeys.has(key) ? lockedEntryKey() : key;
+  }
+  function colunaKeyForDiasAtraso(dias: number): string {
+    const idx = diasParaIndiceLogico(dias);
+    return resolveColunaKeyByLogicalIndex(idx) ?? "";
   }
 
   // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.
