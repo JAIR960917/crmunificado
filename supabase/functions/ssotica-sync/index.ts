@@ -38,80 +38,49 @@ function daysBetween(a: Date, b: Date): number {
   return Math.floor((b.getTime() - a.getTime()) / 86400000);
 }
 
-// Mapeia dias de atraso para a key da coluna em crm_cobranca_statuses.
-// dias < 0 = ainda vai vencer; dias >= 0 = já venceu.
-// IMPORTANTE: a coluna "pendente" ("1 Dia antes do vencimento") só recebe
-// parcelas que vencem em até 1 dia (dias === -1). Parcelas com vencimento
-// mais distante (-2 ou menos) ainda não devem aparecer na cobrança.
-function statusKeyForDiasAtraso(dias: number): string {
-  if (dias === -1) return "pendente";                                  // exatamente 1 dia antes do vencimento
-  if (dias >= 0 && dias <= 4) return "em_cobranca";                    // 1 a 4 dias de atraso
-  if (dias >= 5 && dias <= 14) return "5_dias_de_atraso";              // 5 a 14 dias
-  if (dias >= 15 && dias <= 29) return "atrasado";                     // 15 a 29 dias
-  if (dias >= 30 && dias <= 30) return "30_dias_de_atraso";            // 30
-  if (dias >= 31 && dias <= 44) return "31_dias_de_atraso_ligao";      // 31-44
-  if (dias >= 45 && dias <= 59) return "45_dias_de_atrasomensagem_automtica"; // 45-59
-  if (dias >= 60 && dias <= 60) return "60_dias_de_atraso_ligao_negativao";   // 60
-  if (dias >= 61 && dias <= 64) return "61_negativao";                 // 61-64
-  if (dias >= 65 && dias <= 74) return "65_dias_de_atraso_receber_informe_de_negativao";
-  if (dias >= 75 && dias <= 89) return "75_dias_de_atraso_proposta_de_negociao_ps_negativao";
-  if (dias >= 90 && dias <= 104) return "90_dias_de_atraso_ligao_para_tentativa_de_negociao_ps_negativao";
-  if (dias >= 105 && dias <= 119) return "105_dias_de_atraso_notificao_extra_judicial_altomtico";
-  if (dias >= 120 && dias <= 134) return "120_dias_de_atraso_ligao_informe_judicial";
-  if (dias >= 135 && dias <= 149) return "135_dias_de_atraso_oferta_de_negativao_automatico";
-  if (dias >= 150 && dias <= 179) return "150_dias_de_atraso_enviar_para_o_advogado";
-  return "180_dias_ajuizar_manualmente"; // 180+
+// Calcula o índice "lógico" da coluna a partir dos dias de atraso.
+// 0 = "1 dia antes do vencimento" (dias === -1)
+// 1 = "1 dia de atraso" (0 a 29 dias)
+// 2 = 30 dias
+// 3 = 31-44 dias (coluna 7)
+// 4 = 45-59 (coluna 7 mensagem)
+// 5 = 60 (coluna 8 ligação)
+// 6 = 61-64 (coluna 9 negativação)
+// 7 = 65-74 (coluna 10 receber informe)
+// 8 = 75-89 (coluna 11 proposta)
+// 9 = 90-104 (coluna 12 ligação tentativa)
+// 10 = 105-119 (coluna 13 notificação extra-judicial)
+// 11 = 120-134 (coluna 14 ligação informe judicial)
+// 12 = 135-149 (coluna 15 enviar advogado / oferta negativação)
+// 13 = 150-179 (coluna 15/16 enviar advogado)
+// 14 = 180+ (coluna 16 ajuizar / ajuizados manual)
+function diasParaIndiceLogico(dias: number): number {
+  if (dias === -1) return 0;
+  if (dias >= 0 && dias <= 29) return 1;
+  if (dias === 30) return 2;
+  if (dias >= 31 && dias <= 44) return 3;
+  if (dias >= 45 && dias <= 59) return 4;
+  if (dias === 60) return 5;
+  if (dias >= 61 && dias <= 64) return 6;
+  if (dias >= 65 && dias <= 74) return 7;
+  if (dias >= 75 && dias <= 89) return 8;
+  if (dias >= 90 && dias <= 104) return 9;
+  if (dias >= 105 && dias <= 119) return 10;
+  if (dias >= 120 && dias <= 134) return 11;
+  if (dias >= 135 && dias <= 149) return 12;
+  if (dias >= 150 && dias <= 179) return 13;
+  return 14; // 180+
 }
 
-// Coluna FIXA para clientes com situação "Negativado Serasa" (COLUNA 10).
-const COBRANCA_NEGATIVADO_SERASA_KEY = "65_dias_de_atraso_receber_informe_de_negativao";
-// Coluna FIXA para clientes com situação "Ajuizado(A) Saniely" / "Ajuizado(A) Návde".
-const COBRANCA_AJUIZADO_KEY = "ajuizados_manual";
-// A partir desta coluna (COLUNA "31 dias de atraso — ligação") o sync NÃO altera
-// mais o status do card automaticamente, mesmo que dias_atraso aumente. O card
-// só sai dessa coluna quando a tratativa é registrada e o fluxo configurado avança.
-// Antes dos 31 dias o card segue normalmente as colunas por dias de atraso
-// (pendente / em_cobranca / 5 dias / atrasado / 30 dias).
-const COBRANCA_LOCKED_KEYS = new Set<string>([
-  "31_dias_de_atraso_ligao",
-  "45_dias_de_atrasomensagem_automtica",
-  "60_dias_de_atraso_ligao_negativao",
-  "61_negativao",
-  "65_dias_de_atraso_receber_informe_de_negativao",
-  "75_dias_de_atraso_proposta_de_negociao_ps_negativao",
-  "90_dias_de_atraso_ligao_para_tentativa_de_negociao_ps_negativao",
-  "105_dias_de_atraso_notificao_extra_judicial_altomtico",
-  "120_dias_de_atraso_ligao_informe_judicial",
-  "135_dias_de_atraso_oferta_de_negativao_automatico",
-  "150_dias_de_atraso_enviar_para_o_advogado",
-  "180_dias_ajuizar_manualmente",
-  "ajuizados_manual",
-  "inadimplncia_sem_ajuizamento_manual",
-]);
+// A partir do índice "31 dias" (3) os cards ficam travados — só o fluxo manual
+// (cobranca-flow-advance) avança a partir daí.
+const LOCKED_LOGICAL_INDEX_FROM = 3;
+// Índice da COLUNA "60 dias / ligação negativação" — para onde retornam os
+// cards que estavam em colunas mais avançadas mas perderam a situação Negativado.
+const LOGICAL_INDEX_COLUNA_8 = 5;
+// Índice da COLUNA "31 dias" — limite de entrada automática.
+const LOGICAL_INDEX_31_DIAS = 3;
 
-// Colunas que ficam DEPOIS da COLUNA 8 ("60 dias de atraso — ligação / negativação").
-// Cards nessas colunas exigem situação "Negativado Serasa" para permanecerem.
-// Caso contrário, retornam para a COLUNA 8 aguardando tratativa.
-const COLUNAS_APOS_8 = new Set<string>([
-  "61_negativao",
-  "65_dias_de_atraso_receber_informe_de_negativao",
-  "75_dias_de_atraso_proposta_de_negociao_ps_negativao",
-  "90_dias_de_atraso_ligao_para_tentativa_de_negociao_ps_negativao",
-  "105_dias_de_atraso_notificao_extra_judicial_altomtico",
-  "120_dias_de_atraso_ligao_informe_judicial",
-  "135_dias_de_atraso_oferta_de_negativao_automatico",
-  "150_dias_de_atraso_enviar_para_o_advogado",
-  "180_dias_ajuizar_manualmente",
-  "inadimplncia_sem_ajuizamento_manual",
-]);
-
-// Quando o card é NOVO e a regra por dias indicaria uma coluna travada
-// (>= 31 dias), paramos no "31 dias de atraso — ligação". A partir daí o card
-// só avança via fluxo manual configurado pela Brenda.
-function clampToLockedEntry(key: string): string {
-  if (COBRANCA_LOCKED_KEYS.has(key)) return "31_dias_de_atraso_ligao";
-  return key;
-}
 
 // Mapeia dias desde a última compra para a key da coluna em crm_renovacao_statuses.
 // Re-classifica sempre (a cada sync) para acompanhar a passagem do tempo.
@@ -366,12 +335,15 @@ async function syncContasReceber(
     .maybeSingle();
   const defaultAssignee: string | null = (brendaProfile as any)?.user_id ?? null;
 
-  // Cache de labels das colunas de cobrança (key -> label) para registro de logs
+  // Cache de colunas de cobrança ordenadas por position. Usadas para mapear
+  // dias de atraso → coluna do funil sem keys hardcoded (o admin pode renomear).
   const { data: cobStatusRows } = await supabase
     .from("crm_cobranca_statuses")
-    .select("key,label");
+    .select("key,label,position")
+    .order("position", { ascending: true });
+  const cobStatusList = (cobStatusRows ?? []) as Array<{ key: string; label: string; position: number }>;
   const cobStatusLabelByKey = new Map<string, string>(
-    (cobStatusRows ?? []).map((s: any) => [s.key, s.label]),
+    cobStatusList.map((s) => [s.key, s.label]),
   );
 
   // Helper: registra movimentação automática entre Renovação e Cobrança
@@ -405,13 +377,9 @@ async function syncContasReceber(
   }
 
   // Carrega mapeamento de "situação SSÓtica" → coluna do funil, configurado pelo admin
-  // na tela de Fluxo. Cai em fallback caso a tabela esteja vazia.
-  const situacaoMapping: Record<string, string> = {
-    em_atraso: "60_dias_de_atraso_ligao_negativao",
-    negativado_serasa: "65_dias_de_atraso_receber_informe_de_negativao",
-    ajuizado_saniely: "180_dias_ajuizar_manualmente",
-    ajuizado_navde: "180_dias_ajuizar_manualmente",
-  };
+  // na tela de Fluxo de Cobrança (1 dia antes do vencimento, 1 dia de atraso,
+  // negativado Serasa, ajuizados, etc.).
+  const situacaoMapping: Record<string, string> = {};
   try {
     const { data: mapRows } = await supabase
       .from("crm_cobranca_situacao_mapping")
@@ -421,7 +389,35 @@ async function syncContasReceber(
       if (row?.situacao && key) situacaoMapping[row.situacao] = key;
     }
   } catch (_e) {
-    // mantém defaults se a tabela ainda não existir
+    // tabela vazia/ausente — usa apenas position
+  }
+
+  // Resolve a key da coluna do funil pela posição lógica (0..14), respeitando
+  // mapeamentos configuráveis para 1_dia_antes_vencimento e 1_dia_atraso.
+  function resolveColunaKeyByLogicalIndex(idx: number): string | null {
+    if (idx === 0 && situacaoMapping["1_dia_antes_vencimento"]) return situacaoMapping["1_dia_antes_vencimento"];
+    if (idx === 1 && situacaoMapping["1_dia_atraso"]) return situacaoMapping["1_dia_atraso"];
+    const col = cobStatusList[idx];
+    return col?.key ?? cobStatusList[cobStatusList.length - 1]?.key ?? null;
+  }
+  function lockedEntryKey(): string {
+    return resolveColunaKeyByLogicalIndex(LOGICAL_INDEX_31_DIAS) ?? cobStatusList[0]?.key ?? "";
+  }
+  const lockedKeys = new Set<string>();
+  for (let i = LOCKED_LOGICAL_INDEX_FROM; i < cobStatusList.length; i++) {
+    if (cobStatusList[i]?.key) lockedKeys.add(cobStatusList[i].key);
+  }
+  const colunasApos8 = new Set<string>();
+  for (let i = LOGICAL_INDEX_COLUNA_8 + 1; i < cobStatusList.length; i++) {
+    if (cobStatusList[i]?.key) colunasApos8.add(cobStatusList[i].key);
+  }
+  const coluna8Key = resolveColunaKeyByLogicalIndex(LOGICAL_INDEX_COLUNA_8) ?? lockedEntryKey();
+  function clampToLockedEntryDyn(key: string): string {
+    return lockedKeys.has(key) ? lockedEntryKey() : key;
+  }
+  function colunaKeyForDiasAtraso(dias: number): string {
+    const idx = diasParaIndiceLogico(dias);
+    return resolveColunaKeyByLogicalIndex(idx) ?? "";
   }
 
   // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.
@@ -701,20 +697,26 @@ async function syncContasReceber(
     });
 
     // Regra de coluna (configurável via tabela crm_cobranca_situacao_mapping):
-    //  • Ajuizado(A) Saniely / Návde → coluna mapeada para a variante (default: 180_dias_ajuizar_manualmente)
-    //  • Negativado Serasa            → coluna mapeada (default: COLUNA 10)
-    //  • Em atraso (situação SSÓtica) → coluna mapeada (default: COLUNA 8)
-    //  • Demais (a vencer / vencido)  → escala por dias com cap nas locked
+    //  • Ajuizado(A) Saniely / Návde → coluna mapeada (fallback: última coluna)
+    //  • Negativado Serasa            → coluna mapeada (fallback: COLUNA 10 por position)
+    //  • Demais (a vencer / vencido)  → escala por dias com cap em "31 dias"
+    //
+    // Observação: a situação "Em atraso" não é mais um caso especial — a coluna
+    // de destino vem do cálculo por dias_atraso (ver mapping configurável de
+    // "1 dia antes do vencimento" e "1 dia de atraso" na tela de Fluxo).
     let colunaKeyAlvo: string;
     if (hasAjuizadoMerged) {
       const variantKey = ajuizadoVariantMerged ?? "ajuizado_saniely";
-      colunaKeyAlvo = situacaoMapping[variantKey] ?? situacaoMapping["ajuizado_saniely"] ?? "180_dias_ajuizar_manualmente";
+      colunaKeyAlvo = situacaoMapping[variantKey]
+        ?? situacaoMapping["ajuizado_saniely"]
+        ?? cobStatusList[cobStatusList.length - 1]?.key
+        ?? "";
     } else if (hasNegativadoSerasaMerged) {
-      colunaKeyAlvo = situacaoMapping["negativado_serasa"] ?? "65_dias_de_atraso_receber_informe_de_negativao";
-    } else if (hasEmAtrasoMerged) {
-      colunaKeyAlvo = situacaoMapping["em_atraso"] ?? "60_dias_de_atraso_ligao_negativao";
+      colunaKeyAlvo = situacaoMapping["negativado_serasa"]
+        ?? cobStatusList[7]?.key
+        ?? coluna8Key;
     } else {
-      colunaKeyAlvo = clampToLockedEntry(statusKeyForDiasAtraso(maisAntiga.dias_atraso));
+      colunaKeyAlvo = clampToLockedEntryDyn(colunaKeyForDiasAtraso(maisAntiga.dias_atraso));
     }
 
     const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
@@ -744,12 +746,12 @@ async function syncContasReceber(
     //    sync — quem move dali é o fluxo manual (cobranca-flow-advance).
     let colunaKey = colunaKeyAlvo;
     if (existingCobranca && !hasAjuizadoMerged && !hasNegativadoSerasaMerged) {
-      if (COBRANCA_LOCKED_KEYS.has(existingCobranca.status)) {
+      if (lockedKeys.has(existingCobranca.status)) {
         // Cards após a COLUNA 8 (60 dias) só podem permanecer lá se houver
         // parcela "Negativado Serasa". Como não há, voltam para a COLUNA 8
         // e aguardam tratativa da Brenda.
-        colunaKey = COLUNAS_APOS_8.has(existingCobranca.status)
-          ? "60_dias_de_atraso_ligao_negativao"
+        colunaKey = colunasApos8.has(existingCobranca.status)
+          ? coluna8Key
           : existingCobranca.status; // mantém a coluna atual (travada)
       }
     }
