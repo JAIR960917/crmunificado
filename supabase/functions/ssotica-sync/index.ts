@@ -2002,7 +2002,8 @@ Deno.serve(async (req) => {
         .eq("is_active", true)
         .in("backfill_status", ["running", "scheduled"])
         .lte("backfill_next_run_at", new Date().toISOString())
-        .limit(5); // até 5 lojas em paralelo no mesmo tick
+        .order("backfill_next_run_at", { ascending: true })
+        .limit(BACKFILL_MAX_PARALLEL); // limita concorrência para evitar cancelamento do worker
       const list = await decryptIntegrations(supabase, (pending ?? []) as Integration[]);
       if (list.length === 0) {
         return new Response(JSON.stringify({ ok: true, message: "Nenhum chunk pronto" }), {
