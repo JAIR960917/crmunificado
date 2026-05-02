@@ -1986,6 +1986,35 @@ Deno.serve(async (req) => {
       }
 
       const nowIso = new Date().toISOString();
+      const { data: current, error: currentError } = await supabase
+        .from("ssotica_integrations")
+        .select("*")
+        .eq("id", onlyIntegrationId)
+        .maybeSingle();
+
+      if (currentError) throw currentError;
+      if (!current || current.backfill_status === "done") {
+        return new Response(JSON.stringify({ ok: false, error: "Nenhum backfill pendente para retomar" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const leaseActive = !!current.backfill_next_run_at && new Date(current.backfill_next_run_at).getTime() > Date.now();
+      if (current.backfill_status === "running" && leaseActive) {
+        return new Response(JSON.stringify({
+          ok: true,
+          mode: "resume_backfill",
+          already_running: true,
+          chunk_index: current.backfill_chunk_index || 0,
+          total_chunks: current.backfill_total_chunks || 16,
+          message: `O chunk ${(current.backfill_chunk_index || 0) + 1}/${current.backfill_total_chunks || 16} já está em execução.`,
+        }), {
+          status: 202,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const { data: integ, error } = await supabase
         .from("ssotica_integrations")
         .update({
@@ -1995,6 +2024,7 @@ Deno.serve(async (req) => {
           last_error: null,
         })
         .eq("id", onlyIntegrationId)
+        .eq("backfill_chunk_index", current.backfill_chunk_index || 0)
         .neq("backfill_status", "done")
         .select("*")
         .maybeSingle();
