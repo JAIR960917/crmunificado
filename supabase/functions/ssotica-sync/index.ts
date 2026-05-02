@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
 const MAX_WINDOW_DAYS = 30; // limite da API SSótica por janela
+const SSOTICA_FETCH_TIMEOUT_MS = 45000;
 // Histórico total: 96 meses (8 anos), processado em chunks de 6 meses
 // para evitar timeout da edge function em lojas grandes (~7000 cobranças/ano).
 // Antes: 12 meses × 8 chunks. Agora: 6 meses × 16 chunks (cada chunk ~50% mais rápido).
@@ -141,9 +142,17 @@ async function fetchSSotica(
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, SSOTICA_FETCH_TIMEOUT_MS);
+
     try {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        signal: controller.signal,
       });
       if (!res.ok) {
         const text = await res.text();
@@ -160,16 +169,26 @@ async function fetchSSotica(
       return await res.json();
     } catch (e) {
       const err = e instanceof Error ? e : new Error(String(e));
+      const normalizedError = timedOut
+        ? new Error(`SSótica timeout após ${Math.round(SSOTICA_FETCH_TIMEOUT_MS / 1000)}s: ${url}`)
+        : err;
       // Erros de rede (timeout, conexão) também merecem retry
-      const isNetwork = err.message.includes("network") || err.message.includes("timeout") || err.message.includes("ECONN");
+      const isNetwork =
+        timedOut ||
+        normalizedError.name === "AbortError" ||
+        normalizedError.message.includes("network") ||
+        normalizedError.message.includes("timeout") ||
+        normalizedError.message.includes("ECONN");
       if (isNetwork && attempt < MAX_ATTEMPTS) {
         const waitMs = 2000 * Math.pow(2, attempt - 1);
-        console.warn(`[ssotica-sync] erro de rede tentativa ${attempt}/${MAX_ATTEMPTS}, aguardando ${waitMs}ms... (${err.message})`);
+        console.warn(`[ssotica-sync] erro de rede tentativa ${attempt}/${MAX_ATTEMPTS}, aguardando ${waitMs}ms... (${normalizedError.message})`);
         await new Promise((r) => setTimeout(r, waitMs));
-        lastError = err;
+        lastError = normalizedError;
         continue;
       }
-      throw err;
+      throw normalizedError;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
   throw lastError ?? new Error("SSótica: falha após todas as tentativas");
@@ -1708,6 +1727,7 @@ async function runBackfillChunk(
       backfill_status: "done",
       backfill_next_run_at: null,
       sync_status: "idle",
+      updated_at: nowIso,
     }).eq("id", integ.id);
     console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} já concluída (${idx}/${total})`);
     return { ok: true, chunk_index: total, finished: true, skipped: true };
@@ -1728,6 +1748,7 @@ async function runBackfillChunk(
       backfill_status: "running",
       sync_status: "running",
       last_error: null,
+      updated_at: nowIso,
     })
     .eq("id", integ.id)
     .eq("backfill_chunk_index", idx)
@@ -1745,6 +1766,7 @@ async function runBackfillChunk(
     integration_id: integ.id,
     sync_type: `backfill_chunk_${idx + 1}_of_${total}`,
     status: "running",
+    details: { chunk_index: idx, total_chunks: total, range: { start: ymd(range.start), end: ymd(range.end) }, phase: "starting" },
   }).select("id").single();
   const logId = log?.id ?? null;
 
@@ -1771,6 +1793,7 @@ async function runBackfillChunk(
       last_sync_receber_at: finished ? finishedAt : integ.last_sync_receber_at,
       last_sync_vendas_at: finished ? finishedAt : integ.last_sync_vendas_at,
       last_error: null,
+      updated_at: finishedAt,
     }).eq("id", integ.id).eq("backfill_chunk_index", idx);
 
     if (logId) {
@@ -1784,7 +1807,7 @@ async function runBackfillChunk(
       }).eq("id", logId);
     }
 
-    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. processed=${cr.processed + v.processed} created=${cr.created + v.created} updated=${cr.updated + v.updated}. ${finished ? 'CONCLUÍDO!' : `próximo em 30s (${nextRunAt})`}`);
+    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. processed=${cr.processed + v.processed} created=${cr.created + v.created} updated=${cr.updated + v.updated}. ${finished ? 'CONCLUÍDO!' : `próximo imediato (${nextRunAt})`}`);
 
     if (!finished) {
       try {
@@ -1866,6 +1889,7 @@ async function runBackfillChunk(
       backfill_status: "running",
       backfill_next_run_at: new Date(Date.now() + 30 * 1000).toISOString(),
       last_error: msg.slice(0, 1000),
+      updated_at: new Date().toISOString(),
     }).eq("id", integ.id).eq("backfill_chunk_index", idx);
     if (logId) {
       await supabase.from("ssotica_sync_logs").update({
