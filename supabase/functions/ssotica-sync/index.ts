@@ -210,6 +210,7 @@ interface Integration {
   backfill_status: string; // 'idle' | 'running' | 'done' | 'error'
   backfill_started_at: string | null;
   backfill_next_run_at: string | null;
+  backfill_phase?: string | null; // 'cr' | 'vendas' — etapa atual dentro do chunk
 }
 
 // Descriptografa bearer_token e license_code (que ficam criptografados em repouso no banco).
