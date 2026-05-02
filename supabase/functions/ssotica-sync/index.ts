@@ -125,6 +125,7 @@ function getManualRecentCobrancaWindow(now = new Date()): { start: Date; end: Da
 }
 
 function getDispatchConfig(req: Request): DispatchConfig {
+  const envPublicUrl = Deno.env.get("SUPABASE_PUBLIC_URL");
   const envUrl = Deno.env.get("SUPABASE_URL");
   const envAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const requestAuth = req.headers.get("authorization") ?? req.headers.get("Authorization");
@@ -138,7 +139,11 @@ function getDispatchConfig(req: Request): DispatchConfig {
   }
 
   return {
-    url: envUrl ? `${envUrl}/functions/v1/ssotica-sync` : requestUrl,
+    url: envPublicUrl
+      ? `${envPublicUrl.replace(/\/+$/, "")}/functions/v1/ssotica-sync`
+      : envUrl
+        ? `${envUrl.replace(/\/+$/, "")}/functions/v1/ssotica-sync`
+        : requestUrl,
     auth: envAnonKey ? `Bearer ${envAnonKey}` : requestAuth,
   };
 }
