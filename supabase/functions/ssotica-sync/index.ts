@@ -24,6 +24,8 @@ const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
 const INCREMENTAL_COBRANCAS_SLICES = 8;
 const RUNNING_SYNC_STALE_MINUTES = 5;
 const BACKFILL_CLAIM_WINDOW_MS = RUNNING_SYNC_STALE_MINUTES * 60 * 1000;
+const BACKFILL_HEARTBEAT_MS = 45 * 1000;
+const BACKFILL_MAX_PARALLEL = 2;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
@@ -239,6 +241,52 @@ async function decryptIntegration<T extends { bearer_token?: string | null; lice
   if (!item) return item;
   await decryptIntegrations(supabase, [item]);
   return item;
+}
+
+function startBackfillHeartbeat(params: {
+  supabase: any;
+  integrationId: string;
+  chunkIndex: number;
+  phase: "cr" | "vendas";
+}) {
+  let stopped = false;
+
+  const beat = async () => {
+    if (stopped) return;
+    try {
+      const nowIso = new Date().toISOString();
+      const leaseUntil = new Date(Date.now() + BACKFILL_CLAIM_WINDOW_MS).toISOString();
+      const { error } = await params.supabase
+        .from("ssotica_integrations")
+        .update({
+          sync_status: "running",
+          backfill_status: "running",
+          backfill_phase: params.phase,
+          backfill_next_run_at: leaseUntil,
+          updated_at: nowIso,
+        })
+        .eq("id", params.integrationId)
+        .eq("backfill_chunk_index", params.chunkIndex)
+        .eq("backfill_phase", params.phase)
+        .eq("sync_status", "running")
+        .neq("backfill_status", "done");
+
+      if (error) {
+        console.warn(`[ssotica-sync][backfill-heartbeat] empresa=${params.integrationId} chunk=${params.chunkIndex} fase=${params.phase} erro ao renovar lease: ${error.message}`);
+      }
+    } catch (error) {
+      console.warn(`[ssotica-sync][backfill-heartbeat] empresa=${params.integrationId} chunk=${params.chunkIndex} fase=${params.phase} falha inesperada:`, error);
+    }
+  };
+
+  const timer = setInterval(() => {
+    void beat();
+  }, BACKFILL_HEARTBEAT_MS);
+
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }
 
 // Calcula a janela de datas de um chunk específico (chunk 0 = mais recente).
@@ -1774,6 +1822,12 @@ async function runBackfillChunk(
     details: { chunk_index: idx, total_chunks: total, phase, range: { start: ymd(range.start), end: ymd(range.end) } },
   }).select("id").single();
   const logId = log?.id ?? null;
+  const stopHeartbeat = startBackfillHeartbeat({
+    supabase,
+    integrationId: integ.id,
+    chunkIndex: idx,
+    phase,
+  });
 
   try {
     let cr: any = null;
@@ -1913,6 +1967,8 @@ async function runBackfillChunk(
       }).eq("id", logId);
     }
     return { ok: false, error: msg };
+  } finally {
+    stopHeartbeat();
   }
 }
 
@@ -1948,7 +2004,8 @@ Deno.serve(async (req) => {
         .eq("is_active", true)
         .in("backfill_status", ["running", "scheduled"])
         .lte("backfill_next_run_at", new Date().toISOString())
-        .limit(5); // até 5 lojas em paralelo no mesmo tick
+        .order("backfill_next_run_at", { ascending: true })
+        .limit(BACKFILL_MAX_PARALLEL); // limita concorrência para evitar cancelamento do worker
       const list = await decryptIntegrations(supabase, (pending ?? []) as Integration[]);
       if (list.length === 0) {
         return new Response(JSON.stringify({ ok: true, message: "Nenhum chunk pronto" }), {
