@@ -140,8 +140,9 @@ SQL
 
   local applied_table="public._lovable_migrations"
 
-  # Persistimos configurações usadas por algumas migrations/functions no banco
-  # para evitar erro de current_setting('app.settings.*') ausente.
+  # Persistimos configurações usadas por algumas migrations/functions no banco.
+  # Em self-hosted, os crons do pg_net precisam da URL pública da VPS (não da URL
+  # interna do Kong dentro do Docker) para chamar as edge functions corretamente.
   local app_supabase_url="${SUPABASE_PUBLIC_URL:-${SUPABASE_URL:-}}"
   local app_supabase_anon="${SUPABASE_ANON_KEY:-${ANON_KEY:-}}"
   if [ -n "${app_supabase_url}" ] && [ -n "${app_supabase_anon}" ]; then
@@ -151,6 +152,31 @@ SQL
     if ! db_exec "ALTER DATABASE postgres SET \"app.settings.supabase_anon_key\" = '${app_supabase_anon}';"; then
       warn "Sem permissão para definir app.settings.supabase_anon_key via ALTER DATABASE (continuando)."
     fi
+
+    # Fallback persistente em system_settings para ambientes onde ALTER DATABASE
+    # não é permitido ou não sobrevive ao restore. A migration nova lê estes
+    # valores antes de usar current_setting(...).
+    db_exec "
+      CREATE TABLE IF NOT EXISTS public.system_settings (
+        id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+        setting_key text UNIQUE NOT NULL,
+        setting_value text,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+    " || true
+    db_exec "
+      INSERT INTO public.system_settings (setting_key, setting_value)
+      VALUES ('backend_public_url', '${app_supabase_url}')
+      ON CONFLICT (setting_key)
+      DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now();
+    " || warn "Não foi possível gravar backend_public_url em system_settings (continuando)."
+    db_exec "
+      INSERT INTO public.system_settings (setting_key, setting_value)
+      VALUES ('backend_anon_key', '${app_supabase_anon}')
+      ON CONFLICT (setting_key)
+      DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now();
+    " || warn "Não foi possível gravar backend_anon_key em system_settings (continuando)."
   fi
 
   db_exec "
