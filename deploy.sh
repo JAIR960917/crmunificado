@@ -201,6 +201,11 @@ SQL
     db_exec "INSERT INTO ${applied_table}(filename) VALUES ('${name}')"
     count=$((count+1))
   done
+
+  if ! db_exec "SELECT public.manage_ssotica_cron();"; then
+    warn "Não foi possível reagendar os crons da SSÓtica automaticamente (verifique as configs backend_public_url/backend_anon_key)."
+  fi
+
   ok "Migrations aplicadas: $count"
 }
 
