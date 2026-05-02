@@ -278,6 +278,27 @@ function normalizeName(value: unknown): string {
     .trim();
 }
 
+function normalizeSituacaoLabel(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ")
+    .trim();
+}
+
+function getAjuizadoVariantFromSituacao(situacao: string): "ajuizado_saniely" | "ajuizado_navde" | null {
+  const isJuridico =
+    situacao.startsWith("ajuizado") ||
+    situacao.startsWith("cobranca dr") ||
+    situacao.startsWith("cobranca dra");
+
+  if (!isJuridico) return null;
+  if (situacao.includes("saniely")) return "ajuizado_saniely";
+  if (situacao.includes("navde")) return "ajuizado_navde";
+  return null;
+}
+
 function isSamePerson(nameA: unknown, nameB: unknown): boolean {
   const a = normalizeName(nameA);
   const b = normalizeName(nameB);
@@ -455,12 +476,7 @@ async function syncContasReceber(
         processed++;
         // Normaliza situação: remove acentos, lowercase, troca espaço/underscore
         const situacaoRaw = String(parcela.situacao ?? parcela["situação"] ?? "");
-        const situacao = situacaoRaw
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase()
-          .replace(/[\s_-]+/g, " ")
-          .trim();
+        const situacao = normalizeSituacaoLabel(situacaoRaw);
         situacoesVistas.set(situacao, (situacoesVistas.get(situacao) ?? 0) + 1);
 
         // ⚠️ REGRA: puxamos para o CRM parcelas com situação "Em atraso",
@@ -470,9 +486,8 @@ async function syncContasReceber(
         // anteriores (pendente / em_cobranca / 5 dias / atrasado / 30 dias)
         // conforme o boleto mais antigo. Ao chegar em 31 dias travam e seguem
         // o fluxo manual configurado.
-        const isAjuizado =
-          situacao.startsWith("ajuizado") &&
-          (situacao.includes("saniely") || situacao.includes("navde"));
+        const ajuizadoVariant = getAjuizadoVariantFromSituacao(situacao);
+        const isAjuizado = !!ajuizadoVariant;
         const isNegativadoSerasa =
           situacao.startsWith("negativado") && situacao.includes("serasa");
         const isEmAtraso =
@@ -582,7 +597,7 @@ async function syncContasReceber(
         if (isAjuizado) {
           bucket.hasAjuizado = true;
           if (!bucket.ajuizadoVariant) {
-            bucket.ajuizadoVariant = situacao.includes("saniely") ? "ajuizado_saniely" : "ajuizado_navde";
+            bucket.ajuizadoVariant = ajuizadoVariant;
           }
         }
         // Dedup: a API SSótica pode retornar a mesma parcela em múltiplas janelas/páginas.
@@ -686,16 +701,12 @@ async function syncContasReceber(
       const s = String(p?.situacao ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       return s.startsWith("negativado") && s.includes("serasa");
     });
-    const hasAjuizadoMerged = hasAjuizado || parcelasMerged.some((p) => {
-      const s = String(p?.situacao ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      return s.startsWith("ajuizado") && (s.includes("saniely") || s.includes("navde"));
-    });
+    const hasAjuizadoMerged = hasAjuizado || parcelasMerged.some((p) => !!getAjuizadoVariantFromSituacao(normalizeSituacaoLabel(p?.situacao ?? "")));
     let ajuizadoVariantMerged: string | null = ajuizadoVariant;
     if (hasAjuizadoMerged && !ajuizadoVariantMerged) {
       for (const p of parcelasMerged) {
-        const s = String(p?.situacao ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        if (s.startsWith("ajuizado") && s.includes("saniely")) { ajuizadoVariantMerged = "ajuizado_saniely"; break; }
-        if (s.startsWith("ajuizado") && s.includes("navde")) { ajuizadoVariantMerged = "ajuizado_navde"; break; }
+        const variant = getAjuizadoVariantFromSituacao(normalizeSituacaoLabel(p?.situacao ?? ""));
+        if (variant) { ajuizadoVariantMerged = variant; break; }
       }
     }
     const hasEmAtrasoMerged = hasEmAtraso || parcelasMerged.some((p) => {
