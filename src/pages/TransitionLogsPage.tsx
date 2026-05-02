@@ -96,6 +96,11 @@ export default function TransitionLogsPage() {
   const [completionLoading, setCompletionLoading] = useState(true);
   const [completionSourceFilter, setCompletionSourceFilter] = useState<"all" | "campaign" | "trigger">("all");
 
+  // Logs de eventos do fluxo de cobrança
+  const [flowEvents, setFlowEvents] = useState<CobrancaFlowEventLog[]>([]);
+  const [flowLoading, setFlowLoading] = useState(true);
+  const [flowEventTypeFilter, setFlowEventTypeFilter] = useState<"all" | "tratativa" | "gatilho_enviado" | "avancou_coluna" | "gatilho_falhou">("all");
+
   // Filtros
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
