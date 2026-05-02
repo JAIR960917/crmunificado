@@ -29,6 +29,10 @@ const BACKFILL_MAX_PARALLEL = 2;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
+type DispatchConfig = {
+  url: string | null;
+  auth: string | null;
+};
 
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -117,6 +121,25 @@ function getManualRecentCobrancaWindow(now = new Date()): { start: Date; end: Da
   return {
     start: addDays(now, -365),
     end: addDays(now, COBRANCAS_FUTURE_DAYS),
+  };
+}
+
+function getDispatchConfig(req: Request): DispatchConfig {
+  const envUrl = Deno.env.get("SUPABASE_URL");
+  const envAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const requestAuth = req.headers.get("authorization") ?? req.headers.get("Authorization");
+
+  let requestUrl: string | null = null;
+  try {
+    const currentUrl = new URL(req.url);
+    requestUrl = `${currentUrl.origin}/functions/v1/ssotica-sync`;
+  } catch {
+    requestUrl = null;
+  }
+
+  return {
+    url: envUrl ? `${envUrl}/functions/v1/ssotica-sync` : requestUrl,
+    auth: envAnonKey ? `Bearer ${envAnonKey}` : requestAuth,
   };
 }
 
@@ -1766,6 +1789,7 @@ async function reconcileRenovacoesVsCobrancas(
 async function runBackfillChunk(
   supabase: any,
   integ: Integration,
+  dispatchConfig: DispatchConfig,
 ): Promise<{ ok: true; chunk_index: number; finished: boolean; skipped?: boolean } | { ok: false; error: string }> {
   const total = integ.backfill_total_chunks || 16;
   const idx = integ.backfill_chunk_index || 0;
@@ -1879,14 +1903,12 @@ async function runBackfillChunk(
 
     if (!finished) {
       try {
-        const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
-        const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-        if (!anonKey) {
-          console.warn(`[ssotica-sync][backfill] empresa=${integ.company_id} continuação automática indisponível: SUPABASE_ANON_KEY ausente`);
+        if (!dispatchConfig.url || !dispatchConfig.auth) {
+          console.warn(`[ssotica-sync][backfill] empresa=${integ.company_id} continuação automática não disparada agora; runner agendado continuará pelo backfill_next_run_at`);
         } else {
           const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
-            _url: fnUrl,
-            _auth: `Bearer ${anonKey}`,
+            _url: dispatchConfig.url,
+            _auth: dispatchConfig.auth,
             _integration_id: integ.id,
             _force_full: false,
           });
