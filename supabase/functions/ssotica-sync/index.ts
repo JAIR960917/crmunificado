@@ -1994,7 +1994,7 @@ Deno.serve(async (req) => {
       const { data: integ, error } = await supabase
         .from("ssotica_integrations")
         .update({
-          sync_status: "running",
+          sync_status: "idle",
           backfill_status: "running",
           backfill_next_run_at: nowIso,
           last_error: null,
@@ -2012,16 +2012,26 @@ Deno.serve(async (req) => {
         });
       }
 
-      const decrypted = await decryptIntegration(supabase, integ as any);
-      const resumed = await runBackfillChunk(supabase, (decrypted ?? integ) as Integration);
+      const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+      if (!anonKey) {
+        throw new Error("SUPABASE_ANON_KEY ausente para retomar o backfill");
+      }
+
+      const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
+        _url: fnUrl,
+        _auth: `Bearer ${anonKey}`,
+        _integration_id: onlyIntegrationId,
+        _force_full: false,
+      });
+      if (dispatchErr) throw dispatchErr;
 
       return new Response(JSON.stringify({
         ok: true,
         mode: "resume_backfill",
-        resumed,
-        message: resumed.ok
-          ? `Backfill retomado a partir do chunk ${(integ.backfill_chunk_index || 0) + 1}/${integ.backfill_total_chunks || 16}.`
-          : "Falha ao retomar backfill.",
+        chunk_index: integ.backfill_chunk_index || 0,
+        total_chunks: integ.backfill_total_chunks || 16,
+        message: `Backfill retomado em background a partir do chunk ${(integ.backfill_chunk_index || 0) + 1}/${integ.backfill_total_chunks || 16}.`,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
