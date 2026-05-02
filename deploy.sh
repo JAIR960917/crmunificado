@@ -295,11 +295,13 @@ run_functions() {
 # ---------------------------------------------------------------------------
 run_frontend() {
   local runtime_config_path="${PROJECT_DIR}/public/runtime-config.js"
-  local frontend_backend_url="${FRONTEND_SUPABASE_URL:-${SUPABASE_PUBLIC_URL:-${SUPABASE_URL:-https://api.joonker.com.br}}}"
-  local frontend_publishable_key="${FRONTEND_SUPABASE_PUBLISHABLE_KEY:-${SUPABASE_ANON_KEY:-${ANON_KEY:-}}}"
+  # Frontend agora aponta para o Lovable Cloud por padrão.
+  # Se quiser voltar a apontar para a VPS, defina FRONTEND_SUPABASE_URL/FRONTEND_SUPABASE_PUBLISHABLE_KEY no .env.
+  local frontend_backend_url="${FRONTEND_SUPABASE_URL:-https://flhycgllttqeczrpmfoc.supabase.co}"
+  local frontend_publishable_key="${FRONTEND_SUPABASE_PUBLISHABLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsaHljZ2xsdHRxZWN6cnBtZm9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMjg0NjAsImV4cCI6MjA5MDkwNDQ2MH0.VjVdVgDzRajcD-2ACZY7-3zFwjP_Ti6pbFIBjW0NnhQ}"
 
   if [ -z "$frontend_publishable_key" ]; then
-    err "Defina FRONTEND_SUPABASE_PUBLISHABLE_KEY ou SUPABASE_ANON_KEY antes do build do frontend."
+    err "Defina FRONTEND_SUPABASE_PUBLISHABLE_KEY antes do build do frontend."
     return 1
   fi
 
