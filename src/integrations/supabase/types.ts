@@ -1327,6 +1327,7 @@ export type Database = {
         Row: {
           backfill_chunk_index: number
           backfill_next_run_at: string | null
+          backfill_phase: string
           backfill_started_at: string | null
           backfill_status: string
           backfill_total_chunks: number
@@ -1347,6 +1348,7 @@ export type Database = {
         Insert: {
           backfill_chunk_index?: number
           backfill_next_run_at?: string | null
+          backfill_phase?: string
           backfill_started_at?: string | null
           backfill_status?: string
           backfill_total_chunks?: number
@@ -1367,6 +1369,7 @@ export type Database = {
         Update: {
           backfill_chunk_index?: number
           backfill_next_run_at?: string | null
+          backfill_phase?: string
           backfill_started_at?: string | null
           backfill_status?: string
           backfill_total_chunks?: number
