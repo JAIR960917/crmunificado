@@ -2008,6 +2008,7 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+  const dispatchConfig = getDispatchConfig(req);
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -2044,7 +2045,7 @@ Deno.serve(async (req) => {
             .eq("id", integ.id);
           (integ as any).backfill_status = "running";
         }
-        const r = await runBackfillChunk(supabase, integ);
+        const r = await runBackfillChunk(supabase, integ, dispatchConfig);
         results.push({ integration_id: integ.id, ...r });
       }
       return new Response(JSON.stringify({ ok: true, mode: "backfill_tick", results }), {
@@ -2086,15 +2087,13 @@ Deno.serve(async (req) => {
         .select("*")
         .single();
       if (error || !integ) throw error ?? new Error("Integração não encontrada");
-      const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-      if (!anonKey) {
-        throw new Error("SUPABASE_ANON_KEY ausente para enfileirar o backfill");
+      if (!dispatchConfig.url || !dispatchConfig.auth) {
+        throw new Error("Configuração de dispatch ausente para enfileirar o backfill");
       }
 
       const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
-        _url: fnUrl,
-        _auth: `Bearer ${anonKey}`,
+        _url: dispatchConfig.url,
+        _auth: dispatchConfig.auth,
         _integration_id: onlyIntegrationId,
         _force_full: false,
       });
@@ -2170,15 +2169,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-      if (!anonKey) {
-        throw new Error("SUPABASE_ANON_KEY ausente para retomar o backfill");
+      if (!dispatchConfig.url || !dispatchConfig.auth) {
+        throw new Error("Configuração de dispatch ausente para retomar o backfill");
       }
 
       const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
-        _url: fnUrl,
-        _auth: `Bearer ${anonKey}`,
+        _url: dispatchConfig.url,
+        _auth: dispatchConfig.auth,
         _integration_id: onlyIntegrationId,
         _force_full: false,
       });
@@ -2269,8 +2266,9 @@ Deno.serve(async (req) => {
     // próprio orçamento de tempo. Isso elimina os travamentos de Caicó/Jucurutu
     // que ocorriam quando o runtime pai era encerrado antes dos disparos paralelos.
     if (!onlyIntegrationId && integrations.length > 1) {
-      const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      if (!dispatchConfig.url || !dispatchConfig.auth) {
+        throw new Error("Configuração de dispatch ausente para enfileirar o fan-out das integrações");
+      }
       const dispatched: string[] = [];
       const fanoutSkipped: any[] = [];
       const fanoutErrors: any[] = [];
@@ -2280,8 +2278,8 @@ Deno.serve(async (req) => {
           continue;
         }
         const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
-          _url: fnUrl,
-          _auth: `Bearer ${anonKey}`,
+          _url: dispatchConfig.url,
+          _auth: dispatchConfig.auth,
           _integration_id: integ.id,
           _force_full: forceFull,
         });
@@ -2346,7 +2344,7 @@ Deno.serve(async (req) => {
         // visível: chunk 1/16 sendo "iniciado" repetidamente sem nunca ir pro 2/16.
         // O incremental real só roda DEPOIS que o backfill chegar a "done". =====
         if (integ.backfill_status === "running" || integ.backfill_status === "scheduled") {
-          const r = await runBackfillChunk(supabase, integ);
+          const r = await runBackfillChunk(supabase, integ, dispatchConfig);
           // libera o sync_status pra próxima invocação (que pode ser outro chunk
           // do backfill, OU o incremental se já terminou).
           await supabase.from("ssotica_integrations").update({
