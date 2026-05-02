@@ -1871,11 +1871,12 @@ async function runBackfillChunk(
     const finished = phaseDone && nextIdx >= total;
     const finishedAt = new Date().toISOString();
     const nextRunAt = finished ? null : finishedAt;
+    const nextStatus = finished ? "done" : "scheduled";
 
     await supabase.from("ssotica_integrations").update({
       backfill_chunk_index: nextIdx,
       backfill_phase: nextPhase,
-      backfill_status: finished ? "done" : "running",
+      backfill_status: nextStatus,
       backfill_next_run_at: nextRunAt,
       sync_status: "idle",
       initial_sync_done: finished ? true : integ.initial_sync_done,
@@ -1899,7 +1900,7 @@ async function runBackfillChunk(
       }).eq("id", logId);
     }
 
-    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} fase=${phase} OK. ${finished ? 'CONCLUÍDO!' : `próximo: chunk ${nextIdx + 1} fase ${nextPhase}`}`);
+    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} fase=${phase} OK. ${finished ? 'CONCLUÍDO!' : `próximo: chunk ${nextIdx + 1} fase ${nextPhase} (agendado)`}`);
 
     if (!finished) {
       try {
@@ -1976,7 +1977,7 @@ async function runBackfillChunk(
     // Em caso de erro, mantemos o MESMO chunk pendente para retry automático.
     await supabase.from("ssotica_integrations").update({
       sync_status: "error",
-      backfill_status: "running",
+      backfill_status: "scheduled",
       backfill_next_run_at: new Date(Date.now() + 30 * 1000).toISOString(),
       last_error: msg.slice(0, 1000),
       updated_at: new Date().toISOString(),
