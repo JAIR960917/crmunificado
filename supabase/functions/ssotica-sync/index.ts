@@ -24,6 +24,8 @@ const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
 const INCREMENTAL_COBRANCAS_SLICES = 8;
 const RUNNING_SYNC_STALE_MINUTES = 5;
 const BACKFILL_CLAIM_WINDOW_MS = RUNNING_SYNC_STALE_MINUTES * 60 * 1000;
+const BACKFILL_HEARTBEAT_MS = 45 * 1000;
+const BACKFILL_MAX_PARALLEL = 2;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
@@ -239,6 +241,50 @@ async function decryptIntegration<T extends { bearer_token?: string | null; lice
   if (!item) return item;
   await decryptIntegrations(supabase, [item]);
   return item;
+}
+
+function startBackfillHeartbeat(params: {
+  supabase: any;
+  integrationId: string;
+  chunkIndex: number;
+  phase: "cr" | "vendas";
+}) {
+  let stopped = false;
+
+  const beat = async () => {
+    if (stopped) return;
+    try {
+      const nowIso = new Date().toISOString();
+      const leaseUntil = new Date(Date.now() + BACKFILL_CLAIM_WINDOW_MS).toISOString();
+      const { error } = await params.supabase
+        .from("ssotica_integrations")
+        .update({
+          sync_status: "running",
+          backfill_status: "running",
+          backfill_phase: params.phase,
+          backfill_next_run_at: leaseUntil,
+          updated_at: nowIso,
+        })
+        .eq("id", params.integrationId)
+        .eq("backfill_chunk_index", params.chunkIndex)
+        .neq("backfill_status", "done");
+
+      if (error) {
+        console.warn(`[ssotica-sync][backfill-heartbeat] empresa=${params.integrationId} chunk=${params.chunkIndex} fase=${params.phase} erro ao renovar lease: ${error.message}`);
+      }
+    } catch (error) {
+      console.warn(`[ssotica-sync][backfill-heartbeat] empresa=${params.integrationId} chunk=${params.chunkIndex} fase=${params.phase} falha inesperada:`, error);
+    }
+  };
+
+  const timer = setInterval(() => {
+    void beat();
+  }, BACKFILL_HEARTBEAT_MS);
+
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }
 
 // Calcula a janela de datas de um chunk específico (chunk 0 = mais recente).
