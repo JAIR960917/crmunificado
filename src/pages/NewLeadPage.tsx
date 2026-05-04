@@ -13,6 +13,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, WifiOff, ArrowLeft, Check, Eye, CalendarIcon, Clock } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { addToOfflineQueue, syncOfflineQueue, getOfflineQueue, type OfflineAppointmentPayload } from "@/lib/offlineSync";
 import { formatPhoneBR } from "@/lib/phoneFormat";
 import { format, parse } from "date-fns";
