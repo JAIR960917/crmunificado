@@ -52,6 +52,7 @@ const colorMap: Record<string, { header: string; badge: string }> = {
 export default function LeadsPage() {
   const { user, isAdmin, isGerente } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [columns, setColumns] = useState<CrmColumn[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
