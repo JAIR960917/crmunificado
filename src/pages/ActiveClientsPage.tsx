@@ -121,6 +121,7 @@ export default function ActiveClientsPage() {
   const [autoAssignConfirm, setAutoAssignConfirm] = useState(false);
   const [unassignedCount, setUnassignedCount] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [cobrancaClienteIds, setCobrancaClienteIds] = useState<number[]>([]);
 
   // Schedule dialog
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -141,10 +142,12 @@ export default function ActiveClientsPage() {
       if (filterAssignedTo === "__unassigned__") res = res.is("assigned_to", null);
       else if (filterAssignedTo !== "all") res = res.eq("assigned_to", filterAssignedTo);
       // Exclui clientes inadimplentes (com cobrança ativa) da tela de renovação
-      res = res.not("ssotica_cliente_id", "in", "(select ssotica_cliente_id from crm_cobrancas where ssotica_cliente_id is not null)");
+      if (cobrancaClienteIds.length > 0) {
+        res = res.not("ssotica_cliente_id", "in", `(${cobrancaClienteIds.join(",")})`);
+      }
       return res;
     },
-  }), [filterCompanyId, filterAssignedTo, allowedCompanyIds]);
+  }), [filterCompanyId, filterAssignedTo, allowedCompanyIds, cobrancaClienteIds]);
 
   // ilike search across name/phone in jsonb
   const buildSearchOr = useCallback((q: string) => {
@@ -173,7 +176,7 @@ export default function ActiveClientsPage() {
 
   // Load static data once (statuses, profiles, fields, etc.)
   const loadMeta = useCallback(async () => {
-    const [{ data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }, { data: notes }] = await Promise.all([
+    const [{ data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }, { data: notes }, { data: cobs }] = await Promise.all([
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("user_roles").select("user_id, role"),
@@ -181,6 +184,7 @@ export default function ActiveClientsPage() {
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
       supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
       supabase.from("crm_renovacao_notes").select("renovacao_id"),
+      supabase.from("crm_cobrancas").select("ssotica_cliente_id").not("ssotica_cliente_id", "is", null),
     ]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
@@ -188,6 +192,7 @@ export default function ActiveClientsPage() {
     setFields((ff || []) as unknown as FormField[]);
     setActivities((acts || []) as RenovacaoActivity[]);
     setNoteIds(new Set((notes || []).map((n: any) => n.renovacao_id)));
+    setCobrancaClienteIds(Array.from(new Set(((cobs || []) as any[]).map((c) => c.ssotica_cliente_id).filter((v) => v != null))));
 
     // For gerente: restrict allowed companies to their own (profile + manager_companies)
     if (isGerente && !isAdmin && user?.id) {
