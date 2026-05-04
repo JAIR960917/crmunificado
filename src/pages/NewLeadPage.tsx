@@ -835,6 +835,34 @@ export default function NewLeadPage() {
           )}
         </div>
       </div>
+      <AlertDialog open={!!duplicateInfo} onOpenChange={(o) => !o && setDuplicateInfo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {duplicateInfo?.isMine ? "Lead já cadastrado" : "Telefone já cadastrado"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {duplicateInfo?.isMine
+                ? "Esse lead já está cadastrado em sua carteira. Deseja abrir o cadastro para atualizá-lo?"
+                : `Esse lead já está cadastrado pelo vendedor ${duplicateInfo?.ownerName}.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Fechar</AlertDialogCancel>
+            {duplicateInfo?.isMine && (
+              <AlertDialogAction
+                onClick={() => {
+                  if (duplicateInfo) {
+                    navigate(`/leads?edit=${duplicateInfo.leadId}`);
+                  }
+                }}
+              >
+                Atualizar lead
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
