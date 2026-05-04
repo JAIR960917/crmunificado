@@ -341,6 +341,25 @@ export default function LeadsPage() {
     setOpen(true);
   };
 
+  // Abre automaticamente o lead se houver ?edit=<id> na URL
+  // (vindo da tela de novo lead quando há cadastro duplicado).
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (!editId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("crm_leads")
+        .select("id, data, status, assigned_to, created_by, created_at, scheduled_date, comprou")
+        .eq("id", editId)
+        .maybeSingle();
+      if (data) openEdit(data as Lead);
+      const next = new URLSearchParams(searchParams);
+      next.delete("edit");
+      setSearchParams(next, { replace: true });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get("edit")]);
+
   const resolveStatus = (data: Record<string, any>): string => {
     const defaultStatus = statuses.length > 0 ? statuses[0].key : formStatus;
 
