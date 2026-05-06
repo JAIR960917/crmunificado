@@ -647,44 +647,6 @@ export default function ImportLeadsPage() {
                 <span className="text-sm text-muted-foreground">Clique para selecionar o arquivo .csv</span>
                 <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
               </label>
-
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="w-full">
-                    <Trash2 className="mr-2 h-4 w-4" /> Excluir todos os leads do sistema
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação irá excluir permanentemente TODOS os leads da tela de Leads, junto com suas notas, atividades, agendamentos e mensagens de WhatsApp vinculadas. Os dados de Renovações e Cobranças NÃO serão afetados. Essa ação não pode ser desfeita.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={async () => {
-                        const toastId = toast.loading("Excluindo leads...");
-                        try {
-                          const { data, error } = await supabase.rpc("delete_all_leads_cascade");
-                          if (error) throw error;
-                          const count = typeof data === "object" && data && "deleted_leads" in data
-                            ? Number((data as { deleted_leads?: number }).deleted_leads ?? 0)
-                            : 0;
-                          toast.success(`${count} leads excluídos! Renovações e cobranças preservadas.`, { id: toastId });
-                        } catch (err: unknown) {
-                          const message = err instanceof Error ? err.message : "Erro ao excluir";
-                          toast.error(`Erro ao excluir: ${message}`, { id: toastId });
-                        }
-                      }}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Sim, excluir leads
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
             </CardContent>
           </Card>
         )}
