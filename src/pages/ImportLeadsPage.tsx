@@ -647,44 +647,6 @@ export default function ImportLeadsPage() {
                 <span className="text-sm text-muted-foreground">Clique para selecionar o arquivo .csv</span>
                 <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
               </label>
-
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="w-full">
-                    <Trash2 className="mr-2 h-4 w-4" /> Excluir todos os leads do sistema
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação irá excluir permanentemente TODOS os leads da tela de Leads, junto com suas notas, atividades, agendamentos e mensagens de WhatsApp vinculadas. Os dados de Renovações e Cobranças NÃO serão afetados. Essa ação não pode ser desfeita.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={async () => {
-                        const toastId = toast.loading("Excluindo leads...");
-                        try {
-                          const { data, error } = await supabase.rpc("delete_all_leads_cascade");
-                          if (error) throw error;
-                          const count = typeof data === "object" && data && "deleted_leads" in data
-                            ? Number((data as { deleted_leads?: number }).deleted_leads ?? 0)
-                            : 0;
-                          toast.success(`${count} leads excluídos! Renovações e cobranças preservadas.`, { id: toastId });
-                        } catch (err: unknown) {
-                          const message = err instanceof Error ? err.message : "Erro ao excluir";
-                          toast.error(`Erro ao excluir: ${message}`, { id: toastId });
-                        }
-                      }}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Sim, excluir leads
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
             </CardContent>
           </Card>
         )}
@@ -715,33 +677,9 @@ export default function ImportLeadsPage() {
               )}
 
               {duplicates && duplicates.length > 0 && (
-                <div className="flex justify-end">
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="destructive" disabled={deletingAll}>
-                        <Trash2 className="mr-1 h-3 w-3" />
-                        {deletingAll ? "Excluindo..." : `Excluir todos os ${duplicates.length} duplicados`}
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir todos os duplicados?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          {duplicates.length} card(s) serão removidos da tela de Leads. As renovações correspondentes NÃO serão afetadas.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={deleteAllDuplicates}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Sim, excluir todos
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  {duplicates.length} lead(s) com telefone também em Renovações. Use o botão individual ao lado de cada lead para excluí-lo da tela de Leads.
+                </p>
               )}
 
               {duplicates && duplicates.length > 0 && (
