@@ -226,6 +226,30 @@ export default function ImportLeadsPage() {
     }
   };
 
+  const [deletingAll, setDeletingAll] = useState(false);
+  const deleteAllDuplicates = async () => {
+    if (!duplicates || duplicates.length === 0) return;
+    setDeletingAll(true);
+    try {
+      const ids = duplicates.map((d) => d.leadId);
+      await Promise.all([
+        supabase.from("crm_lead_notes").delete().in("lead_id", ids),
+        supabase.from("lead_activities").delete().in("lead_id", ids),
+        supabase.from("crm_appointments").delete().in("lead_id", ids),
+        supabase.from("notifications").delete().in("lead_id", ids),
+        supabase.from("scheduled_whatsapp_messages").delete().in("lead_id", ids),
+      ]);
+      const { error } = await supabase.from("crm_leads").delete().in("id", ids);
+      if (error) throw error;
+      setDuplicates([]);
+      toast.success(`${ids.length} lead(s) duplicado(s) excluído(s).`);
+    } catch (err: any) {
+      toast.error(`Erro ao excluir todos: ${err.message || err}`);
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
 
   const { data: formFields = [] } = useQuery({
     queryKey: ["import-form-fields"],
