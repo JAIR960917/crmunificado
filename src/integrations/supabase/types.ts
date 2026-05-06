@@ -1952,6 +1952,7 @@ export type Database = {
       }
       decrypt_secret: { Args: { _ciphertext: string }; Returns: string }
       delete_all_leads_cascade: { Args: never; Returns: Json }
+      delete_duplicate_leads: { Args: { _lead_ids: string[] }; Returns: Json }
       encrypt_secret: { Args: { _plaintext: string }; Returns: string }
       find_lead_by_phone: {
         Args: { _phone: string }
