@@ -31,17 +31,41 @@ const isPreviewHost =
   window.location.hostname.includes("id-preview--") ||
   window.location.hostname.includes("lovableproject.com");
 
-/** Service Worker só é seguro em produção real, fora de iframe. */
+/**
+ * Não registramos mais o antigo /sw.js com cache de app shell.
+ * Mantemos apenas um worker mínimo para push no domínio publicado.
+ */
 const canRegisterServiceWorker =
   "serviceWorker" in navigator && !isPreviewHost && !isInIframe;
 
 if (canRegisterServiceWorker) {
-  // Registra após "load" para não competir com o boot da app.
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  window.addEventListener("load", async () => {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+
+      await Promise.all(
+        registrations.map(async (registration) => {
+          const activeUrl = registration.active?.scriptURL ?? "";
+          const waitingUrl = registration.waiting?.scriptURL ?? "";
+          const installingUrl = registration.installing?.scriptURL ?? "";
+          const urls = [activeUrl, waitingUrl, installingUrl].filter(Boolean);
+
+          if (urls.some((url) => url.includes("/sw.js"))) {
+            try {
+              await registration.update();
+            } catch {
+              // no-op
+            }
+          }
+        })
+      );
+
+      await navigator.serviceWorker.register("/service-worker.js");
+    } catch {
+      // no-op
+    }
   });
 } else {
-  // Em preview: remove SW antigo se existir, evitando cache "fantasma".
   navigator.serviceWorker?.getRegistrations().then((registrations) => {
     registrations.forEach((registration) => registration.unregister());
   });
