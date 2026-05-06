@@ -171,7 +171,7 @@ export default function ActiveClientsPage() {
 
   // Load static data once (statuses, profiles, fields, etc.)
   const loadMeta = useCallback(async () => {
-    const [{ data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }, { data: notes }, { data: cobs }] = await Promise.all([
+    const [{ data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }, { data: notes }] = await Promise.all([
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("user_roles").select("user_id, role"),
@@ -179,7 +179,6 @@ export default function ActiveClientsPage() {
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
       supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
       supabase.from("crm_renovacao_notes").select("renovacao_id"),
-      supabase.from("crm_cobrancas").select("ssotica_cliente_id").not("ssotica_cliente_id", "is", null),
     ]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
@@ -187,7 +186,6 @@ export default function ActiveClientsPage() {
     setFields((ff || []) as unknown as FormField[]);
     setActivities((acts || []) as RenovacaoActivity[]);
     setNoteIds(new Set((notes || []).map((n: any) => n.renovacao_id)));
-    setCobrancaClienteIds(Array.from(new Set(((cobs || []) as any[]).map((c) => c.ssotica_cliente_id).filter((v) => v != null))));
 
     // For gerente: restrict allowed companies to their own (profile + manager_companies)
     if (isGerente && !isAdmin && user?.id) {
