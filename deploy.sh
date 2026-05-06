@@ -74,31 +74,68 @@ SQL
 sync_frontend_assets_cache() {
   local cache_root="${PROJECT_DIR}/.frontend-assets-cache"
   local cache_assets_dir="${cache_root}/assets"
+  local latest_assets_dir=""
+  local temp_assets_dir=""
 
   mkdir -p "$cache_assets_dir"
 
-  if [ -d "${PROJECT_DIR}/dist/assets" ]; then
-    cp -a "${PROJECT_DIR}/dist/assets/." "$cache_assets_dir/"
-    ok "Cache local de assets históricos atualizado"
-    return 0
+  update_frontend_asset_aliases() {
+    local source_assets_dir="$1"
+    local target_assets_dir="$2"
+    local latest_js=""
+    local latest_css=""
+
+    latest_js="$(ls "${source_assets_dir}"/index-*.js 2>/dev/null | head -n 1 || true)"
+    latest_css="$(ls "${source_assets_dir}"/index-*.css 2>/dev/null | head -n 1 || true)"
+
+    if [ -n "$latest_js" ]; then
+      cp "$latest_js" "${target_assets_dir}/index-latest.js"
+    fi
+
+    if [ -n "$latest_css" ]; then
+      cp "$latest_css" "${target_assets_dir}/index-latest.css"
+    fi
+  }
+
+  if docker ps --format '{{.Names}}' | grep -q '^crm-frontend$'; then
+    docker cp "crm-frontend:/usr/share/nginx/html/assets/." "$cache_assets_dir/" >/dev/null 2>&1 || \
+      warn "Não foi possível copiar os assets do container atual para o cache histórico"
   fi
 
   local image_id
   image_id="$(docker compose images -q crm-frontend 2>/dev/null | tail -n 1)"
-  if [ -z "$image_id" ]; then
-    warn "Imagem do frontend não encontrada para montar cache de assets históricos"
-    return 1
-  fi
 
-  local temp_container
-  temp_container="$(docker create "$image_id")"
-  if ! docker cp "${temp_container}:/usr/share/nginx/html/assets/." "$cache_assets_dir/"; then
+  if [ -n "$image_id" ]; then
+    local temp_container
+    temp_container="$(docker create "$image_id")"
+    temp_assets_dir="$(mktemp -d)"
+
+    if docker cp "${temp_container}:/usr/share/nginx/html/assets/." "$temp_assets_dir/"; then
+      cp -a "${temp_assets_dir}/." "$cache_assets_dir/"
+      latest_assets_dir="$temp_assets_dir"
+    else
+      warn "Não foi possível copiar os assets da imagem recém-buildada para o cache histórico"
+    fi
+
     docker rm -f "$temp_container" >/dev/null 2>&1 || true
-    warn "Não foi possível copiar os assets do frontend para o cache histórico"
+  fi
+
+  if [ -z "$latest_assets_dir" ] && [ -d "${PROJECT_DIR}/dist/assets" ]; then
+    cp -a "${PROJECT_DIR}/dist/assets/." "$cache_assets_dir/"
+    latest_assets_dir="${PROJECT_DIR}/dist/assets"
+  fi
+
+  if [ -z "$latest_assets_dir" ]; then
+    warn "Nenhuma fonte de assets encontrada para montar o cache histórico do frontend"
     return 1
   fi
 
-  docker rm -f "$temp_container" >/dev/null 2>&1 || true
+  update_frontend_asset_aliases "$latest_assets_dir" "$cache_assets_dir"
+
+  if [ -n "$temp_assets_dir" ] && [ -d "$temp_assets_dir" ]; then
+    rm -rf "$temp_assets_dir"
+  fi
+
   ok "Cache de assets históricos atualizado"
 }
 
