@@ -121,7 +121,6 @@ export default function ActiveClientsPage() {
   const [autoAssignConfirm, setAutoAssignConfirm] = useState(false);
   const [unassignedCount, setUnassignedCount] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [cobrancaClienteIds, setCobrancaClienteIds] = useState<number[]>([]);
 
   // Schedule dialog
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -141,22 +140,9 @@ export default function ActiveClientsPage() {
       }
       if (filterAssignedTo === "__unassigned__") res = res.is("assigned_to", null);
       else if (filterAssignedTo !== "all") res = res.eq("assigned_to", filterAssignedTo);
-      // Exclui clientes inadimplentes (com cobrança ativa) da tela de renovação.
-      // Aplica server-side apenas se a lista for pequena para não estourar o tamanho da URL.
-      // Para listas grandes, o filtro é aplicado client-side em getByStatus.
-      if (cobrancaClienteIds.length > 0 && cobrancaClienteIds.length <= 200) {
-        res = res.not("ssotica_cliente_id", "in", `(${cobrancaClienteIds.join(",")})`);
-      }
       return res;
     },
-  }), [filterCompanyId, filterAssignedTo, allowedCompanyIds, cobrancaClienteIds]);
-
-  // Set para lookup O(1) ao filtrar client-side
-  const cobrancaClienteIdsSet = useMemo(() => new Set(cobrancaClienteIds), [cobrancaClienteIds]);
-  const applyCobrancaExclusion = useCallback((items: Renovacao[]) => {
-    if (cobrancaClienteIds.length === 0 || cobrancaClienteIds.length <= 200) return items;
-    return items.filter((r) => r.ssotica_cliente_id == null || !cobrancaClienteIdsSet.has(r.ssotica_cliente_id));
-  }, [cobrancaClienteIds.length, cobrancaClienteIdsSet]);
+  }), [filterCompanyId, filterAssignedTo, allowedCompanyIds]);
 
   // ilike search across name/phone in jsonb
   const buildSearchOr = useCallback((q: string) => {
@@ -185,7 +171,7 @@ export default function ActiveClientsPage() {
 
   // Load static data once (statuses, profiles, fields, etc.)
   const loadMeta = useCallback(async () => {
-    const [{ data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }, { data: notes }, { data: cobs }] = await Promise.all([
+    const [{ data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }, { data: notes }] = await Promise.all([
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("user_roles").select("user_id, role"),
@@ -193,7 +179,6 @@ export default function ActiveClientsPage() {
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
       supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
       supabase.from("crm_renovacao_notes").select("renovacao_id"),
-      supabase.from("crm_cobrancas").select("ssotica_cliente_id").not("ssotica_cliente_id", "is", null),
     ]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
@@ -201,7 +186,6 @@ export default function ActiveClientsPage() {
     setFields((ff || []) as unknown as FormField[]);
     setActivities((acts || []) as RenovacaoActivity[]);
     setNoteIds(new Set((notes || []).map((n: any) => n.renovacao_id)));
-    setCobrancaClienteIds(Array.from(new Set(((cobs || []) as any[]).map((c) => c.ssotica_cliente_id).filter((v) => v != null))));
 
     // For gerente: restrict allowed companies to their own (profile + manager_companies)
     if (isGerente && !isAdmin && user?.id) {
@@ -505,18 +489,18 @@ export default function ActiveClientsPage() {
   // Build per-status item list (paginated or filtered from search)
   const getByStatus = useCallback((key: string): { items: Renovacao[]; total: number; hasMore: boolean; loading: boolean } => {
     if (isSearching) {
-      const filtered = applyCobrancaExclusion((searchResults || []).filter((r) => r.status === key));
+      const filtered = (searchResults || []).filter((r) => r.status === key);
       return { items: sortByTaskPriority(filtered), total: filtered.length, hasMore: false, loading: searching };
     }
     const col = paginatedColumns[key];
-    const items = applyCobrancaExclusion(col?.items || []);
+    const items = col?.items || [];
     return {
       items: sortByTaskPriority(items),
       total: col?.total || 0,
       hasMore: col?.hasMore || false,
       loading: col?.loading || false,
     };
-  }, [paginatedColumns, isSearching, searchResults, searching, sortByTaskPriority, applyCobrancaExclusion]);
+  }, [paginatedColumns, isSearching, searchResults, searching, sortByTaskPriority]);
 
   const totalDisplayed = useMemo(() => {
     if (isSearching) return searchResults?.length || 0;
