@@ -102,16 +102,6 @@ const parseCsvText = (text: string, separator = ";") => {
   return rows;
 };
 
-const chunkArray = <T,>(items: T[], size: number) => {
-  const chunks: T[][] = [];
-
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-
-  return chunks;
-};
-
 export default function ImportLeadsPage() {
   const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
@@ -235,34 +225,6 @@ export default function ImportLeadsPage() {
       setDeletingId(null);
     }
   };
-
-  const [deletingAll, setDeletingAll] = useState(false);
-  const deleteAllDuplicates = async () => {
-    if (!duplicates || duplicates.length === 0) return;
-    setDeletingAll(true);
-    try {
-      const ids = duplicates.map((d) => d.leadId);
-      const leadIdChunks = chunkArray(ids, 250);
-      let deletedCount = 0;
-
-      for (const leadIds of leadIdChunks) {
-        const { data, error } = await supabase.rpc("delete_duplicate_leads", { _lead_ids: leadIds });
-        if (error) throw error;
-
-        deletedCount += typeof data === "object" && data && "deleted_leads" in data
-          ? Number((data as { deleted_leads?: number }).deleted_leads ?? 0)
-          : 0;
-      }
-
-      setDuplicates([]);
-      toast.success(`${deletedCount || ids.length} lead(s) duplicado(s) excluído(s).`);
-    } catch (err: any) {
-      toast.error(`Erro ao excluir todos: ${err.message || err}`);
-    } finally {
-      setDeletingAll(false);
-    }
-  };
-
 
   const { data: formFields = [] } = useQuery({
     queryKey: ["import-form-fields"],
