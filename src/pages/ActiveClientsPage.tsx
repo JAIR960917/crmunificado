@@ -141,13 +141,22 @@ export default function ActiveClientsPage() {
       }
       if (filterAssignedTo === "__unassigned__") res = res.is("assigned_to", null);
       else if (filterAssignedTo !== "all") res = res.eq("assigned_to", filterAssignedTo);
-      // Exclui clientes inadimplentes (com cobrança ativa) da tela de renovação
-      if (cobrancaClienteIds.length > 0) {
+      // Exclui clientes inadimplentes (com cobrança ativa) da tela de renovação.
+      // Aplica server-side apenas se a lista for pequena para não estourar o tamanho da URL.
+      // Para listas grandes, o filtro é aplicado client-side em getByStatus.
+      if (cobrancaClienteIds.length > 0 && cobrancaClienteIds.length <= 200) {
         res = res.not("ssotica_cliente_id", "in", `(${cobrancaClienteIds.join(",")})`);
       }
       return res;
     },
   }), [filterCompanyId, filterAssignedTo, allowedCompanyIds, cobrancaClienteIds]);
+
+  // Set para lookup O(1) ao filtrar client-side
+  const cobrancaClienteIdsSet = useMemo(() => new Set(cobrancaClienteIds), [cobrancaClienteIds]);
+  const applyCobrancaExclusion = useCallback((items: Renovacao[]) => {
+    if (cobrancaClienteIds.length === 0 || cobrancaClienteIds.length <= 200) return items;
+    return items.filter((r) => r.ssotica_cliente_id == null || !cobrancaClienteIdsSet.has(r.ssotica_cliente_id));
+  }, [cobrancaClienteIds.length, cobrancaClienteIdsSet]);
 
   // ilike search across name/phone in jsonb
   const buildSearchOr = useCallback((q: string) => {
