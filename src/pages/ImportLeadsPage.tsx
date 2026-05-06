@@ -242,15 +242,20 @@ export default function ImportLeadsPage() {
     setDeletingAll(true);
     try {
       const ids = duplicates.map((d) => d.leadId);
-      const leadIdChunks = chunkArray(ids, 100);
+      const leadIdChunks = chunkArray(ids, 250);
+      let deletedCount = 0;
 
       for (const leadIds of leadIdChunks) {
-        const { error } = await supabase.from("crm_leads").delete().in("id", leadIds);
+        const { data, error } = await supabase.rpc("delete_duplicate_leads", { _lead_ids: leadIds });
         if (error) throw error;
+
+        deletedCount += typeof data === "object" && data && "deleted_leads" in data
+          ? Number((data as { deleted_leads?: number }).deleted_leads ?? 0)
+          : 0;
       }
 
       setDuplicates([]);
-      toast.success(`${ids.length} lead(s) duplicado(s) excluído(s).`);
+      toast.success(`${deletedCount || ids.length} lead(s) duplicado(s) excluído(s).`);
     } catch (err: any) {
       toast.error(`Erro ao excluir todos: ${err.message || err}`);
     } finally {
