@@ -102,6 +102,16 @@ const parseCsvText = (text: string, separator = ";") => {
   return rows;
 };
 
+const chunkArray = <T,>(items: T[], size: number) => {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+};
+
 export default function ImportLeadsPage() {
   const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
@@ -232,15 +242,13 @@ export default function ImportLeadsPage() {
     setDeletingAll(true);
     try {
       const ids = duplicates.map((d) => d.leadId);
-      await Promise.all([
-        supabase.from("crm_lead_notes").delete().in("lead_id", ids),
-        supabase.from("lead_activities").delete().in("lead_id", ids),
-        supabase.from("crm_appointments").delete().in("lead_id", ids),
-        supabase.from("notifications").delete().in("lead_id", ids),
-        supabase.from("scheduled_whatsapp_messages").delete().in("lead_id", ids),
-      ]);
-      const { error } = await supabase.from("crm_leads").delete().in("id", ids);
-      if (error) throw error;
+      const leadIdChunks = chunkArray(ids, 100);
+
+      for (const leadIds of leadIdChunks) {
+        const { error } = await supabase.from("crm_leads").delete().in("id", leadIds);
+        if (error) throw error;
+      }
+
       setDuplicates([]);
       toast.success(`${ids.length} lead(s) duplicado(s) excluído(s).`);
     } catch (err: any) {
