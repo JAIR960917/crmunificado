@@ -17,6 +17,7 @@ const MAX_HISTORY_DAYS = 2880; // 96 meses
 const CHUNK_DAYS = 183;        // ~6 meses por chunk (usado pelo backfill histórico)
 const COBRANCAS_LOOKBACK_DAYS = 730; // faixa histórica total coberta pelo ciclo incremental
 const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
+const PER_INTEGRATION_TIMEOUT_MS = 120_000;
 // 24 meses ÷ 8 fatias = ~3 meses por execução. Reduzido de 4 para 8 porque
 // lojas grandes (Caicó, Jucurutu) estouravam o limite de ~400s da edge function
 // mesmo isoladas. Com 3 meses cada execução roda em <200s. Cobertura total
@@ -2005,6 +2006,25 @@ function isRunningSyncStale(integration: Pick<Integration, "sync_status" | "upda
   const updatedAt = new Date(integration.updated_at).getTime();
   if (Number.isNaN(updatedAt)) return false;
   return Date.now() - updatedAt > RUNNING_SYNC_STALE_MINUTES * 60 * 1000;
+}
+
+async function shouldRunGlobalConsolidation(supabase: any, onlyIntegrationId?: string): Promise<boolean> {
+  if (!onlyIntegrationId) return true;
+
+  const { data: coordinator, error } = await supabase
+    .from("ssotica_integrations")
+    .select("id")
+    .eq("is_active", true)
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn(`[ssotica-sync][consolidation] falha ao determinar coordenador; executando mesmo assim: ${error.message}`);
+    return true;
+  }
+
+  return !coordinator || coordinator.id === onlyIntegrationId;
 }
 
 Deno.serve(async (req) => {
