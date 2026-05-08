@@ -418,7 +418,7 @@ export default function TransitionLogsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">
-                        {log.trigger_source === "auto" ? "Automático" : "Manual"}
+                        {log.trigger_source?.startsWith("auto") ? "Automático" : "Manual"}
                       </Badge>
                     </TableCell>
                   </TableRow>

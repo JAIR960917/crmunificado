@@ -747,17 +747,31 @@ async function syncContasReceber(
   for (const [clienteIdNum, bucket] of parcelasPorCliente.entries()) {
     const { cliente, parcelas, hasNegativadoSerasa, hasAjuizado, ajuizadoVariant, hasEmAtraso } = bucket;
 
-    // Upsert apenas do card desta própria loja. A consolidação cross-store roda
-    // ao final da sync e é ela quem decide qual loja vence e quais parcelas serão unificadas.
-    // Se apagarmos cards de outras lojas aqui, perdemos parcelas antes do merge final.
+    // Procura primeiro card da PRÓPRIA loja. Se não existir, busca card consolidado
+    // em OUTRA loja para o mesmo cliente — assim evitamos o flap onde a consolidação
+    // cross-store deletava o card da loja perdedora a cada ciclo, e a sync por loja
+    // criava um novo no ciclo seguinte (loop "criado → excluído → criado…").
     const { data: existingSameStore } = await supabase
       .from("crm_cobrancas")
-      .select("id, assigned_to, created_by, scheduled_date, status, valor, vencimento, dias_atraso, data")
+      .select("id, assigned_to, created_by, scheduled_date, status, valor, vencimento, dias_atraso, data, ssotica_company_id")
       .eq("ssotica_cliente_id", clienteIdNum)
       .eq("ssotica_company_id", integ.company_id)
       .maybeSingle();
 
-    const existingCobranca = existingSameStore as ExistingCobranca | null;
+    let existingCobranca = existingSameStore as ExistingCobranca | null;
+    if (!existingCobranca) {
+      const { data: existingOtherStore } = await supabase
+        .from("crm_cobrancas")
+        .select("id, assigned_to, created_by, scheduled_date, status, valor, vencimento, dias_atraso, data, ssotica_company_id")
+        .eq("ssotica_cliente_id", clienteIdNum)
+        .neq("ssotica_company_id", integ.company_id)
+        .order("vencimento", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (existingOtherStore) {
+        existingCobranca = existingOtherStore as ExistingCobranca;
+      }
+    }
 
     // ===== MERGE com parcelas já existentes no banco =====
     // Como o sync incremental cobre apenas ~92 dias por slot, parcelas de outros
