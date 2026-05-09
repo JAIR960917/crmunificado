@@ -19,10 +19,11 @@ const COBRANCAS_LOOKBACK_DAYS = 730; // faixa histórica total coberta pelo cicl
 const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
 const PER_INTEGRATION_TIMEOUT_MS = 120_000;
 // 24 meses ÷ 8 fatias = ~3 meses por execução. Reduzido de 4 para 8 porque
-// lojas grandes (Caicó, Jucurutu) estouravam o limite de ~400s da edge function
-// mesmo isoladas. Com 3 meses cada execução roda em <200s. Cobertura total
-// continua sendo 24 meses, agora distribuída em 8 ciclos de 3h (24h completas).
+// lojas grandes (Caicó, Jucurutu) estouravam o limite do runtime mesmo isoladas.
+// Como o cron atual roda 4x por dia, percorremos as 8 fatias ao longo de 2 dias
+// (em vez de deixar metade das fatias sem nunca rodar).
 const INCREMENTAL_COBRANCAS_SLICES = 8;
+const SSOTICA_INCREMENTAL_RUNS_PER_DAY = 4;
 const RUNNING_SYNC_STALE_MINUTES = 5;
 const BACKFILL_CLAIM_WINDOW_MS = RUNNING_SYNC_STALE_MINUTES * 60 * 1000;
 const BACKFILL_HEARTBEAT_MS = 45 * 1000;
@@ -103,9 +104,21 @@ function statusKeyForRenovacao(diasDesdeUltimaCompra: number | null): string {
 
 function getBrasiliaCycleSlot(date = new Date()): number {
   const br = new Date(date.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-  // 24 horas / SLICES = horas por slot (3h quando SLICES=8)
-  const hoursPerSlot = Math.max(1, Math.floor(24 / INCREMENTAL_COBRANCAS_SLICES));
-  return Math.floor(br.getHours() / hoursPerSlot) % INCREMENTAL_COBRANCAS_SLICES;
+  // O cron da SSótica roda 4x por dia (~6h). Antes usávamos o relógio dividido
+  // em 8 slots de 3h, o que fazia apenas os slots ímpares rodarem (ex.: 04h,
+  // 10h, 16h, 22h => 1,3,5,7) e metade da janela histórica nunca era visitada.
+  // Agora calculamos o slot pela sequência real das execuções: 4 rodadas por dia,
+  // avançando 1 slot por rodada. Assim as 8 fatias são cobertas em 2 dias sem
+  // aumentar o volume por execução.
+  const hoursPerRun = Math.max(1, Math.floor(24 / SSOTICA_INCREMENTAL_RUNS_PER_DAY));
+  const runIndex = Math.min(
+    SSOTICA_INCREMENTAL_RUNS_PER_DAY - 1,
+    Math.floor(br.getHours() / hoursPerRun),
+  );
+  const brasiliaDaySerial = Math.floor(
+    Date.UTC(br.getFullYear(), br.getMonth(), br.getDate()) / 86400000,
+  );
+  return ((brasiliaDaySerial * SSOTICA_INCREMENTAL_RUNS_PER_DAY) + runIndex) % INCREMENTAL_COBRANCAS_SLICES;
 }
 
 function getIncrementalCobrancaWindow(now = new Date()): { start: Date; end: Date; slot: number } {
