@@ -44,7 +44,11 @@ persist_backend_runtime_settings_vps() {
   [ -n "${app_supabase_url}" ] && [ -n "${app_supabase_anon}" ] || return 0
   docker ps --format '{{.Names}}' | grep -q "^${DB_CONTAINER}$" || return 1
 
-  docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 >/dev/null <<SQL
+  docker exec -i "$DB_CONTAINER" \
+    psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 \
+      -v backend_url="${app_supabase_url}" \
+      -v backend_key="${app_supabase_anon}" \
+      >/dev/null <<'SQL'
 CREATE TABLE IF NOT EXISTS public.system_settings (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   setting_key text NOT NULL UNIQUE,
@@ -53,21 +57,17 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
 );
 
 INSERT INTO public.system_settings (setting_key, setting_value)
-VALUES ('backend_public_url', '${app_supabase_url}')
+VALUES ('backend_public_url', :'backend_url')
 ON CONFLICT (setting_key)
 DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now();
 
 INSERT INTO public.system_settings (setting_key, setting_value)
-VALUES ('backend_anon_key', '${app_supabase_anon}')
+VALUES ('backend_anon_key', :'backend_key')
 ON CONFLICT (setting_key)
 DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now();
 
-DO \$do\$
-BEGIN
-  IF to_regprocedure('public.manage_ssotica_cron()') IS NOT NULL THEN
-    PERFORM public.manage_ssotica_cron();
-  END IF;
-END \$do\$;
+SELECT public.manage_ssotica_cron()
+WHERE to_regprocedure('public.manage_ssotica_cron()') IS NOT NULL;
 SQL
 }
 
