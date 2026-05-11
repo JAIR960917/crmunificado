@@ -2362,21 +2362,37 @@ Deno.serve(async (req) => {
     for (const integ of integrations as Integration[]) {
       let logId: string | null = null;
       try {
-        if (integ.sync_status === "running" && !isRunningSyncStale(integ)) {
+        // 🔓 Sync MANUAL (botão "Sincronizar" de uma loja específica): força destrave.
+        // Mesmo que outra execução tenha travado essa loja em "running" (e ainda não
+        // tenha passado o auto-cleanup de 15min), liberamos AGORA — afeta apenas a
+        // loja escolhida, sem mexer nas outras.
+        const isManualSingle = !!onlyIntegrationId && manualRecent;
+
+        if (!isManualSingle && integ.sync_status === "running" && !isRunningSyncStale(integ)) {
           results.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
           continue;
         }
 
-        if (isRunningSyncStale(integ)) {
+        if (isManualSingle || isRunningSyncStale(integ)) {
           await supabase
             .from("ssotica_sync_logs")
             .update({
               finished_at: new Date().toISOString(),
               status: "error",
-              error_message: `Execução anterior excedeu ${RUNNING_SYNC_STALE_MINUTES} min e foi encerrada automaticamente antes do novo ciclo.`,
+              error_message: isManualSingle
+                ? "Execução anterior encerrada — usuário acionou sincronização manual desta loja."
+                : `Execução anterior excedeu ${RUNNING_SYNC_STALE_MINUTES} min e foi encerrada automaticamente antes do novo ciclo.`,
             })
             .eq("integration_id", integ.id)
             .eq("status", "running");
+          // Garante que o claim abaixo encontre sync_status != "running"
+          if (isManualSingle && integ.sync_status === "running") {
+            await supabase
+              .from("ssotica_integrations")
+              .update({ sync_status: "idle" })
+              .eq("id", integ.id);
+            integ.sync_status = "idle";
+          }
         }
 
         const { data: claimedIntegration } = await supabase
