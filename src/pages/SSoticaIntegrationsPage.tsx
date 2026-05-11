@@ -493,41 +493,19 @@ export default function SSoticaIntegrationsPage() {
           </div>
         </div>
 
-        {/* Card de configuração do cron diário */}
+        {/* Aviso: sincronização automática desativada — agora é só manual */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="h-4 w-4" /> Sincronização automática (a cada 6h)
+              <Clock className="h-4 w-4" /> Sincronização manual
             </CardTitle>
             <CardDescription>
-              Escolha o horário base (de Brasília). A sincronização rodará a cada 6 horas a partir desse horário
-              (ex: 6h → 6h, 12h, 18h, 0h). Cobranças quitadas serão removidas e clientes sem dívida vão
-              automaticamente para Renovações.
+              A sincronização automática está <strong>desativada</strong>. Cada loja só sincroniza
+              quando você clicar em <strong>Sincronizar</strong> no card dela abaixo. Assim, você
+              evita disputa de recursos entre as lojas e garante que a atualização da loja escolhida
+              vá até o fim.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="sync-hour">Horário base</Label>
-                <Select value={syncHour} onValueChange={setSyncHour}>
-                  <SelectTrigger id="sync-hour" className="w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {Array.from({ length: 24 }).map((_, h) => (
-                      <SelectItem key={h} value={String(h)}>
-                        {String(h).padStart(2, "0")}:00
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button onClick={handleSaveHour} disabled={savingHour}>
-                {savingHour && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Salvar e reagendar
-              </Button>
-            </div>
-          </CardContent>
         </Card>
 
         {loading ? (
