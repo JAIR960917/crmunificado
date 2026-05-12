@@ -460,23 +460,10 @@ export default function SSoticaIntegrationsPage() {
               <Plug className="h-6 w-6" /> Integrações SSótica
             </h1>
             <p className="text-muted-foreground text-sm">
-              Configure o token de acesso de cada loja. A sincronização roda automaticamente todos os dias.
+              Configure o token de acesso de cada loja. A sincronização automática está desativada — cada loja só sincroniza ao clicar em <strong>Sincronizar</strong> ou <strong>Backfill 96m</strong>.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleResyncAll}
-              disabled={resyncingAll || stoppingAll}
-            >
-              {resyncingAll ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Ressincronizar tudo
-            </Button>
             <Button
               variant="destructive"
               size="sm"
