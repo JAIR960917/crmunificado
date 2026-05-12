@@ -38,6 +38,31 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const BACKEND_STORAGE_KEY = "crm_backend_url";
+
+function syncPersistedAuthWithCurrentBackend() {
+  const runtimeConfig = window.__CRM_RUNTIME_CONFIG__;
+  const currentBackendUrl = runtimeConfig?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL || "";
+
+  if (!currentBackendUrl) return;
+
+  const previousBackendUrl = localStorage.getItem(BACKEND_STORAGE_KEY);
+
+  if (previousBackendUrl && previousBackendUrl !== currentBackendUrl) {
+    for (const key of Object.keys(localStorage)) {
+      if (key === "supabase.auth.token" || /^sb-.*auth-token/.test(key)) {
+        localStorage.removeItem(key);
+      }
+    }
+
+    console.warn("[Auth] Backend alterado; sessão local anterior foi limpa para evitar token inválido.", {
+      previousBackendUrl,
+      currentBackendUrl,
+    });
+  }
+
+  localStorage.setItem(BACKEND_STORAGE_KEY, currentBackendUrl);
+}
 
 /**
  * Busca os papéis do usuário no banco.
@@ -73,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     /** Lê a sessão persistida no localStorage (refresh da página). */
     const restoreSession = async () => {
       try {
+        syncPersistedAuthWithCurrentBackend();
         const { data: { session: restoredSession } } = await supabase.auth.getSession();
         if (!mounted) return;
         setSession(restoredSession);
