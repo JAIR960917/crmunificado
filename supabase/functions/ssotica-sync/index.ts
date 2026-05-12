@@ -2074,6 +2074,28 @@ Deno.serve(async (req) => {
     const onlyIntegrationId: string | undefined = body.integration_id;
     const forceFull: boolean = body.force_full === true;
     const manualRecent: boolean = body.manual_recent === true;
+    const internalChain: boolean = body.internal_chain === true;
+
+    // 🔒 LOCK GLOBAL: Sincronização é 100% manual e UMA loja por vez.
+    // Se outra loja estiver rodando/agendada, recusa o pedido (exceto consolidate_only).
+    // Continuações automáticas do mesmo backfill (internal_chain=true) também passam.
+    if (mode !== "consolidate_only" && onlyIntegrationId && !internalChain) {
+      const { data: busy } = await supabase
+        .from("ssotica_integrations")
+        .select("id, company_id, sync_status, backfill_status")
+        .neq("id", onlyIntegrationId)
+        .or("sync_status.eq.running,backfill_status.in.(running,scheduled)");
+      if (busy && busy.length > 0) {
+        return new Response(JSON.stringify({
+          ok: false,
+          locked: true,
+          busy_count: busy.length,
+          busy_integration_ids: busy.map((b: any) => b.id),
+          message: `Outra loja já está sincronizando. Aguarde terminar ou clique em "Parar todos os backfills" antes de iniciar esta.`,
+        }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
 
     // ========== MODO 1: DESATIVADO — sincronização agora é 100% manual por loja ==========
     if (mode === "backfill_tick") {
