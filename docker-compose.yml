@@ -32,7 +32,7 @@ services:
       GOTRUE_API_PORT: 9999
       API_EXTERNAL_URL: ${SUPABASE_PUBLIC_URL}
       GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@supabase-db:5432/${POSTGRES_DB:-postgres}
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@supabase-db:5432/${POSTGRES_DB:-postgres}
       GOTRUE_SITE_URL: ${SITE_URL}
       GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-}
       GOTRUE_JWT_SECRET: ${JWT_SECRET}
@@ -167,7 +167,7 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/${POSTGRES_DB:-postgres}
       VERIFY_JWT: "${FUNCTIONS_VERIFY_JWT:-true}"
-    command: ["start", "--main-service", "/home/deno/functions/main/index.ts"]
+    command: ["start", "--main-service", "/home/deno/functions/main"]
 
   supabase-studio:
     container_name: supabase-studio
