@@ -1086,18 +1086,12 @@ async function syncContasReceber(
           parcelaIdsDoCard.length > 0 &&
           parcelaIdsDoCard.every((id) => parcelasInativasIds.has(id));
 
-        // Fallback para sync manual recente: a API da SSótica costuma remover da
-        // resposta as parcelas já pagas. Nessa situação, se TODAS as parcelas
-        // conhecidas deste card (somente da loja atual) estavam dentro da janela
-        // revisada e nenhuma apareceu como ativa, tratamos o desaparecimento como
-        // quitação. Nunca aplicamos isso em backfill/chunks parciais nem em cards
-        // cross-store, porque ali a ausência não é evidência suficiente.
-        const hasAbsenceQuitacaoEvidence =
-          allowMissingAsPaid &&
-          !hasParcelasOutraLoja &&
-          todasParcelasDaLojaNaJanela;
-
-        if (!hasDirectQuitacaoEvidence && !hasAbsenceQuitacaoEvidence) continue;
+        // ⚠️ REGRA DO NEGÓCIO: o card SÓ sai da cobrança quando temos evidência
+        // direta da SSótica (parcela retornada como paga / renegociada / em
+        // aberto / baixada / cancelada / estornada). NÃO usamos mais a
+        // heurística de "ausência" — se a API simplesmente parar de devolver a
+        // parcela, mantemos o card até que ela apareça com situação inativa.
+        if (!hasDirectQuitacaoEvidence) continue;
 
         // OK, evidência confirmada de quitação DESTA parcela: remove só este card.
         const cobData = (cob as any).data ?? {};
