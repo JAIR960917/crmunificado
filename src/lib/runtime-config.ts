@@ -1,17 +1,11 @@
-type RuntimeConfig = {
+export type AppRuntimeConfig = {
   supabaseUrl?: string;
   supabasePublishableKey?: string;
   disableRealtime?: boolean;
 };
 
-declare global {
-  interface Window {
-    __CRM_RUNTIME_CONFIG__?: RuntimeConfig;
-  }
-}
-
-export function getRuntimeConfig(): RuntimeConfig {
-  return window.__CRM_RUNTIME_CONFIG__ ?? {};
+export function getRuntimeConfig(): AppRuntimeConfig {
+  return ((window as Window & { __CRM_RUNTIME_CONFIG__?: AppRuntimeConfig }).__CRM_RUNTIME_CONFIG__ ?? {});
 }
 
 export function isRealtimeEnabled(): boolean {
