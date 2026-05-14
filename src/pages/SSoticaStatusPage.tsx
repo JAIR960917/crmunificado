@@ -53,6 +53,21 @@ const STUCK_MINUTES = 30;
 
 type Health = "ok" | "warning" | "stuck" | "error" | "inactive" | "never";
 
+function getBackfillVisualProgress(item: Pick<IntegrationStatus, "backfill_status" | "backfill_chunk_index" | "backfill_total_chunks">) {
+  const total = item.backfill_total_chunks ?? 32;
+  const completed = item.backfill_chunk_index ?? 0;
+  const status = item.backfill_status ?? "idle";
+  const isActive = status === "running" || status === "scheduled";
+  const currentChunk = isActive && completed < total ? completed + 1 : completed;
+
+  return {
+    total,
+    completed,
+    currentChunk,
+    percent: total > 0 ? Math.round((currentChunk / total) * 100) : 0,
+  };
+}
+
 function getHealth(i: IntegrationStatus): { health: Health; label: string } {
   if (!i.is_active) return { health: "inactive", label: "Inativa" };
 
@@ -414,20 +429,18 @@ export default function SSoticaStatusPage() {
                             const bfActive =
                               i.backfill_status === "running" ||
                               i.backfill_status === "scheduled";
-                            const total = i.backfill_total_chunks ?? 32;
-                            const done = i.backfill_chunk_index ?? 0;
-                            const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                            const progress = getBackfillVisualProgress(i);
                             if (bfActive) {
                               return (
                                 <div className="space-y-1 min-w-[140px]">
                                   <div className="flex items-center justify-between text-xs">
                                     <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
-                                      backfill {done}/{total}
+                                      backfill lote {progress.currentChunk}/{progress.total}
                                     </Badge>
-                                    <span className="text-muted-foreground">{pct}%</span>
+                                    <span className="text-muted-foreground">{progress.percent}%</span>
                                   </div>
                                   <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                    <div className="h-full bg-amber-500 transition-all" style={{ width: `${pct}%` }} />
+                                    <div className="h-full bg-amber-500 transition-all" style={{ width: `${progress.percent}%` }} />
                                   </div>
                                 </div>
                               );
