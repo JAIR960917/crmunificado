@@ -38,30 +38,38 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const BACKEND_STORAGE_KEY = "crm_backend_url";
+const BACKEND_STORAGE_KEY = "crm_backend_fingerprint";
+
+function clearPersistedAuthTokens() {
+  for (const key of Object.keys(localStorage)) {
+    if (key === "supabase.auth.token" || /^sb-.*auth-token/.test(key)) {
+      localStorage.removeItem(key);
+    }
+  }
+}
 
 function syncPersistedAuthWithCurrentBackend() {
   const runtimeConfig = window.__CRM_RUNTIME_CONFIG__;
   const currentBackendUrl = runtimeConfig?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL || "";
+  const currentPublishableKey =
+    runtimeConfig?.supabasePublishableKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 
   if (!currentBackendUrl) return;
 
-  const previousBackendUrl = localStorage.getItem(BACKEND_STORAGE_KEY);
+  const currentBackendFingerprint = `${currentBackendUrl}::${currentPublishableKey}`;
 
-  if (previousBackendUrl && previousBackendUrl !== currentBackendUrl) {
-    for (const key of Object.keys(localStorage)) {
-      if (key === "supabase.auth.token" || /^sb-.*auth-token/.test(key)) {
-        localStorage.removeItem(key);
-      }
-    }
+  const previousBackendFingerprint = localStorage.getItem(BACKEND_STORAGE_KEY);
+
+  if (previousBackendFingerprint && previousBackendFingerprint !== currentBackendFingerprint) {
+    clearPersistedAuthTokens();
 
     console.warn("[Auth] Backend alterado; sessão local anterior foi limpa para evitar token inválido.", {
-      previousBackendUrl,
-      currentBackendUrl,
+      previousBackendFingerprint,
+      currentBackendFingerprint,
     });
   }
 
-  localStorage.setItem(BACKEND_STORAGE_KEY, currentBackendUrl);
+  localStorage.setItem(BACKEND_STORAGE_KEY, currentBackendFingerprint);
 }
 
 /**
