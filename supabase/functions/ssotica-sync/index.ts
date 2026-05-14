@@ -622,8 +622,12 @@ async function syncContasReceber(
           situacao === "avencer" ||
           situacao === "pendente";
 
+        // ⚠️ "Em aberto" NÃO é considerada ativa: por regra do negócio, parcela
+        // marcada como "em aberto" significa que saiu da cobrança (junto com
+        // paga/renegociada). Só "Em atraso", "Vencido", "A vencer/Pendente" e
+        // os casos especiais (Negativado Serasa / Ajuizado) entram como ativas.
         const isAtiva =
-          isEmAtraso || isEmAberto || isVencido || isAVencer ||
+          isEmAtraso || isVencido || isAVencer ||
           isNegativadoSerasa || isAjuizado;
 
         const renegociacaoObj = parcela.renegociacao ?? parcela.renegociacao_info ?? null;
@@ -666,7 +670,7 @@ async function syncContasReceber(
         else if (foiPaga) skipped.paga++;
 
         const isInativa =
-          !isAtiva || foiRenegociada || foiBaixada || foiCancelada || foiEstornada || foiPaga;
+          !isAtiva || isEmAberto || foiRenegociada || foiBaixada || foiCancelada || foiEstornada || foiPaga;
 
         if (isInativa) {
           const cliInativa = parcela.titulo?.cliente ?? parcela.cliente ?? {};
@@ -1082,18 +1086,12 @@ async function syncContasReceber(
           parcelaIdsDoCard.length > 0 &&
           parcelaIdsDoCard.every((id) => parcelasInativasIds.has(id));
 
-        // Fallback para sync manual recente: a API da SSótica costuma remover da
-        // resposta as parcelas já pagas. Nessa situação, se TODAS as parcelas
-        // conhecidas deste card (somente da loja atual) estavam dentro da janela
-        // revisada e nenhuma apareceu como ativa, tratamos o desaparecimento como
-        // quitação. Nunca aplicamos isso em backfill/chunks parciais nem em cards
-        // cross-store, porque ali a ausência não é evidência suficiente.
-        const hasAbsenceQuitacaoEvidence =
-          allowMissingAsPaid &&
-          !hasParcelasOutraLoja &&
-          todasParcelasDaLojaNaJanela;
-
-        if (!hasDirectQuitacaoEvidence && !hasAbsenceQuitacaoEvidence) continue;
+        // ⚠️ REGRA DO NEGÓCIO: o card SÓ sai da cobrança quando temos evidência
+        // direta da SSótica (parcela retornada como paga / renegociada / em
+        // aberto / baixada / cancelada / estornada). NÃO usamos mais a
+        // heurística de "ausência" — se a API simplesmente parar de devolver a
+        // parcela, mantemos o card até que ela apareça com situação inativa.
+        if (!hasDirectQuitacaoEvidence) continue;
 
         // OK, evidência confirmada de quitação DESTA parcela: remove só este card.
         const cobData = (cob as any).data ?? {};
@@ -1105,7 +1103,6 @@ async function syncContasReceber(
         await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
         removed++;
         if (hasDirectQuitacaoEvidence) removedByDirectEvidence++;
-        else if (hasAbsenceQuitacaoEvidence) removedByAbsence++;
 
         // ⚠️ IMPORTANTE: o cliente pode ter OUTRAS parcelas em aberto (mais
         // antigas ou em outros cards). Só consideramos "quitado de verdade"
