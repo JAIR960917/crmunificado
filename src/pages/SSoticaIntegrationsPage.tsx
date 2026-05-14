@@ -127,7 +127,7 @@ export default function SSoticaIntegrationsPage() {
     }
     if (!confirm(
       `Ressincronizar TUDO em ${active.length} loja(s)?\n\n` +
-      `• A 1ª loja inicia o Backfill 96m agora (16 lotes de 6 meses).\n` +
+      `• A 1ª loja inicia o Backfill 96m agora (32 lotes de ~3 meses).\n` +
       `• As demais serão agendadas em sequência, espaçadas 30 min entre cada.\n` +
       `• Tempo total estimado: ~${Math.round((active.length * 30))} min.\n\n` +
       `Continuar?`
@@ -439,7 +439,7 @@ export default function SSoticaIntegrationsPage() {
       return <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />Na fila</Badge>;
     }
     if (integ.backfill_status === "running") {
-      const total = integ.backfill_total_chunks ?? 16;
+      const total = integ.backfill_total_chunks ?? 32;
       const done = integ.backfill_chunk_index ?? 0;
       const phaseLabel = integ.backfill_phase === "vendas" ? "vendas" : "cobranças";
       return <Badge variant="secondary"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Backfill {done}/{total} · {phaseLabel}</Badge>;
@@ -543,7 +543,7 @@ export default function SSoticaIntegrationsPage() {
                           <div className="text-destructive break-words">⚠ {integ.last_error.slice(0, 120)}</div>
                         )}
                         {(() => {
-                          const total = (integ as any).backfill_total_chunks ?? 16;
+                          const total = (integ as any).backfill_total_chunks ?? 32;
                           const done = (integ as any).backfill_chunk_index ?? 0;
                           const status = (integ as any).backfill_status;
                           const phase = (integ as any).backfill_phase === "vendas" ? "vendas" : "cobranças";
@@ -602,12 +602,12 @@ export default function SSoticaIntegrationsPage() {
                             size="sm"
                             variant="secondary"
                             onClick={() => {
-                              if (confirm("Iniciar backfill de 96 meses (8 anos)?\n\nO processamento roda em 16 lotes de 6 meses. O progresso será atualizado automaticamente nesta tela.\n\nFaça uma loja por vez para evitar sobrecarga.")) {
+                              if (confirm("Iniciar backfill de 96 meses (8 anos)?\n\nO processamento roda em 32 lotes de ~3 meses. O progresso será atualizado automaticamente nesta tela.\n\nFaça uma loja por vez para evitar sobrecarga.")) {
                                 handleSyncNow(integ, true);
                               }
                             }}
                             disabled={syncingId === integ.id || !integ.is_active}
-                            title="Backfill completo de 96 meses em 16 lotes de 6 meses"
+                            title="Backfill completo de 96 meses em 32 lotes de ~3 meses"
                           >
                             <RefreshCw className="h-3 w-3 mr-1" />
                             Backfill 96m

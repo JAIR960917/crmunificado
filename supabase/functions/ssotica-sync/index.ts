@@ -1853,7 +1853,7 @@ async function runBackfillChunk(
   integ: Integration,
   dispatchConfig: DispatchConfig,
 ): Promise<{ ok: true; chunk_index: number; finished: boolean; skipped?: boolean } | { ok: false; error: string }> {
-  const total = integ.backfill_total_chunks || 16;
+  const total = integ.backfill_total_chunks || 32;
   const idx = integ.backfill_chunk_index || 0;
   const nowIso = new Date().toISOString();
   if (idx >= total) {
@@ -2161,7 +2161,7 @@ Deno.serve(async (req) => {
         .from("ssotica_integrations")
         .update({
           backfill_chunk_index: 0,
-          backfill_total_chunks: 16,
+          backfill_total_chunks: 32,
           backfill_phase: "cr",
           backfill_status: "scheduled",
           backfill_started_at: new Date().toISOString(),
@@ -2188,7 +2188,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         ok: true,
         mode: "start_backfill",
-        message: "Backfill de 96 meses agendado em background. Os 16 chunks rodarão automaticamente sem segurar a resposta do botão Sync.",
+        message: "Backfill de 96 meses agendado em background. Os 32 chunks rodarão automaticamente sem segurar a resposta do botão Sync.",
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -2225,8 +2225,8 @@ Deno.serve(async (req) => {
           mode: "resume_backfill",
           already_running: true,
           chunk_index: current.backfill_chunk_index || 0,
-          total_chunks: current.backfill_total_chunks || 16,
-          message: `O chunk ${(current.backfill_chunk_index || 0) + 1}/${current.backfill_total_chunks || 16} já está em execução.`,
+          total_chunks: current.backfill_total_chunks || 32,
+          message: `O chunk ${(current.backfill_chunk_index || 0) + 1}/${current.backfill_total_chunks || 32} já está em execução.`,
         }), {
           status: 202,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2271,8 +2271,8 @@ Deno.serve(async (req) => {
         ok: true,
         mode: "resume_backfill",
         chunk_index: integ.backfill_chunk_index || 0,
-        total_chunks: integ.backfill_total_chunks || 16,
-        message: `Backfill retomado em background a partir do chunk ${(integ.backfill_chunk_index || 0) + 1}/${integ.backfill_total_chunks || 16}.`,
+        total_chunks: integ.backfill_total_chunks || 32,
+        message: `Backfill retomado em background a partir do chunk ${(integ.backfill_chunk_index || 0) + 1}/${integ.backfill_total_chunks || 32}.`,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

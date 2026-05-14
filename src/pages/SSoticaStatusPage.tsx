@@ -181,7 +181,7 @@ export default function SSoticaStatusPage() {
     const hasPendingBackfill =
       !!current &&
       current.backfill_status !== "done" &&
-      ((current.backfill_total_chunks ?? 0) === 0 || (current.backfill_chunk_index ?? 0) < (current.backfill_total_chunks ?? 16));
+      ((current.backfill_total_chunks ?? 0) === 0 || (current.backfill_chunk_index ?? 0) < (current.backfill_total_chunks ?? 32));
     const { error } = await supabase
       .from("ssotica_integrations")
       .update({
@@ -210,7 +210,7 @@ export default function SSoticaStatusPage() {
     const hasPendingBackfill =
       !!current &&
       current.backfill_status !== "done" &&
-      ((current.backfill_total_chunks ?? 0) === 0 || (current.backfill_chunk_index ?? 0) < (current.backfill_total_chunks ?? 16));
+      ((current.backfill_total_chunks ?? 0) === 0 || (current.backfill_chunk_index ?? 0) < (current.backfill_total_chunks ?? 32));
 
     const { data, error } = await supabase.functions.invoke("ssotica-sync", {
       body: {
@@ -273,7 +273,7 @@ export default function SSoticaStatusPage() {
       stuckItems.map((item) => {
         const hasPendingBackfill =
           item.backfill_status !== "done" &&
-          ((item.backfill_total_chunks ?? 0) === 0 || (item.backfill_chunk_index ?? 0) < (item.backfill_total_chunks ?? 16));
+          ((item.backfill_total_chunks ?? 0) === 0 || (item.backfill_chunk_index ?? 0) < (item.backfill_total_chunks ?? 32));
 
         return supabase
           .from("ssotica_integrations")
@@ -414,7 +414,7 @@ export default function SSoticaStatusPage() {
                             const bfActive =
                               i.backfill_status === "running" ||
                               i.backfill_status === "scheduled";
-                            const total = i.backfill_total_chunks ?? 16;
+                            const total = i.backfill_total_chunks ?? 32;
                             const done = i.backfill_chunk_index ?? 0;
                             const pct = total > 0 ? Math.round((done / total) * 100) : 0;
                             if (bfActive) {
