@@ -12,9 +12,9 @@ const MAX_WINDOW_DAYS = 30; // limite da API SSótica por janela
 const SSOTICA_FETCH_TIMEOUT_MS = 45000;
 // Histórico total: 96 meses (8 anos), processado em chunks de 6 meses
 // para evitar timeout da edge function em lojas grandes (~7000 cobranças/ano).
-// Antes: 12 meses × 8 chunks. Agora: 6 meses × 16 chunks (cada chunk ~50% mais rápido).
+// Antes: 6 meses × 16 chunks. Agora: 3 meses × 32 chunks (cada chunk ~50% mais rápido).
 const MAX_HISTORY_DAYS = 2880; // 96 meses
-const CHUNK_DAYS = 183;        // ~6 meses por chunk (usado pelo backfill histórico)
+const CHUNK_DAYS = 92;         // ~3 meses por chunk (usado pelo backfill histórico)
 const COBRANCAS_LOOKBACK_DAYS = 730; // faixa histórica total coberta pelo ciclo incremental
 const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
 // 350s — bem abaixo do hard-limit do edge runtime (~400s) mas alto o
