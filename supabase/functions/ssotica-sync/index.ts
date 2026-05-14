@@ -692,7 +692,7 @@ async function syncContasReceber(
         else if (foiPaga) skipped.paga++;
 
         const isInativa =
-          !isAtiva || isEmAberto || foiRenegociada || foiBaixada || foiCancelada || foiEstornada || foiPaga;
+          !isAtiva || foiRenegociada || foiBaixada || foiCancelada || foiEstornada || foiPaga;
 
         if (isInativa) {
           const cliInativa = parcela.titulo?.cliente ?? parcela.cliente ?? {};
