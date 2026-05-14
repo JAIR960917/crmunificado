@@ -407,12 +407,23 @@ function getAjuizadoVariantFromSituacao(situacao: string): "ajuizado_saniely" | 
   const isJuridico =
     situacao.startsWith("ajuizado") ||
     situacao.startsWith("cobranca dr") ||
-    situacao.startsWith("cobranca dra");
+    situacao.startsWith("cobranca dra") ||
+    situacao.startsWith("escritorio de cobranca") ||
+    situacao.startsWith("escritorio cobranca");
 
   if (!isJuridico) return null;
   if (situacao.includes("saniely")) return "ajuizado_saniely";
   if (situacao.includes("navde")) return "ajuizado_navde";
-  return null;
+  // Escritório de cobrança terceiro sem variante explícita → trata como Návde
+  // (fallback comum de cobrança jurídica externa). Mantém o card em Cobrança.
+  return "ajuizado_navde";
+}
+
+// Situação "Remover do Cobrança Dr. Návde" significa que o cliente SAIU da
+// cobrança jurídica — a parcela voltou para o fluxo normal (não é dívida ativa
+// por essa via). Tratamos como evento de saída para liberar o card se for o caso.
+function isRemocaoCobrancaJuridica(situacao: string): boolean {
+  return situacao.startsWith("remover do cobranca") || situacao.startsWith("remover cobranca");
 }
 
 function isSamePerson(nameA: unknown, nameB: unknown): boolean {
