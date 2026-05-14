@@ -1086,12 +1086,22 @@ async function syncContasReceber(
           parcelaIdsDoCard.length > 0 &&
           parcelaIdsDoCard.every((id) => parcelasInativasIds.has(id));
 
-        // ⚠️ REGRA DO NEGÓCIO: o card SÓ sai da cobrança quando temos evidência
-        // direta da SSótica (parcela retornada como paga / renegociada / em
-        // aberto / baixada / cancelada / estornada). NÃO usamos mais a
-        // heurística de "ausência" — se a API simplesmente parar de devolver a
-        // parcela, mantemos o card até que ela apareça com situação inativa.
-        if (!hasDirectQuitacaoEvidence) continue;
+        // ⚠️ REGRA DO NEGÓCIO: o card sai da cobrança quando:
+        //  1) Temos EVIDÊNCIA DIRETA (situação paga/renegociada/em aberto/
+        //     baixada/cancelada/estornada retornada pela API), OU
+        //  2) TODAS as parcelas conhecidas desse card têm vencimento DENTRO
+        //     da janela que acabamos de consultar e NENHUMA delas voltou —
+        //     a SSótica costuma simplesmente remover parcelas pagas da
+        //     resposta em vez de devolvê-las com status "pago", então a
+        //     ausência dentro de uma janela revisada é evidência confiável.
+        //     Esse caminho NÃO roda em backfill (janela parcial) — apenas
+        //     em sync incremental ou manualRecent.
+        const allowAbsenceAsPaid = (!isBackfillChunk) &&
+          parcelasConhecidasDaLoja.length > 0 &&
+          todasParcelasDaLojaNaJanela &&
+          !hasParcelasOutraLoja;
+
+        if (!hasDirectQuitacaoEvidence && !allowAbsenceAsPaid) continue;
 
         // OK, evidência confirmada de quitação DESTA parcela: remove só este card.
         const cobData = (cob as any).data ?? {};
@@ -1103,6 +1113,7 @@ async function syncContasReceber(
         await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
         removed++;
         if (hasDirectQuitacaoEvidence) removedByDirectEvidence++;
+        else removedByAbsence++;
 
         // ⚠️ IMPORTANTE: o cliente pode ter OUTRAS parcelas em aberto (mais
         // antigas ou em outros cards). Só consideramos "quitado de verdade"
