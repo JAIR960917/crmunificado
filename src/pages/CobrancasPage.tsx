@@ -178,6 +178,7 @@ export default function CobrancasPage() {
     searchQuery,
     buildSearchOr,
     refreshKey,
+    pollingIntervalMs: 5000,
   });
 
   const loadMeta = useCallback(async () => {

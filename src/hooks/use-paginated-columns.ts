@@ -37,6 +37,8 @@ export type UsePaginatedColumnsOptions = {
   buildSearchOr?: (q: string) => string | null;
   // refresh trigger — when this value changes, we reload everything
   refreshKey?: number;
+  // optional polling fallback for environments where realtime may lag or be unavailable
+  pollingIntervalMs?: number;
 };
 
 export function usePaginatedColumns<T extends { id: string; status: string }>(
@@ -52,11 +54,13 @@ export function usePaginatedColumns<T extends { id: string; status: string }>(
     searchQuery,
     buildSearchOr,
     refreshKey = 0,
+    pollingIntervalMs = 0,
   } = opts;
 
   const [columns, setColumns] = useState<Record<string, ColumnState<T>>>({});
   const [searchResults, setSearchResults] = useState<T[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searchPollTick, setSearchPollTick] = useState(0);
   const inflightRef = useRef<Set<string>>(new Set());
 
   const queryFor = useCallback(
@@ -157,7 +161,23 @@ export function usePaginatedColumns<T extends { id: string; status: string }>(
     return () => {
       cancelled = true;
     };
-  }, [searchQuery, refreshKey, buildSearchOr, table, select, filter, orderColumn, orderAscending]);
+  }, [searchQuery, refreshKey, searchPollTick, buildSearchOr, table, select, filter, orderColumn, orderAscending]);
+
+  useEffect(() => {
+    if (!pollingIntervalMs || pollingIntervalMs <= 0 || statusKeys.length === 0) return;
+
+    const intervalId = window.setInterval(() => {
+      const q = (searchQuery || "").trim();
+      if (q && buildSearchOr) {
+        setSearchPollTick((prev) => prev + 1);
+        return;
+      }
+
+      statusKeys.forEach((k) => fetchColumn(k, 0));
+    }, pollingIntervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, [pollingIntervalMs, statusKeys, searchQuery, buildSearchOr, fetchColumn]);
 
   // ---------- Mutations -------------
   const updateItemStatus = useCallback((itemId: string, fromStatus: string, toStatus: string, item?: T) => {
