@@ -641,12 +641,15 @@ async function syncContasReceber(
           situacao === "avencer" ||
           situacao === "pendente";
 
-        // ⚠️ "Em aberto" NÃO é considerada ativa: por regra do negócio, parcela
-        // marcada como "em aberto" significa que saiu da cobrança (junto com
-        // paga/renegociada). Só "Em atraso", "Vencido", "A vencer/Pendente" e
-        // os casos especiais (Negativado Serasa / Ajuizado) entram como ativas.
+        // ⚠️ Conforme a documentação oficial da SSótica (Contas a Receber),
+        // o campo "situação" retorna "em aberto" como o status PADRÃO de uma
+        // parcela ainda devida (não paga, não cancelada). "Em atraso" é apenas
+        // um label derivado do vencimento — a API normalmente devolve "em aberto"
+        // tanto para parcelas a vencer quanto vencidas. Portanto "em aberto"
+        // DEVE ser tratada como ATIVA. A diferenciação entre "a vencer" e
+        // "atrasada" é feita depois pelo cálculo de diasAtraso.
         const isAtiva =
-          isEmAtraso || isVencido || isAVencer ||
+          isEmAberto || isEmAtraso || isVencido || isAVencer ||
           isNegativadoSerasa || isAjuizado;
 
         const renegociacaoObj = parcela.renegociacao ?? parcela.renegociacao_info ?? null;
