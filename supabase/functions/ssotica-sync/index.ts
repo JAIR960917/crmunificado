@@ -622,8 +622,12 @@ async function syncContasReceber(
           situacao === "avencer" ||
           situacao === "pendente";
 
+        // ⚠️ "Em aberto" NÃO é considerada ativa: por regra do negócio, parcela
+        // marcada como "em aberto" significa que saiu da cobrança (junto com
+        // paga/renegociada). Só "Em atraso", "Vencido", "A vencer/Pendente" e
+        // os casos especiais (Negativado Serasa / Ajuizado) entram como ativas.
         const isAtiva =
-          isEmAtraso || isEmAberto || isVencido || isAVencer ||
+          isEmAtraso || isVencido || isAVencer ||
           isNegativadoSerasa || isAjuizado;
 
         const renegociacaoObj = parcela.renegociacao ?? parcela.renegociacao_info ?? null;
