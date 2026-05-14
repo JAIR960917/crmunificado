@@ -923,6 +923,7 @@ async function syncContasReceber(
           dias_atraso: maisAntiga.dias_atraso,
           status: colunaKey,
           scheduled_date: maisAntiga.vencimento,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", existingCobranca.id);
       updated++;
