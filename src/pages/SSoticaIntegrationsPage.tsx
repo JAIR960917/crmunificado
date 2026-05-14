@@ -95,6 +95,25 @@ interface SyncLog {
   details: any;
 }
 
+function getBackfillVisualProgress(integration?: Pick<Integration, "backfill_status" | "backfill_chunk_index" | "backfill_total_chunks"> | null) {
+  const total = integration?.backfill_total_chunks ?? 32;
+  const completed = integration?.backfill_chunk_index ?? 0;
+  const status = integration?.backfill_status ?? "idle";
+  const isActive = status === "running" || status === "scheduled";
+  const isDone = status === "done";
+  const currentChunk = isActive && completed < total ? completed + 1 : completed;
+
+  return {
+    total,
+    completed,
+    status,
+    isActive,
+    isDone,
+    currentChunk,
+    percent: total > 0 ? Math.round((currentChunk / total) * 100) : 0,
+  };
+}
+
 export default function SSoticaIntegrationsPage() {
   const { isAdmin, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -436,13 +455,13 @@ export default function SSoticaIntegrationsPage() {
     if (!integ) return <Badge variant="outline">Não configurada</Badge>;
     if (!integ.is_active) return <Badge variant="secondary">Desativada</Badge>;
     if (integ.backfill_status === "scheduled") {
-      return <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />Na fila</Badge>;
+      const progress = getBackfillVisualProgress(integ);
+      return <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />Na fila · lote {progress.currentChunk}/{progress.total}</Badge>;
     }
     if (integ.backfill_status === "running") {
-      const total = integ.backfill_total_chunks ?? 32;
-      const done = integ.backfill_chunk_index ?? 0;
+      const progress = getBackfillVisualProgress(integ);
       const phaseLabel = integ.backfill_phase === "vendas" ? "vendas" : "cobranças";
-      return <Badge variant="secondary"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Backfill {done}/{total} · {phaseLabel}</Badge>;
+      return <Badge variant="secondary"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Backfill lote {progress.currentChunk}/{progress.total} · {phaseLabel}</Badge>;
     }
     if (integ.sync_status === "running")
       return <Badge variant="secondary"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sincronizando</Badge>;
@@ -543,22 +562,23 @@ export default function SSoticaIntegrationsPage() {
                           <div className="text-destructive break-words">⚠ {integ.last_error.slice(0, 120)}</div>
                         )}
                         {(() => {
-                          const total = (integ as any).backfill_total_chunks ?? 32;
-                          const done = (integ as any).backfill_chunk_index ?? 0;
-                          const status = (integ as any).backfill_status;
+                          const progress = getBackfillVisualProgress(integ);
+                          const total = progress.total;
+                          const done = progress.completed;
+                          const status = progress.status;
                           const phase = (integ as any).backfill_phase === "vendas" ? "vendas" : "cobranças";
                           const remaining = Math.max(0, total - done);
-                          const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-                          const isActive = status === "running" || status === "scheduled";
-                          const isDone = status === "done";
+                          const pct = progress.percent;
+                          const isActive = progress.isActive;
+                          const isDone = progress.isDone;
                           if (!isActive && !isDone && done === 0) return null;
                           return (
                             <div className="pt-1 space-y-1">
                               <div className="flex items-center justify-between text-foreground">
                                 <span className="font-medium">
-                                  Sincronizações: {done}/{total}
+                                  Backfill: {isActive ? progress.currentChunk : done}/{total}
                                   {isActive && remaining > 0 && (
-                                    <span className="text-muted-foreground font-normal"> · {status === "running" ? `processando ${phase}` : `faltam ${remaining}`}</span>
+                                    <span className="text-muted-foreground font-normal"> · {status === "running" ? `processando ${phase}` : `na fila`} · {done} concluídos</span>
                                   )}
                                   {isDone && <span className="text-emerald-600 font-normal"> · concluído</span>}
                                 </span>
