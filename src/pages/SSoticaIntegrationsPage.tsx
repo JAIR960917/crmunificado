@@ -439,7 +439,7 @@ export default function SSoticaIntegrationsPage() {
       return <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />Na fila</Badge>;
     }
     if (integ.backfill_status === "running") {
-      const total = integ.backfill_total_chunks ?? 16;
+      const total = integ.backfill_total_chunks ?? 32;
       const done = integ.backfill_chunk_index ?? 0;
       const phaseLabel = integ.backfill_phase === "vendas" ? "vendas" : "cobranças";
       return <Badge variant="secondary"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Backfill {done}/{total} · {phaseLabel}</Badge>;
@@ -543,7 +543,7 @@ export default function SSoticaIntegrationsPage() {
                           <div className="text-destructive break-words">⚠ {integ.last_error.slice(0, 120)}</div>
                         )}
                         {(() => {
-                          const total = (integ as any).backfill_total_chunks ?? 16;
+                          const total = (integ as any).backfill_total_chunks ?? 32;
                           const done = (integ as any).backfill_chunk_index ?? 0;
                           const status = (integ as any).backfill_status;
                           const phase = (integ as any).backfill_phase === "vendas" ? "vendas" : "cobranças";

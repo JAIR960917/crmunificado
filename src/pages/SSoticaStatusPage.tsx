@@ -414,7 +414,7 @@ export default function SSoticaStatusPage() {
                             const bfActive =
                               i.backfill_status === "running" ||
                               i.backfill_status === "scheduled";
-                            const total = i.backfill_total_chunks ?? 16;
+                            const total = i.backfill_total_chunks ?? 32;
                             const done = i.backfill_chunk_index ?? 0;
                             const pct = total > 0 ? Math.round((done / total) * 100) : 0;
                             if (bfActive) {
