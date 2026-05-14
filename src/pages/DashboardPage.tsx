@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Users, Receipt, CalendarHeart, Phone, PhoneOff, CalendarCheck, CalendarX, Calendar as CalIcon, Building2, ChevronDown, X, ThumbsUp, ThumbsDown, HandCoins } from "lucide-react";
+import { isRealtimeEnabled } from "@/lib/runtime-config";
 
 type Profile = { user_id: string; full_name: string; avatar_url: string | null; company_id: string | null };
 type Company = { id: string; name: string };
@@ -404,6 +405,7 @@ export default function DashboardPage() {
   // Realtime: refresh reports when opens or notes change
   useEffect(() => {
     if (!canSee || !user) return;
+    if (!isRealtimeEnabled()) return;
 
     let scheduled = false;
     const refresh = () => {
