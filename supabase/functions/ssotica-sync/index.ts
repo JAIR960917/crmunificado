@@ -1991,11 +1991,15 @@ async function runBackfillChunk(
       }
     }
 
-    // RECONCILIAÇÃO: roda APENAS no chunk final (quando todos os dados já foram sincronizados).
-    // Antes era a cada chunk, mas em lojas grandes (~7000 cobranças) isso causava timeout
-    // antes de salvar o progresso, fazendo o chunk reprocessar infinitamente.
+    // RECONCILIAÇÃO: no chunk final, além da reconciliação, roda uma varredura
+    // recente de Contas a Receber. Isso é crucial porque a SSótica costuma
+    // remover da resposta as parcelas já pagas; durante o backfill por chunks não
+    // deletamos cards por ausência, então essa passada final recente é a que limpa
+    // cobranças quitadas e devolve o cliente para Renovação.
     if (finished) {
       try {
+        const finalRecentCobrancas = await syncContasReceber(supabase, integ, undefined, { manualRecent: true });
+        console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} refresh final recente: removed=${finalRecentCobrancas.removed} quitados=${finalRecentCobrancas.clientesQuitados.length}`);
         const reconciled = await reconcileRenovacoesVsCobrancas(supabase, integ.company_id);
         console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} reconciliação final removeu ${reconciled} renovações com dívida aberta`);
       } catch (recErr) {
