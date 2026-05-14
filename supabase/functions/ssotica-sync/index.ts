@@ -1113,6 +1113,7 @@ async function syncContasReceber(
         await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
         removed++;
         if (hasDirectQuitacaoEvidence) removedByDirectEvidence++;
+        else removedByAbsence++;
 
         // ⚠️ IMPORTANTE: o cliente pode ter OUTRAS parcelas em aberto (mais
         // antigas ou em outros cards). Só consideramos "quitado de verdade"
