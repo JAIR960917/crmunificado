@@ -177,6 +177,7 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/${POSTGRES_DB:-postgres}
       VERIFY_JWT: "${FUNCTIONS_VERIFY_JWT:-true}"
+      APIFULL_API_KEY: ${APIFULL_API_KEY:-}
     command: ["start", "--main-service", "/home/deno/functions/main"]
 
   supabase-studio:
