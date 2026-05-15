@@ -95,6 +95,46 @@ interface SyncLog {
   details: any;
 }
 
+function toSafeNumber(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function getLogCounters(log: SyncLog) {
+  const details = log.details ?? {};
+  const contasReceber = details?.contas_receber ?? {};
+  const vendas = details?.vendas ?? {};
+
+  const fallbackProcessed = toSafeNumber(contasReceber.processed) + toSafeNumber(vendas.processed);
+  const fallbackCreated = toSafeNumber(contasReceber.created) + toSafeNumber(vendas.created);
+  const fallbackUpdated = toSafeNumber(contasReceber.updated) + toSafeNumber(vendas.updated);
+
+  return {
+    processed: Math.max(toSafeNumber(log.items_processed), fallbackProcessed),
+    created: Math.max(toSafeNumber(log.items_created), fallbackCreated),
+    updated: Math.max(toSafeNumber(log.items_updated), fallbackUpdated),
+  };
+}
+
+function getLogSubtitle(log: SyncLog) {
+  if (!log.sync_type.startsWith("backfill_chunk_")) return null;
+
+  const details = log.details ?? {};
+  const chunkIndex = toSafeNumber(details.chunk_index);
+  const totalChunks = toSafeNumber(details.total_chunks);
+  const rangeStart = details?.range?.start;
+  const rangeEnd = details?.range?.end;
+  const phase = details?.phase === "vendas" ? "vendas" : details?.phase === "cr" ? "cobranças" : null;
+
+  const parts = [
+    totalChunks > 0 ? `Lote ${chunkIndex + 1}/${totalChunks}` : null,
+    phase,
+    rangeStart && rangeEnd ? `${rangeStart} → ${rangeEnd}` : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" · ") : "Backfill";
+}
+
 function getBackfillVisualProgress(integration?: Pick<Integration, "backfill_status" | "backfill_chunk_index" | "backfill_total_chunks"> | null) {
   const total = integration?.backfill_total_chunks ?? 32;
   const completed = integration?.backfill_chunk_index ?? 0;
@@ -769,7 +809,16 @@ export default function SSoticaIntegrationsPage() {
             {logs.length === 0 ? (
               <div className="text-muted-foreground text-sm">Nenhum log ainda.</div>
             ) : (
-              logs.map((log) => (
+              logs.map((log) => {
+                const counters = getLogCounters(log);
+                const subtitle = getLogSubtitle(log);
+                const emptyBackfillWindow =
+                  log.sync_type.startsWith("backfill_chunk_") &&
+                  counters.processed === 0 &&
+                  counters.created === 0 &&
+                  counters.updated === 0;
+
+                return (
                 <Card key={log.id}>
                   <CardContent className="py-3 text-sm space-y-1">
                     <div className="flex items-center justify-between">
@@ -788,10 +837,16 @@ export default function SSoticaIntegrationsPage() {
                         {log.status}
                       </Badge>
                     </div>
+                      {subtitle && <div className="text-xs text-muted-foreground">{subtitle}</div>}
                     <div className="text-xs text-muted-foreground">
-                      Processados: {log.items_processed} · Criados: {log.items_created} · Atualizados:{" "}
-                      {log.items_updated}
+                      Processados: {counters.processed} · Criados: {counters.created} · Atualizados:{" "}
+                      {counters.updated}
                     </div>
+                      {emptyBackfillWindow && (
+                        <div className="text-xs text-muted-foreground">
+                          Janela histórica sem registros retornados pela SSÓtica nesse lote.
+                        </div>
+                      )}
                     {log.error_message && (
                       <div className="text-xs text-destructive break-words">{log.error_message}</div>
                     )}
@@ -802,7 +857,8 @@ export default function SSoticaIntegrationsPage() {
                     )}
                   </CardContent>
                 </Card>
-              ))
+                );
+              })
             )}
           </div>
         </SheetContent>
