@@ -280,6 +280,58 @@ export default function WhatsAppPage() {
     else { toast.success("Instância excluída"); fetchData(); }
   };
 
+  const handleSyncFromApiFull = async () => {
+    setInstanceLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("apifull-whatsapp", {
+        body: { action: "list-instances" },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      // Normalize the response — API Full pode retornar array direto ou { dados/data/instances: [...] }
+      const list: any[] =
+        (Array.isArray(data) && data) ||
+        data?.dados ||
+        data?.data ||
+        data?.instances ||
+        data?.result ||
+        [];
+
+      if (!Array.isArray(list) || list.length === 0) {
+        toast.info("Nenhuma instância encontrada na API Full");
+        setInstanceLoading(false);
+        return;
+      }
+
+      const existingSessions = new Set(instances.map(i => i.session));
+      const toInsert = list
+        .map((it: any) => {
+          const session = it.session || it.name || it.instance || it.id || it.sessionName;
+          const name = it.name || it.session || session;
+          return session ? { name: String(name), session: String(session) } : null;
+        })
+        .filter((x): x is { name: string; session: string } => !!x && !existingSessions.has(x.session));
+
+      if (toInsert.length === 0) {
+        toast.success("Tudo sincronizado — nenhuma instância nova");
+        setInstanceLoading(false);
+        return;
+      }
+
+      const { error: insErr } = await supabase
+        .from("whatsapp_instances")
+        .insert(toInsert.map(t => ({ ...t, company_id: null })));
+      if (insErr) throw insErr;
+
+      toast.success(`${toInsert.length} instância(s) importada(s) da API Full`);
+      fetchData();
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao sincronizar com API Full");
+    }
+    setInstanceLoading(false);
+  };
+
   useEffect(() => {
     if (instances.length > 0 && (isAdmin || isGerente)) {
       instances.forEach(inst => handleCheckStatus(inst));
