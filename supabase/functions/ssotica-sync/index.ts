@@ -2677,8 +2677,6 @@ Deno.serve(async (req) => {
         .from("ssotica_integrations")
         .update({
           sync_status: "idle",
-          full_sweep_status: "scheduled",
-          full_sweep_requested_at: new Date().toISOString(),
           last_error: null,
           updated_at: new Date().toISOString(),
         })
