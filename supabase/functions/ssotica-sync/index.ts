@@ -2384,6 +2384,11 @@ Deno.serve(async (req) => {
         current.backfill_status !== "done" &&
         (totalChunks === 0 || chunkIndex < totalChunks);
 
+      const owner = await getManualBackfillOwner(supabase);
+      if (owner === onlyIntegrationId && !hasPendingBackfill) {
+        await setManualBackfillOwner(supabase, null);
+      }
+
       await supabase
         .from("ssotica_sync_logs")
         .update({
@@ -2460,26 +2465,16 @@ Deno.serve(async (req) => {
       if (busy) return busyResponse(busy);
 
       try {
-        const pauseFields = {
-          sync_status: "idle",
-          backfill_status: "idle",
-          backfill_next_run_at: null,
-          last_error: "Pausado automaticamente — outra loja foi acionada manualmente.",
-          updated_at: new Date().toISOString(),
-        };
-        await supabase
-          .from("ssotica_integrations")
-          .update(pauseFields)
-          .neq("id", onlyIntegrationId)
-          .eq("sync_status", "running");
-        await supabase
-          .from("ssotica_integrations")
-          .update(pauseFields)
-          .neq("id", onlyIntegrationId)
-          .in("backfill_status", ["running", "scheduled"]);
+        await pauseOtherIntegrations(
+          supabase,
+          onlyIntegrationId,
+          "Pausado automaticamente — outra loja foi acionada manualmente.",
+        );
       } catch (pauseErr) {
         console.error("[ssotica-sync][start_backfill] erro ao pausar outras lojas:", pauseErr);
       }
+
+      await setManualBackfillOwner(supabase, onlyIntegrationId);
 
       // Reseta o progresso e marca pra rodar AGORA (próximo tick do cron pega)
       const { data: integ, error } = await supabase
@@ -2536,6 +2531,8 @@ Deno.serve(async (req) => {
       // 🔒 LOCK GLOBAL: rejeita se outra loja está ocupada.
       const busy = await getOtherBusyIntegration(supabase, onlyIntegrationId);
       if (busy) return busyResponse(busy);
+
+      await setManualBackfillOwner(supabase, onlyIntegrationId);
 
 
       const nowIso = new Date().toISOString();
@@ -2622,6 +2619,14 @@ Deno.serve(async (req) => {
         error: "integration_id_required",
         message: "integration_id é obrigatório. Sincronização global automática foi desativada — dispare cada loja manualmente.",
       }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const manualOwnerIntegrationId = await getManualBackfillOwner(supabase);
+    const isManualSingle = !!onlyIntegrationId && manualRecent;
+    const isOwnerContinuation = !!manualOwnerIntegrationId && manualOwnerIntegrationId === onlyIntegrationId;
+
+    if (!isManualSingle && !isOwnerContinuation) {
+      return automaticSyncDisabledResponse(manualOwnerIntegrationId);
     }
 
     // 🔒 LOCK GLOBAL: rejeita se outra loja está ocupada (apenas 1 por vez).
@@ -2715,7 +2720,6 @@ Deno.serve(async (req) => {
         // Mesmo que outra execução tenha travado essa loja em "running" (e ainda não
         // tenha passado o auto-cleanup de 15min), liberamos AGORA — afeta apenas a
         // loja escolhida, sem mexer nas outras.
-        const isManualSingle = !!onlyIntegrationId && manualRecent;
 
         if (!isManualSingle && integ.sync_status === "running" && !isRunningSyncStale(integ)) {
           results.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
@@ -2784,6 +2788,9 @@ Deno.serve(async (req) => {
           await supabase.from("ssotica_integrations").update({
             sync_status: "idle",
           }).eq("id", integ.id);
+          if ((r as any).ok && (r as any).finished) {
+            await setManualBackfillOwner(supabase, null);
+          }
           results.push({ integration_id: integ.id, ok: true, mode: "backfill_chunk", chunk: r, manual_sweep: manualSweep });
           continue;
         }
