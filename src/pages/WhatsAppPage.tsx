@@ -173,10 +173,20 @@ export default function WhatsAppPage() {
     (async () => {
       const { data } = await supabase
         .from("system_settings")
-        .select("setting_value")
-        .eq("setting_key", "whatsapp_send_delay_seconds")
-        .maybeSingle();
-      if (data?.setting_value) setSendDelaySeconds(String(data.setting_value));
+        .select("setting_key, setting_value")
+        .in("setting_key", ["whatsapp_send_delay_seconds", "whatsapp_cobrancas_sessions"]);
+      for (const row of (data || []) as any[]) {
+        if (row.setting_key === "whatsapp_send_delay_seconds" && row.setting_value) {
+          setSendDelaySeconds(String(row.setting_value));
+        } else if (row.setting_key === "whatsapp_cobrancas_sessions" && row.setting_value) {
+          try {
+            const arr = JSON.parse(row.setting_value);
+            if (Array.isArray(arr)) setCobrancasSessions(arr.filter((s: any) => typeof s === "string"));
+          } catch {
+            setCobrancasSessions(String(row.setting_value).split(",").map((s) => s.trim()).filter(Boolean));
+          }
+        }
+      }
     })();
   }, []);
 
