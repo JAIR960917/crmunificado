@@ -501,7 +501,8 @@ serve(async (req) => {
             }
           }
 
-          const messageBody = campaign.message.replace(/\{nome\}/gi, name);
+          const vars = buildCobrancaVars(card, name, companiesMap);
+          const messageBody = applyTemplateVars(campaign.message, vars);
           const cp = cleanPhone(phone);
 
           try {
