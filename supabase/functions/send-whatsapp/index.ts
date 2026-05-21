@@ -325,6 +325,11 @@ function buildCobrancaVars(
     return `Parcela ${num}/${total} Valor ${formatBRL(p?.valor)}\n                        Data ${formatDateBR(p?.vencimento)}`;
   }).join("\n");
 
+  // Boleto/parcela mais antigo entre as vencidas (maior dias_atraso ou menor vencimento)
+  const maisAntigo = vencidas.slice().sort((a, b) =>
+    String(a?.vencimento || "9999-12-31").localeCompare(String(b?.vencimento || "9999-12-31")),
+  )[0];
+
   const companyId = card?.company_id || card?.ssotica_company_id || null;
   const company = companyId ? companies.get(companyId) : null;
 
@@ -338,6 +343,7 @@ function buildCobrancaVars(
     nome_empresa: company?.name || "",
     valor_total_parcelas: formatBRL(totalEffective),
     parcelas_vencidas: listaParcelasVencidas,
+    data_boleto_mais_antigo: maisAntigo ? formatDateBR(maisAntigo.vencimento) : "",
   };
 }
 function applyTemplateVars(template: string, vars: Record<string, string>): string {
