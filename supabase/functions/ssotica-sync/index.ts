@@ -980,7 +980,11 @@ async function syncContasReceber(
 
     const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
     const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
+    // Preserva marcas do fluxo automático (cobranca-flow-advance) para que o
+    // sync NÃO reset o gatilho/tratativa e cause reenvio do WhatsApp.
+    const prevData = (existingCobranca?.data ?? {}) as Record<string, any>;
     const data = {
+      ...prevData,
       nome: cliente.nome ?? "Cliente SSótica",
       telefone,
       documento,
@@ -997,6 +1001,14 @@ async function syncContasReceber(
       qtd_parcelas_atrasadas: parcelasMerged.length,
       situacao_especial: hasAjuizadoMerged ? "ajuizado" : hasNegativadoSerasaMerged ? "negativado_serasa" : null,
       ssotica_raw: maisAntiga.ssotica_raw,
+      // Mantém explicitamente as marcas do fluxo (caso prevData não as tenha, ficam undefined)
+      gatilho_enviado_em: prevData.gatilho_enviado_em,
+      gatilho_status_key: prevData.gatilho_status_key,
+      gatilho_campaign_id: prevData.gatilho_campaign_id,
+      gatilho_campaign_name: prevData.gatilho_campaign_name,
+      tratativa_em: prevData.tratativa_em,
+      tratativa_status_key: prevData.tratativa_status_key,
+      tratativa_atendeu: prevData.tratativa_atendeu,
     };
 
     // Decide o status final que será gravado:
