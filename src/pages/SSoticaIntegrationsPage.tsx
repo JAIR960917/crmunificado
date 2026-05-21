@@ -418,7 +418,18 @@ export default function SSoticaIntegrationsPage() {
         ? { mode: "start_backfill", integration_id: integ.id, scope }
         : { integration_id: integ.id, manual_recent: true };
       const { data, error } = await supabase.functions.invoke("ssotica-sync", { body });
+      // Trata o lock global: outra loja já está sincronizando.
+      if (data && (data as any).error === "another_store_busy") {
+        toast({
+          title: "Outra loja está sincronizando",
+          description: (data as any).message ?? "Aguarde terminar antes de iniciar outra (1 loja por vez).",
+          variant: "destructive",
+        });
+        await fetchAll();
+        return;
+      }
       if (error) throw error;
+
 
       if (forceFull) {
         const scopeLabel = scope === "renovacoes" ? "renovações" : scope === "cobrancas" ? "cobranças" : "completo";
