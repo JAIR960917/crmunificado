@@ -495,7 +495,7 @@ export default function SSoticaIntegrationsPage() {
       toast({
         title: "Varredura iniciada",
         description:
-          "Rodando em segundo plano (pode levar alguns minutos). Acompanhe pelos logs de sincronização — o status vai para 'success' ao terminar.",
+          "Enfileirada numa execução dedicada. Acompanhe pelos logs de sincronização; ela deve sair de running para success ao terminar.",
       });
       await fetchAll();
     } catch (e: any) {
