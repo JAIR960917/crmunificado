@@ -763,7 +763,7 @@ export default function WhatsAppPage() {
                   <Label>Instância WhatsApp {companyId === "__GLOBAL__" && moduleKey !== "cobrancas" ? "" : "*"}</Label>
                   {moduleKey === "cobrancas" ? (
                     <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-primary/40 text-xs text-muted-foreground">
-                      📌 Cobranças usa sempre a instância <span className="font-semibold ml-1">oticaJoonker</span>
+                      🔁 Cobranças intercala envios entre instâncias sem empresa vinculada
                     </div>
                   ) : companyId === "__GLOBAL__" ? (
                     <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-border text-xs text-muted-foreground">
