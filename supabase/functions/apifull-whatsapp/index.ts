@@ -44,13 +44,14 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Check admin role
-    const { data: roleData } = await supabase
+    const { data: roleRows, error: roleError } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id)
-      .single();
+      .eq("user_id", user.id);
 
-    if (!roleData || roleData.role !== "admin") {
+    const isAdmin = (roleRows || []).some((row) => row.role === "admin");
+
+    if (roleError || !isAdmin) {
       return new Response(JSON.stringify({ error: "Apenas administradores podem gerenciar instâncias" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
