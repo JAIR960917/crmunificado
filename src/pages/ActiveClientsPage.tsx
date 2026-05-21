@@ -117,6 +117,22 @@ export default function ActiveClientsPage() {
   const [filterAssignedTo, setFilterAssignedTo] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleting(true);
+    let q = supabase.from("crm_renovacoes").delete().not("id", "is", null);
+    if (filterCompanyId !== "all") q = q.eq("ssotica_company_id", filterCompanyId);
+    const { error } = await q;
+    setBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    if (error) toast.error("Erro ao excluir todos");
+    else {
+      toast.success("Renovações excluídas");
+      setRefreshKey((k) => k + 1);
+    }
+  };
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignConfirm, setAutoAssignConfirm] = useState(false);
   const [unassignedCount, setUnassignedCount] = useState(0);
@@ -756,6 +772,11 @@ export default function ActiveClientsPage() {
           <Button size="sm" onClick={() => openCreate()}>
             <Plus className="mr-2 h-4 w-4" />Nova Renovação
           </Button>
+          {isAdmin && (
+            <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+              <Trash2 className="mr-2 h-4 w-4" />Excluir todos
+            </Button>
+          )}
         </div>
       </div>
 
@@ -923,6 +944,30 @@ export default function ActiveClientsPage() {
             <AlertDialogCancel disabled={autoAssigning}>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={runAutoAssign} disabled={autoAssigning}>
               {autoAssigning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Distribuindo...</> : "Distribuir agora"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(open) => !bulkDeleting && setBulkDeleteOpen(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir TODAS as renovações?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {filterCompanyId === "all"
+                ? "Todos os cards de renovação de todas as empresas serão removidos permanentemente."
+                : "Todos os cards de renovação da empresa filtrada serão removidos permanentemente."}
+              {" "}Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              disabled={bulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Excluindo...</> : "Excluir todos"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

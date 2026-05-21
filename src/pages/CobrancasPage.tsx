@@ -145,6 +145,8 @@ export default function CobrancasPage() {
   const [filterCompanyId, setFilterCompanyId] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -287,6 +289,20 @@ export default function CobrancasPage() {
   };
 
   const handleDelete = (id: string) => setDeleteConfirmId(id);
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleting(true);
+    let q = supabase.from("crm_cobrancas").delete().not("id", "is", null);
+    if (filterCompanyId !== "all") q = q.eq("company_id", filterCompanyId);
+    const { error } = await q;
+    setBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    if (error) toast.error("Erro ao excluir todos");
+    else {
+      toast.success("Cobranças excluídas");
+      setRefreshKey((k) => k + 1);
+    }
+  };
 
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
@@ -682,6 +698,11 @@ export default function CobrancasPage() {
               <Plus className="mr-2 h-4 w-4" />Nova Cobrança
             </Button>
           )}
+          {isAdmin && (
+            <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+              <Trash2 className="mr-2 h-4 w-4" />Excluir todos
+            </Button>
+          )}
         </div>
       </div>
 
@@ -855,6 +876,30 @@ export default function CobrancasPage() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(open) => !bulkDeleting && setBulkDeleteOpen(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir TODAS as cobranças?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {filterCompanyId === "all"
+                ? "Todos os cards de cobrança de todas as empresas serão removidos permanentemente."
+                : "Todos os cards de cobrança da empresa filtrada serão removidos permanentemente."}
+              {" "}Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              disabled={bulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Excluindo...</> : "Excluir todos"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
