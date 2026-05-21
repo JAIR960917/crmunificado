@@ -111,7 +111,7 @@ serve(async (req) => {
     // 2) Carrega cobranças que estão em alguma coluna habilitada
     const { data: cobrancas } = await supabase
       .from("crm_cobrancas")
-      .select("id, status, data, company_id")
+      .select("id, status, data, company_id, ssotica_cliente_id")
       .in("status", Array.from(enabledKeys));
 
     const stats = { processed: 0, gatilhos_enviados: 0, gatilhos_falhos: 0, avancados: 0, skipped: 0 };
