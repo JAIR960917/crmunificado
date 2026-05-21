@@ -2701,6 +2701,8 @@ Deno.serve(async (req) => {
       if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any)?.waitUntil) {
         // @ts-ignore
         EdgeRuntime.waitUntil(dispatchSweep);
+      } else {
+        await dispatchSweep;
       }
 
       return new Response(JSON.stringify({
