@@ -2688,13 +2688,22 @@ Deno.serve(async (req) => {
         throw new Error("Configuração de dispatch ausente para enfileirar a varredura de quitações");
       }
 
-      const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
-        _url: dispatchConfig.url,
-        _auth: dispatchConfig.auth,
-        _integration_id: onlyIntegrationId,
-        _force_full: false,
+      const dispatchSweep = fetch(dispatchConfig.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: dispatchConfig.auth,
+        },
+        body: JSON.stringify({ mode: "run_full_sweep", integration_id: onlyIntegrationId }),
+      }).catch((dispatchErr) => {
+        console.error("[ssotica-sync][full_sweep] falha ao disparar execução dedicada:", dispatchErr);
       });
-      if (dispatchErr) throw dispatchErr;
+
+      // @ts-ignore EdgeRuntime existe no runtime do ambiente self-hosted
+      if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any)?.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(dispatchSweep);
+      }
 
       return new Response(JSON.stringify({
         ok: true,
