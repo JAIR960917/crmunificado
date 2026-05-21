@@ -252,6 +252,8 @@ serve(async (req) => {
       delete newData.gatilho_status_key;
       delete newData.gatilho_campaign_id;
       delete newData.gatilho_campaign_name;
+      newData.status_entered_at = new Date().toISOString();
+      newData.status_entered_status_key = nextStatus.key;
 
       await supabase
         .from("crm_cobrancas")
