@@ -512,11 +512,18 @@ export default function TriggerCampaigns({ instances }: Props) {
                   />
                 </div>
                 <Textarea
-                  placeholder="Mensagem desta etapa... Use {nome} para o nome do lead"
+                  placeholder="Mensagem desta etapa..."
                   value={step.message}
                   onChange={(e) => updateStep(idx, "message", e.target.value)}
                   className="min-h-[70px] text-sm"
                 />
+                <div className="text-[11px] text-muted-foreground leading-relaxed">
+                  <span className="font-semibold">Variáveis disponíveis:</span>{" "}
+                  <code>{"{nome}"}</code>, <code>{"{valor_parcela_vencida}"}</code>,{" "}
+                  <code>{"{valor_parcela_a_vencer}"}</code>, <code>{"{data_parcela_vencida}"}</code>,{" "}
+                  <code>{"{data_parcela_a_vencer}"}</code>, <code>{"{valor_total_parcelas}"}</code>,{" "}
+                  <code>{"{nome_empresa}"}</code>, <code>{"{cnpj_empresa}"}</code>
+                </div>
                 <ImageUploadField
                   value={step.image_url || null}
                   onChange={(url) => updateStep(idx, "image_url", url)}

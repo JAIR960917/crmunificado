@@ -282,6 +282,63 @@ async function resolveStatusKey(supabase: any, statusTable: string, statusId: st
   return data?.key || "";
 }
 
+// ============= Template variables (placeholders) =============
+function formatBRL(v: any): string {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(",", "."));
+  if (!isFinite(n)) return "R$ 0,00";
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+function formatDateBR(s: any): string {
+  if (!s) return "";
+  const str = String(s).slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(str);
+  if (!m) return String(s);
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+function buildCobrancaVars(
+  card: any,
+  name: string,
+  companies: Map<string, { name: string; cnpj: string | null }>,
+): Record<string, string> {
+  const data = (card?.data && typeof card.data === "object") ? card.data : {};
+  const parcelas: any[] = Array.isArray(data.parcelas_atrasadas) ? data.parcelas_atrasadas : [];
+  const vencidas = parcelas.filter((p) => Number(p?.dias_atraso) > 0);
+  const aVencer = parcelas.filter((p) => Number(p?.dias_atraso) <= 0)
+    .sort((a, b) => String(a?.vencimento || "").localeCompare(String(b?.vencimento || "")));
+  const vencidasOrdenadas = vencidas.slice().sort((a, b) => Number(b?.dias_atraso || 0) - Number(a?.dias_atraso || 0));
+  const pVencida = vencidasOrdenadas[0] || parcelas.find((p) => Number(p?.dias_atraso) > 0);
+  const pAVencer = aVencer[0];
+
+  const totalParcelas = vencidas.reduce((sum, p) => {
+    const v = typeof p?.valor === "number" ? p.valor : parseFloat(String(p?.valor ?? "0").replace(",", "."));
+    return sum + (isFinite(v) ? v : 0);
+  }, 0);
+  const totalEffective = totalParcelas > 0 ? totalParcelas : Number(data.total_atraso || 0);
+
+  const companyId = card?.company_id || card?.ssotica_company_id || null;
+  const company = companyId ? companies.get(companyId) : null;
+
+  return {
+    nome: name || "",
+    valor_parcela_vencida: pVencida ? formatBRL(pVencida.valor) : "",
+    valor_parcela_a_vencer: pAVencer ? formatBRL(pAVencer.valor) : "",
+    data_parcela_vencida: pVencida ? formatDateBR(pVencida.vencimento) : "",
+    data_parcela_a_vencer: pAVencer ? formatDateBR(pAVencer.vencimento) : "",
+    cnpj_empresa: company?.cnpj || "",
+    nome_empresa: company?.name || "",
+    valor_total_parcelas: formatBRL(totalEffective),
+  };
+}
+function applyTemplateVars(template: string, vars: Record<string, string>): string {
+  if (!template) return template;
+  let out = template;
+  for (const [k, v] of Object.entries(vars)) {
+    const re = new RegExp(`\\{\\s*${k}\\s*\\}`, "gi");
+    out = out.replace(re, v ?? "");
+  }
+  return out;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -338,6 +395,15 @@ serve(async (req) => {
         if (i?.session) sessionToInstanceName.set(i.session, i.name || i.session);
       }
     }
+    // Mapa company_id -> { name, cnpj } para variáveis de template
+    const companiesMap = new Map<string, { name: string; cnpj: string | null }>();
+    {
+      const { data: comps } = await supabase.from("companies").select("id, name, cnpj");
+      for (const c of (comps || []) as any[]) {
+        if (c?.id) companiesMap.set(c.id, { name: c.name || "", cnpj: c.cnpj || null });
+      }
+    }
+
 
     // ========== PERIOD CAMPAIGNS ==========
     const { data: campaigns } = await supabase.from("whatsapp_campaigns")
@@ -380,7 +446,7 @@ serve(async (req) => {
         const statusLabel = statusRow?.label || statusKey;
 
         const { data: cards } = await supabase.from(cfg.dataTable)
-          .select("id, data, created_by, assigned_to").eq("status", statusKey);
+          .select(isCobrancas ? "id, data, created_by, assigned_to, company_id, ssotica_company_id" : "id, data, created_by, assigned_to").eq("status", statusKey);
         if (!cards) continue;
 
         let scopedCards: any[];
@@ -435,7 +501,8 @@ serve(async (req) => {
             }
           }
 
-          const messageBody = campaign.message.replace(/\{nome\}/gi, name);
+          const vars = buildCobrancaVars(card, name, companiesMap);
+          const messageBody = applyTemplateVars(campaign.message, vars);
           const cp = cleanPhone(phone);
 
           try {
@@ -526,7 +593,7 @@ serve(async (req) => {
         const tcStatusLabel = tcStatusRow?.label || statusKey;
 
         const { data: cardsRaw } = await supabase.from(cfg.dataTable)
-          .select("id, data, status, updated_at, created_by, assigned_to").eq("status", statusKey);
+          .select(isCobrancas ? "id, data, status, updated_at, created_by, assigned_to, company_id, ssotica_company_id" : "id, data, status, updated_at, created_by, assigned_to").eq("status", statusKey);
         if (!cardsRaw || cardsRaw.length === 0) continue;
 
         let cards: any[];
@@ -603,7 +670,8 @@ serve(async (req) => {
             if (sentStepIds.has(step.id)) continue;
             if (daysSinceEntry < step.delay_days) continue;
 
-            const messageBody = step.message.replace(/\{nome\}/gi, name);
+            const vars = buildCobrancaVars(card, name, companiesMap);
+            const messageBody = applyTemplateVars(step.message, vars);
             const cp = cleanPhone(phone);
 
             try {
