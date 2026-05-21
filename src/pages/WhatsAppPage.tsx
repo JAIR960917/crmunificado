@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
@@ -108,6 +108,7 @@ export default function WhatsAppPage() {
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [allowedCompanyIds, setAllowedCompanyIds] = useState<string[] | null>(null);
   const [newInstanceCompanyId, setNewInstanceCompanyId] = useState("");
+  const autoSyncTriedRef = useRef(false);
 
   const canManage = isAdmin;
 
@@ -383,6 +384,13 @@ export default function WhatsAppPage() {
       instances.forEach(inst => handleCheckStatus(inst));
     }
   }, [instances.length]);
+
+  useEffect(() => {
+    if (!loading && isAdmin && instances.length === 0 && !instanceLoading && !autoSyncTriedRef.current) {
+      autoSyncTriedRef.current = true;
+      void handleSyncFromApiFull();
+    }
+  }, [loading, isAdmin, instances.length, instanceLoading]);
 
   const resetForm = () => {
     setName(""); setMessage(""); setImageUrl(null);
