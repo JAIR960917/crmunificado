@@ -377,9 +377,12 @@ serve(async (req) => {
           const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
           if (!phone) continue;
 
-          // Resolve sessão por card quando global
+          // Resolve sessão por card
           let session = fixedSession;
-          if (isGlobal) {
+          if (isCobrancas) {
+            session = pickRoundRobinSession(rrIndex);
+            rrIndex++;
+          } else if (isGlobal) {
             const cardCompanyId = resolveCardCompanyId(card, userToCompany);
             if (!cardCompanyId) {
               skippedNoCompany++;
