@@ -402,12 +402,13 @@ export default function WhatsAppPage() {
     }
   }, [instances.length]);
 
-  useEffect(() => {
-    if (!loading && isAdmin && instances.length === 0 && !instanceLoading && !autoSyncTriedRef.current) {
-      autoSyncTriedRef.current = true;
-      void handleSyncFromApiFull();
-    }
-  }, [loading, isAdmin, instances.length, instanceLoading]);
+  // Auto-sync desativado — botão mantido apenas para uso futuro
+  // useEffect(() => {
+  //   if (!loading && isAdmin && instances.length === 0 && !instanceLoading && !autoSyncTriedRef.current) {
+  //     autoSyncTriedRef.current = true;
+  //     void handleSyncFromApiFull();
+  //   }
+  // }, [loading, isAdmin, instances.length, instanceLoading]);
 
   const resetForm = () => {
     setName(""); setMessage(""); setImageUrl(null);
