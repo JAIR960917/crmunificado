@@ -27,9 +27,12 @@ const PER_INTEGRATION_TIMEOUT_MS = 350_000;
 // (em vez de deixar metade das fatias sem nunca rodar).
 const INCREMENTAL_COBRANCAS_SLICES = 8;
 const SSOTICA_INCREMENTAL_RUNS_PER_DAY = 4;
-const RUNNING_SYNC_STALE_MINUTES = 5;
+// 15 min: o heartbeat atualiza updated_at a cada 20s, então execuções vivas
+// nunca se aproximam desse limite. Só execuções genuinamente mortas (runtime
+// derrubado, sem heartbeat por >15 min) são marcadas como órfãs.
+const RUNNING_SYNC_STALE_MINUTES = 15;
 const BACKFILL_CLAIM_WINDOW_MS = RUNNING_SYNC_STALE_MINUTES * 60 * 1000;
-const BACKFILL_HEARTBEAT_MS = 45 * 1000;
+const BACKFILL_HEARTBEAT_MS = 20 * 1000;
 const BACKFILL_MAX_PARALLEL = 2;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
