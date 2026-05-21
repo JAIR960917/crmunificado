@@ -2250,6 +2250,72 @@ Deno.serve(async (req) => {
     const forceFull: boolean = body.force_full === true;
     const manualRecent: boolean = body.manual_recent === true;
 
+    if (mode === "force_unlock") {
+      if (!onlyIntegrationId) {
+        return new Response(JSON.stringify({ ok: false, error: "integration_id obrigatório" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const { data: current, error: currentError } = await supabase
+        .from("ssotica_integrations")
+        .select("id, sync_status, backfill_status, backfill_chunk_index, backfill_total_chunks, backfill_phase")
+        .eq("id", onlyIntegrationId)
+        .maybeSingle();
+
+      if (currentError) throw currentError;
+      if (!current) {
+        return new Response(JSON.stringify({ ok: false, error: "Integração não encontrada" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const totalChunks = current.backfill_total_chunks ?? 32;
+      const chunkIndex = current.backfill_chunk_index ?? 0;
+      const hasPendingBackfill =
+        current.backfill_status !== "done" &&
+        (totalChunks === 0 || chunkIndex < totalChunks);
+
+      await supabase
+        .from("ssotica_sync_logs")
+        .update({
+          finished_at: nowIso,
+          status: "error",
+          error_message: "Execução encerrada manualmente pelo usuário via destravar.",
+        })
+        .eq("integration_id", onlyIntegrationId)
+        .eq("status", "running");
+
+      const { error: unlockError } = await supabase
+        .from("ssotica_integrations")
+        .update({
+          sync_status: "idle",
+          backfill_status: hasPendingBackfill ? "scheduled" : current.backfill_status ?? "idle",
+          backfill_next_run_at: hasPendingBackfill ? nowIso : null,
+          backfill_phase: current.backfill_phase === "vendas" ? "vendas" : "cr",
+          last_error: null,
+          updated_at: nowIso,
+        })
+        .eq("id", onlyIntegrationId);
+
+      if (unlockError) throw unlockError;
+
+      return new Response(JSON.stringify({
+        ok: true,
+        mode: "force_unlock",
+        integration_id: onlyIntegrationId,
+        resumed_backfill: hasPendingBackfill,
+        message: hasPendingBackfill
+          ? "Execução destravada e backfill reagendado a partir do lote atual."
+          : "Execução destravada com sucesso.",
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ========== MODO 1: tick do cron — processa próximo chunk de qualquer integração pronta ==========
     if (mode === "backfill_tick") {
       // Inclui tanto "running" (já em andamento) quanto "scheduled" (agendadas pelo "Ressincronizar tudo").

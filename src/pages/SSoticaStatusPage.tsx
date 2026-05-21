@@ -192,20 +192,12 @@ export default function SSoticaStatusPage() {
 
   async function unlock(id: string) {
     setActionId(id);
-    const current = items.find((item) => item.id === id);
-    const hasPendingBackfill =
-      !!current &&
-      current.backfill_status !== "done" &&
-      ((current.backfill_total_chunks ?? 0) === 0 || (current.backfill_chunk_index ?? 0) < (current.backfill_total_chunks ?? 32));
-    const { error } = await supabase
-      .from("ssotica_integrations")
-      .update({
-        sync_status: "idle",
-        backfill_status: hasPendingBackfill ? "running" : current?.backfill_status ?? "idle",
-        backfill_next_run_at: hasPendingBackfill ? new Date().toISOString() : null,
-        last_error: null,
-      })
-      .eq("id", id);
+    const { data, error } = await supabase.functions.invoke("ssotica-sync", {
+      body: {
+        mode: "force_unlock",
+        integration_id: id,
+      },
+    });
     setActionId(null);
     if (error) {
       toast({
@@ -215,7 +207,10 @@ export default function SSoticaStatusPage() {
       });
       return;
     }
-    toast({ title: "Loja destravada", description: "Backfill liberado para continuar do ponto atual." });
+    toast({
+      title: "Loja destravada",
+      description: String(data?.message ?? "Execução encerrada e fila liberada para continuar."),
+    });
     load();
   }
 
@@ -287,23 +282,15 @@ export default function SSoticaStatusPage() {
       return;
     }
     setBulkLoading(true);
-    const nowIso = new Date().toISOString();
     const results = await Promise.all(
-      stuckItems.map((item) => {
-        const hasPendingBackfill =
-          item.backfill_status !== "done" &&
-          ((item.backfill_total_chunks ?? 0) === 0 || (item.backfill_chunk_index ?? 0) < (item.backfill_total_chunks ?? 32));
-
-        return supabase
-          .from("ssotica_integrations")
-          .update({
-            sync_status: "idle",
-            backfill_status: hasPendingBackfill ? "running" : item.backfill_status ?? "idle",
-            backfill_next_run_at: hasPendingBackfill ? nowIso : null,
-            last_error: null,
-          })
-          .eq("id", item.id);
-      })
+      stuckItems.map((item) =>
+        supabase.functions.invoke("ssotica-sync", {
+          body: {
+            mode: "force_unlock",
+            integration_id: item.id,
+          },
+        })
+      )
     );
     setBulkLoading(false);
     const error = results.find((result) => result.error)?.error;
