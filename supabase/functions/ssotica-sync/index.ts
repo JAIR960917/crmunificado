@@ -42,6 +42,63 @@ type DispatchConfig = {
   auth: string | null;
 };
 
+const MANUAL_BACKFILL_OWNER_KEY = "ssotica_manual_backfill_owner";
+
+async function getManualBackfillOwner(supabase: any): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("system_settings")
+    .select("setting_value")
+    .eq("setting_key", MANUAL_BACKFILL_OWNER_KEY)
+    .maybeSingle();
+
+  if (error) {
+    console.warn(`[ssotica-sync][manual-owner] falha ao ler owner manual: ${error.message}`);
+    return null;
+  }
+
+  const value = typeof data?.setting_value === "string" ? data.setting_value.trim() : "";
+  return value || null;
+}
+
+async function setManualBackfillOwner(supabase: any, integrationId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from("system_settings")
+    .upsert(
+      {
+        setting_key: MANUAL_BACKFILL_OWNER_KEY,
+        setting_value: integrationId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "setting_key" },
+    );
+
+  if (error) {
+    console.warn(`[ssotica-sync][manual-owner] falha ao salvar owner manual: ${error.message}`);
+  }
+}
+
+async function pauseOtherIntegrations(supabase: any, integrationId: string, reason: string): Promise<void> {
+  const pauseFields = {
+    sync_status: "idle",
+    backfill_status: "idle",
+    backfill_next_run_at: null,
+    last_error: reason,
+    updated_at: new Date().toISOString(),
+  };
+
+  await supabase
+    .from("ssotica_integrations")
+    .update(pauseFields)
+    .neq("id", integrationId)
+    .eq("sync_status", "running");
+
+  await supabase
+    .from("ssotica_integrations")
+    .update(pauseFields)
+    .neq("id", integrationId)
+    .in("backfill_status", ["running", "scheduled"]);
+}
+
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -2266,6 +2323,22 @@ function busyResponse(busy: { id: string; company_id: string }): Response {
   );
 }
 
+function automaticSyncDisabledResponse(ownerIntegrationId: string | null): Response {
+  const message = ownerIntegrationId
+    ? "Sincronização automática entre lojas está desativada. Apenas a loja iniciada manualmente pode continuar em background."
+    : "Sincronização automática está desativada. Inicie a loja manualmente pela tela de integrações para continuar o backfill.";
+
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: "automatic_sync_disabled",
+      manual_owner_integration_id: ownerIntegrationId,
+      message,
+    }),
+    { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -2310,6 +2383,11 @@ Deno.serve(async (req) => {
       const hasPendingBackfill =
         current.backfill_status !== "done" &&
         (totalChunks === 0 || chunkIndex < totalChunks);
+
+      const owner = await getManualBackfillOwner(supabase);
+      if (owner === onlyIntegrationId && !hasPendingBackfill) {
+        await setManualBackfillOwner(supabase, null);
+      }
 
       await supabase
         .from("ssotica_sync_logs")
@@ -2387,26 +2465,16 @@ Deno.serve(async (req) => {
       if (busy) return busyResponse(busy);
 
       try {
-        const pauseFields = {
-          sync_status: "idle",
-          backfill_status: "idle",
-          backfill_next_run_at: null,
-          last_error: "Pausado automaticamente — outra loja foi acionada manualmente.",
-          updated_at: new Date().toISOString(),
-        };
-        await supabase
-          .from("ssotica_integrations")
-          .update(pauseFields)
-          .neq("id", onlyIntegrationId)
-          .eq("sync_status", "running");
-        await supabase
-          .from("ssotica_integrations")
-          .update(pauseFields)
-          .neq("id", onlyIntegrationId)
-          .in("backfill_status", ["running", "scheduled"]);
+        await pauseOtherIntegrations(
+          supabase,
+          onlyIntegrationId,
+          "Pausado automaticamente — outra loja foi acionada manualmente.",
+        );
       } catch (pauseErr) {
         console.error("[ssotica-sync][start_backfill] erro ao pausar outras lojas:", pauseErr);
       }
+
+      await setManualBackfillOwner(supabase, onlyIntegrationId);
 
       // Reseta o progresso e marca pra rodar AGORA (próximo tick do cron pega)
       const { data: integ, error } = await supabase
@@ -2463,6 +2531,8 @@ Deno.serve(async (req) => {
       // 🔒 LOCK GLOBAL: rejeita se outra loja está ocupada.
       const busy = await getOtherBusyIntegration(supabase, onlyIntegrationId);
       if (busy) return busyResponse(busy);
+
+      await setManualBackfillOwner(supabase, onlyIntegrationId);
 
 
       const nowIso = new Date().toISOString();
@@ -2549,6 +2619,14 @@ Deno.serve(async (req) => {
         error: "integration_id_required",
         message: "integration_id é obrigatório. Sincronização global automática foi desativada — dispare cada loja manualmente.",
       }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const manualOwnerIntegrationId = await getManualBackfillOwner(supabase);
+    const isManualSingle = !!onlyIntegrationId && manualRecent;
+    const isOwnerContinuation = !!manualOwnerIntegrationId && manualOwnerIntegrationId === onlyIntegrationId;
+
+    if (!isManualSingle && !isOwnerContinuation) {
+      return automaticSyncDisabledResponse(manualOwnerIntegrationId);
     }
 
     // 🔒 LOCK GLOBAL: rejeita se outra loja está ocupada (apenas 1 por vez).
@@ -2642,7 +2720,6 @@ Deno.serve(async (req) => {
         // Mesmo que outra execução tenha travado essa loja em "running" (e ainda não
         // tenha passado o auto-cleanup de 15min), liberamos AGORA — afeta apenas a
         // loja escolhida, sem mexer nas outras.
-        const isManualSingle = !!onlyIntegrationId && manualRecent;
 
         if (!isManualSingle && integ.sync_status === "running" && !isRunningSyncStale(integ)) {
           results.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
@@ -2711,6 +2788,9 @@ Deno.serve(async (req) => {
           await supabase.from("ssotica_integrations").update({
             sync_status: "idle",
           }).eq("id", integ.id);
+          if ((r as any).ok && (r as any).finished) {
+            await setManualBackfillOwner(supabase, null);
+          }
           results.push({ integration_id: integ.id, ok: true, mode: "backfill_chunk", chunk: r, manual_sweep: manualSweep });
           continue;
         }

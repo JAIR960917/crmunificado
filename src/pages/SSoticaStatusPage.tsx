@@ -244,6 +244,15 @@ export default function SSoticaStatusPage() {
       load();
       return;
     }
+    if (data && (data as any).error === "automatic_sync_disabled") {
+      toast({
+        title: "Sincronização automática bloqueada",
+        description: (data as any).message ?? "Agora só continua a loja iniciada manualmente.",
+        variant: "destructive",
+      });
+      load();
+      return;
+    }
 
     if (error) {
       const isAlreadyRunning =
