@@ -2299,7 +2299,9 @@ Deno.serve(async (req) => {
     }
 
     // ========== MODO 3.5: retomar backfill pendente sem reiniciar do zero ==========
-    if (mode === "resume_backfill") {
+    // Se vier manual_recent=true junto, caímos no fluxo padrão abaixo para rodar
+    // primeiro o sweep manual de cobrança e só então continuar o backfill.
+    if (mode === "resume_backfill" && !manualRecent) {
       if (!onlyIntegrationId) {
         return new Response(JSON.stringify({ ok: false, error: "integration_id obrigatório" }), {
           status: 400,
