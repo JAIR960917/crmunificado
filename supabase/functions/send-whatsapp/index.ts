@@ -104,7 +104,36 @@ async function loadSendDelayMs(supabase: any): Promise<number> {
   return DEFAULT_SEND_DELAY_MS;
 }
 
-async function loadUnboundSessions(supabase: any): Promise<string[]> {
+async function loadCobrancasSessions(supabase: any): Promise<string[]> {
+  // 1) Sessões explicitamente selecionadas via settings (round-robin)
+  const { data: setting } = await supabase
+    .from("system_settings")
+    .select("setting_value")
+    .eq("setting_key", "whatsapp_cobrancas_sessions")
+    .maybeSingle();
+  let configured: string[] = [];
+  const raw = setting?.setting_value;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) configured = parsed.filter((s: any) => typeof s === "string" && s.trim());
+    } catch {
+      configured = String(raw).split(",").map((s) => s.trim()).filter(Boolean);
+    }
+  }
+
+  if (configured.length > 0) {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("session, is_active")
+      .in("session", configured)
+      .eq("is_active", true);
+    const valid = new Set(((data || []) as any[]).map((i) => i.session));
+    const ordered = configured.filter((s) => valid.has(s));
+    if (ordered.length > 0) return ordered;
+  }
+
+  // 2) Fallback: todas as instâncias ativas sem empresa vinculada
   const { data } = await supabase
     .from("whatsapp_instances")
     .select("session, is_active, company_id, created_at")
@@ -293,10 +322,10 @@ serve(async (req) => {
 
     // Configurações dinâmicas
     const SEND_DELAY_MS = await loadSendDelayMs(supabase);
-    const unboundSessions = await loadUnboundSessions(supabase);
+    const cobrancasSessions = await loadCobrancasSessions(supabase);
     const pickRoundRobinSession = (index: number): string | null => {
-      if (unboundSessions.length === 0) return null;
-      return unboundSessions[index % unboundSessions.length];
+      if (cobrancasSessions.length === 0) return null;
+      return cobrancasSessions[index % cobrancasSessions.length];
     };
 
     // ========== PERIOD CAMPAIGNS ==========
@@ -323,7 +352,7 @@ serve(async (req) => {
         const isCobrancas = moduleKey === "cobrancas";
         const fixedSession = (isGlobal || isCobrancas) ? null : await resolveSession(supabase, campaign.instance_id);
         if (!isGlobal && !isCobrancas && !fixedSession) continue;
-        if (isCobrancas && unboundSessions.length === 0) {
+        if (isCobrancas && cobrancasSessions.length === 0) {
           console.warn(`[campaign ${campaign.id}] cobranças sem instâncias sem empresa vinculada — pulando`);
           continue;
         }
@@ -466,7 +495,7 @@ serve(async (req) => {
         const isCobrancas = moduleKey === "cobrancas";
         const fixedSession = (isGlobal || isCobrancas) ? null : await resolveSession(supabase, tc.instance_id);
         if (!isGlobal && !isCobrancas && !fixedSession) continue;
-        if (isCobrancas && unboundSessions.length === 0) {
+        if (isCobrancas && cobrancasSessions.length === 0) {
           console.warn(`[trigger ${tc.id}] cobranças sem instâncias sem empresa vinculada — pulando`);
           continue;
         }

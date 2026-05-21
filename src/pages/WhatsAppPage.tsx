@@ -110,6 +110,8 @@ export default function WhatsAppPage() {
   const [newInstanceCompanyId, setNewInstanceCompanyId] = useState("");
   const [sendDelaySeconds, setSendDelaySeconds] = useState<string>("30");
   const [savingDelay, setSavingDelay] = useState(false);
+  const [cobrancasSessions, setCobrancasSessions] = useState<string[]>([]);
+  const [savingCobrancasSessions, setSavingCobrancasSessions] = useState(false);
   const autoSyncTriedRef = useRef(false);
 
   const canManage = isAdmin;
@@ -171,10 +173,20 @@ export default function WhatsAppPage() {
     (async () => {
       const { data } = await supabase
         .from("system_settings")
-        .select("setting_value")
-        .eq("setting_key", "whatsapp_send_delay_seconds")
-        .maybeSingle();
-      if (data?.setting_value) setSendDelaySeconds(String(data.setting_value));
+        .select("setting_key, setting_value")
+        .in("setting_key", ["whatsapp_send_delay_seconds", "whatsapp_cobrancas_sessions"]);
+      for (const row of (data || []) as any[]) {
+        if (row.setting_key === "whatsapp_send_delay_seconds" && row.setting_value) {
+          setSendDelaySeconds(String(row.setting_value));
+        } else if (row.setting_key === "whatsapp_cobrancas_sessions" && row.setting_value) {
+          try {
+            const arr = JSON.parse(row.setting_value);
+            if (Array.isArray(arr)) setCobrancasSessions(arr.filter((s: any) => typeof s === "string"));
+          } catch {
+            setCobrancasSessions(String(row.setting_value).split(",").map((s) => s.trim()).filter(Boolean));
+          }
+        }
+      }
     })();
   }, []);
 
@@ -192,6 +204,28 @@ export default function WhatsAppPage() {
     if (error) toast.error("Erro ao salvar intervalo: " + error.message);
     else toast.success(`Intervalo entre envios definido para ${secs}s`);
   };
+
+  const toggleCobrancasSession = (session: string) => {
+    setCobrancasSessions((prev) =>
+      prev.includes(session) ? prev.filter((s) => s !== session) : [...prev, session]
+    );
+  };
+
+  const handleSaveCobrancasSessions = async () => {
+    setSavingCobrancasSessions(true);
+    const { error } = await supabase
+      .from("system_settings")
+      .upsert(
+        { setting_key: "whatsapp_cobrancas_sessions", setting_value: JSON.stringify(cobrancasSessions) },
+        { onConflict: "setting_key" }
+      );
+    setSavingCobrancasSessions(false);
+    if (error) toast.error("Erro ao salvar instâncias: " + error.message);
+    else if (cobrancasSessions.length === 0) toast.success("Sem instâncias selecionadas — usando todas as não vinculadas a empresa.");
+    else toast.success(`${cobrancasSessions.length} instância(s) selecionada(s) para Cobranças.`);
+  };
+
+
 
   const callApiFull = async (action: string, session: string, extraBody: Record<string, any> = {}) => {
     const tag = `[apifull:${action}${session ? `:${session}` : ""}]`;
@@ -612,6 +646,54 @@ export default function WhatsAppPage() {
                       {savingDelay ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
                       Salvar intervalo
                     </Button>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t space-y-2">
+                  <Label className="text-xs font-semibold">Instâncias usadas para envios de Cobranças (round-robin)</Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Marque as instâncias que devem ser usadas para enviar mensagens da página "Cobranças". Os envios serão intercalados entre as selecionadas para reduzir o risco de banimento. Se nenhuma for marcada, o sistema usará todas as instâncias ativas sem empresa vinculada.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
+                    {instances.filter((i) => i.is_active).length === 0 ? (
+                      <p className="text-xs text-muted-foreground col-span-full">Nenhuma instância ativa disponível.</p>
+                    ) : (
+                      instances.filter((i) => i.is_active).map((inst) => {
+                        const checked = cobrancasSessions.includes(inst.session);
+                        return (
+                          <label
+                            key={inst.id}
+                            className="flex items-center gap-2 rounded border p-2 cursor-pointer hover:bg-muted/40 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleCobrancasSession(inst.session)}
+                              className="h-4 w-4"
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium">{inst.name}</span>
+                              <span className="text-[10px] text-muted-foreground">{inst.session}</span>
+                            </div>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveCobrancasSessions}
+                      disabled={savingCobrancasSessions}
+                    >
+                      {savingCobrancasSessions ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                      Salvar instâncias de Cobranças
+                    </Button>
+                    {cobrancasSessions.length > 0 && (
+                      <Button size="sm" variant="ghost" onClick={() => setCobrancasSessions([])}>
+                        Limpar seleção
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
