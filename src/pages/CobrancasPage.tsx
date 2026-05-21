@@ -290,6 +290,20 @@ export default function CobrancasPage() {
 
   const handleDelete = (id: string) => setDeleteConfirmId(id);
 
+  const confirmBulkDelete = async () => {
+    setBulkDeleting(true);
+    let q = supabase.from("crm_cobrancas").delete().not("id", "is", null);
+    if (filterCompanyId !== "all") q = q.eq("company_id", filterCompanyId);
+    const { error } = await q;
+    setBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    if (error) toast.error("Erro ao excluir todos");
+    else {
+      toast.success("Cobranças excluídas");
+      setRefreshKey((k) => k + 1);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
     // Captura dados do card antes de excluir, para o log
