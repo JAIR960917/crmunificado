@@ -980,6 +980,23 @@ async function syncContasReceber(
 
     const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
     const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
+
+    // Decide o status final que será gravado:
+    //  • Casos especiais (Serasa / Ajuizado) sempre forçam a coluna fixa.
+    //  • Card já existente em coluna travada (>= COLUNA 9) NÃO é movido pelo
+    //    sync — quem move dali é o fluxo manual (cobranca-flow-advance).
+    let colunaKey = colunaKeyAlvo;
+    if (existingCobranca && !hasAjuizadoMerged && !hasNegativadoSerasaMerged) {
+      if (lockedKeys.has(existingCobranca.status)) {
+        // Cards após a COLUNA 8 (60 dias) só podem permanecer lá se houver
+        // parcela "Negativado Serasa". Como não há, voltam para a COLUNA 8
+        // e aguardam tratativa da Brenda.
+        colunaKey = colunasApos8.has(existingCobranca.status)
+          ? coluna8Key
+          : existingCobranca.status; // mantém a coluna atual (travada)
+      }
+    }
+
     // Preserva marcas do fluxo automático (cobranca-flow-advance) para que o
     // sync NÃO reset o gatilho/tratativa e cause reenvio do WhatsApp.
     const prevData = (existingCobranca?.data ?? {}) as Record<string, any>;
@@ -1016,22 +1033,6 @@ async function syncContasReceber(
       tratativa_status_key: prevData.tratativa_status_key,
       tratativa_atendeu: prevData.tratativa_atendeu,
     };
-
-    // Decide o status final que será gravado:
-    //  • Casos especiais (Serasa / Ajuizado) sempre forçam a coluna fixa.
-    //  • Card já existente em coluna travada (>= COLUNA 9) NÃO é movido pelo
-    //    sync — quem move dali é o fluxo manual (cobranca-flow-advance).
-    let colunaKey = colunaKeyAlvo;
-    if (existingCobranca && !hasAjuizadoMerged && !hasNegativadoSerasaMerged) {
-      if (lockedKeys.has(existingCobranca.status)) {
-        // Cards após a COLUNA 8 (60 dias) só podem permanecer lá se houver
-        // parcela "Negativado Serasa". Como não há, voltam para a COLUNA 8
-        // e aguardam tratativa da Brenda.
-        colunaKey = colunasApos8.has(existingCobranca.status)
-          ? coluna8Key
-          : existingCobranca.status; // mantém a coluna atual (travada)
-      }
-    }
 
     let targetCobrancaId = existingCobranca?.id ?? null;
 
