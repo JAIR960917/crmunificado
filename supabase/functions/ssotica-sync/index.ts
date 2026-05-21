@@ -2290,8 +2290,24 @@ Deno.serve(async (req) => {
       const rawScope = typeof body.scope === "string" ? body.scope : "all";
       const scope: "all" | "cobrancas" | "renovacoes" =
         rawScope === "cobrancas" || rawScope === "renovacoes" ? rawScope : "all";
-      // Fase inicial conforme escopo: renovações começa direto em 'vendas'.
       const initialPhase: "cr" | "vendas" = scope === "renovacoes" ? "vendas" : "cr";
+
+      // 🔒 EXCLUSIVIDADE: pausa qualquer outra loja em execução para evitar
+      // sobrecarregar a SSótica com requisições paralelas e estourar timeouts.
+      // Marca como "idle" e zera o agendamento de backfill das demais. O backfill
+      // pode ser retomado depois manualmente pelo botão Sincronizar.
+      await supabase
+        .from("ssotica_integrations")
+        .update({
+          sync_status: "idle",
+          backfill_status: "idle",
+          backfill_next_run_at: null,
+          last_error: "Pausado automaticamente — outra loja foi acionada manualmente.",
+          updated_at: new Date().toISOString(),
+        })
+        .neq("id", onlyIntegrationId)
+        .or("sync_status.eq.running,backfill_status.in.(running,scheduled)");
+
       // Reseta o progresso e marca pra rodar AGORA (próximo tick do cron pega)
       const { data: integ, error } = await supabase
         .from("ssotica_integrations")
@@ -2327,7 +2343,7 @@ Deno.serve(async (req) => {
         ok: true,
         mode: "start_backfill",
         scope,
-        message: `Backfill de 96 meses (${scopeLabel}) agendado em background. Os 32 chunks rodarão automaticamente.`,
+        message: `Backfill de 96 meses (${scopeLabel}) agendado em background. Demais lojas foram pausadas para evitar sobrecarga.`,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -2420,6 +2436,22 @@ Deno.serve(async (req) => {
     }
 
     // ========== MODO 4 (default): sync incremental ==========
+    // 🔒 EXCLUSIVIDADE: clique manual em "Sincronizar" de UMA loja pausa as
+    // demais para evitar sobrecarregar a SSótica com requisições paralelas.
+    if (onlyIntegrationId && manualRecent) {
+      await supabase
+        .from("ssotica_integrations")
+        .update({
+          sync_status: "idle",
+          backfill_status: "idle",
+          backfill_next_run_at: null,
+          last_error: "Pausado automaticamente — outra loja foi acionada manualmente.",
+          updated_at: new Date().toISOString(),
+        })
+        .neq("id", onlyIntegrationId)
+        .or("sync_status.eq.running,backfill_status.in.(running,scheduled)");
+    }
+
     const query = supabase
       .from("ssotica_integrations")
       .select("*")
