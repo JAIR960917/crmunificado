@@ -111,11 +111,14 @@ serve(async (req) => {
     // 2) Carrega cobranças que estão em alguma coluna habilitada
     const { data: cobrancas } = await supabase
       .from("crm_cobrancas")
-      .select("id, status, data, company_id")
+      .select("id, status, data, company_id, ssotica_cliente_id")
       .in("status", Array.from(enabledKeys));
 
     const stats = { processed: 0, gatilhos_enviados: 0, gatilhos_falhos: 0, avancados: 0, skipped: 0 };
     const now = new Date();
+
+    // Dedupe por lead (telefone/ssotica_cliente_id) por status, dentro deste tick
+    const triggeredLeadsByStatus = new Set<string>();
 
     for (const cob of (cobrancas || []) as any[]) {
       stats.processed++;
@@ -129,7 +132,9 @@ serve(async (req) => {
       // ---- COLUNA AUTO: garantir disparo do gatilho ----
       if (flow.column_type === "auto") {
         const sentForThisStatus = data.gatilho_status_key === cob.status && data.gatilho_enviado_em;
-        if (!sentForThisStatus && flow.whatsapp_trigger_campaign_id) {
+        const phoneRawDedupe = String(data.telefone || data.phone || data.celular || "").replace(/\D/g, "");
+        const leadKey = `${cob.status}::${(cob as any).ssotica_cliente_id || phoneRawDedupe || cob.id}`;
+        if (!sentForThisStatus && !triggeredLeadsByStatus.has(leadKey) && flow.whatsapp_trigger_campaign_id) {
           // Carrega campanha + 1º step
           const { data: campaign } = await supabase
             .from("whatsapp_trigger_campaigns")
@@ -189,6 +194,7 @@ serve(async (req) => {
                 });
                 // refletimos a mudança em memória para a checagem de avanço a seguir
                 Object.assign(data, newData);
+                triggeredLeadsByStatus.add(leadKey);
                 stats.gatilhos_enviados++;
               } else {
                 await supabase.from("crm_cobranca_flow_events").insert({
