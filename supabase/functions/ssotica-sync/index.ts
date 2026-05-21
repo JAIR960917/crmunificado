@@ -2322,10 +2322,10 @@ async function getOtherBusyIntegration(
   const staleCutoff = new Date(Date.now() - RUNNING_SYNC_STALE_MINUTES * 60 * 1000).toISOString();
   const { data } = await supabase
     .from("ssotica_integrations")
-    .select("id, company_id, sync_status, backfill_status, updated_at")
+    .select("id, company_id, sync_status, backfill_status, full_sweep_status, updated_at")
     .neq("id", exceptId)
     .eq("is_active", true)
-    .or("sync_status.eq.running,backfill_status.eq.running,backfill_status.eq.scheduled")
+    .or("sync_status.eq.running,backfill_status.eq.running,backfill_status.eq.scheduled,full_sweep_status.eq.running,full_sweep_status.eq.scheduled")
     .gte("updated_at", staleCutoff)
     .limit(1);
   return (data && data.length > 0) ? data[0] as any : null;
