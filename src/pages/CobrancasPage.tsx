@@ -338,7 +338,12 @@ export default function CobrancasPage() {
       || (searchResults || []).find((it) => it.id === cobrancaId);
 
     updateItemStatus(cobrancaId, fromStatus, newStatus, item);
-    await supabase.from("crm_cobrancas").update({ status: newStatus }).eq("id", cobrancaId);
+    const nextData = {
+      ...((item?.data && typeof item.data === "object") ? item.data : {}),
+      status_entered_at: new Date().toISOString(),
+      status_entered_status_key: newStatus,
+    };
+    await supabase.from("crm_cobrancas").update({ status: newStatus, data: nextData }).eq("id", cobrancaId);
   };
 
   const getProfileName = (userId: string | null) => {
