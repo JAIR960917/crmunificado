@@ -110,6 +110,8 @@ export default function WhatsAppPage() {
   const [newInstanceCompanyId, setNewInstanceCompanyId] = useState("");
   const [sendDelaySeconds, setSendDelaySeconds] = useState<string>("30");
   const [savingDelay, setSavingDelay] = useState(false);
+  const [cobrancasSessions, setCobrancasSessions] = useState<string[]>([]);
+  const [savingCobrancasSessions, setSavingCobrancasSessions] = useState(false);
   const autoSyncTriedRef = useRef(false);
 
   const canManage = isAdmin;
