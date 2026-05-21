@@ -303,24 +303,45 @@ export default function WhatsAppPage() {
 
   const handleSyncFromApiFull = async () => {
     setInstanceLoading(true);
+    console.groupCollapsed("[APIFULL] list-instances");
     try {
       const { data, error } = await supabase.functions.invoke("apifull-whatsapp", {
         body: { action: "list-instances" },
       });
+      console.log("raw data:", data);
+      console.log("invoke error:", error);
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
-      // Normalize the response — API Full pode retornar array direto ou { dados/data/instances: [...] }
-      const list: any[] =
-        (Array.isArray(data) && data) ||
-        data?.dados ||
-        data?.data ||
-        data?.instances ||
-        data?.result ||
-        [];
+      // Normalize: API Full pode retornar array direto, { dados/data/instances/response/sessions: [...] }
+      // ou ainda objeto único. Vamos tentar várias formas e logar o que achamos.
+      let list: any[] = [];
+      if (Array.isArray(data)) list = data;
+      else if (data && typeof data === "object") {
+        const candidates = ["dados", "data", "instances", "result", "response", "sessions", "items", "list"];
+        for (const k of candidates) {
+          if (Array.isArray((data as any)[k])) { list = (data as any)[k]; break; }
+        }
+        // Caso a chave aninhe outro objeto com array
+        if (list.length === 0) {
+          for (const v of Object.values(data)) {
+            if (Array.isArray(v)) { list = v as any[]; break; }
+            if (v && typeof v === "object") {
+              for (const v2 of Object.values(v)) {
+                if (Array.isArray(v2)) { list = v2 as any[]; break; }
+              }
+              if (list.length > 0) break;
+            }
+          }
+        }
+      }
+      console.log("parsed list length:", list.length, list);
 
       if (!Array.isArray(list) || list.length === 0) {
-        toast.info("Nenhuma instância encontrada na API Full");
+        const rawPreview = JSON.stringify(data).slice(0, 300);
+        toast.info(`Nenhuma instância reconhecida. Resposta: ${rawPreview}`);
+        console.warn("Chaves disponíveis:", data && typeof data === "object" ? Object.keys(data) : typeof data);
+        console.groupEnd();
         setInstanceLoading(false);
         return;
       }
@@ -328,14 +349,16 @@ export default function WhatsAppPage() {
       const existingSessions = new Set(instances.map(i => i.session));
       const toInsert = list
         .map((it: any) => {
-          const session = it.session || it.name || it.instance || it.id || it.sessionName;
-          const name = it.name || it.session || session;
+          const session = it.session || it.name || it.instance || it.id || it.sessionName || it.sessao || it.nome;
+          const name = it.name || it.nome || it.session || session;
           return session ? { name: String(name), session: String(session) } : null;
         })
         .filter((x): x is { name: string; session: string } => !!x && !existingSessions.has(x.session));
+      console.log("toInsert:", toInsert);
 
       if (toInsert.length === 0) {
         toast.success("Tudo sincronizado — nenhuma instância nova");
+        console.groupEnd();
         setInstanceLoading(false);
         return;
       }
@@ -348,8 +371,10 @@ export default function WhatsAppPage() {
       toast.success(`${toInsert.length} instância(s) importada(s) da API Full`);
       fetchData();
     } catch (e: any) {
+      console.error("[APIFULL] sync error:", e);
       toast.error(e.message || "Erro ao sincronizar com API Full");
     }
+    console.groupEnd();
     setInstanceLoading(false);
   };
 
