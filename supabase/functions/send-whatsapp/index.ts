@@ -395,6 +395,15 @@ serve(async (req) => {
         if (i?.session) sessionToInstanceName.set(i.session, i.name || i.session);
       }
     }
+    // Mapa company_id -> { name, cnpj } para variáveis de template
+    const companiesMap = new Map<string, { name: string; cnpj: string | null }>();
+    {
+      const { data: comps } = await supabase.from("companies").select("id, name, cnpj");
+      for (const c of (comps || []) as any[]) {
+        if (c?.id) companiesMap.set(c.id, { name: c.name || "", cnpj: c.cnpj || null });
+      }
+    }
+
 
     // ========== PERIOD CAMPAIGNS ==========
     const { data: campaigns } = await supabase.from("whatsapp_campaigns")
