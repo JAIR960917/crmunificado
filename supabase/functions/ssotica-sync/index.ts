@@ -2671,64 +2671,72 @@ Deno.serve(async (req) => {
       }).select("id").single();
       const logId = log?.id ?? null;
 
-      try {
-        console.log(`[ssotica-sync][full_sweep] empresa=${integ.company_id} iniciando varredura 96 meses`);
-        const cr = await syncContasReceber(supabase, integ, undefined, { fullSweep: true });
-        console.log(`[ssotica-sync][full_sweep] empresa=${integ.company_id} contas_receber removed=${cr.removed} quitados=${cr.clientesQuitados.length}`);
+      // Roda em background — full_sweep pode levar minutos (96 meses × N páginas)
+      // e estoura o timeout HTTP se aguardarmos a resposta. Cliente acompanha
+      // pelos logs de sincronização (ssotica_sync_logs).
+      const runSweep = async () => {
+        try {
+          console.log(`[ssotica-sync][full_sweep] empresa=${integ.company_id} iniciando varredura 96 meses`);
+          const cr = await syncContasReceber(supabase, integ, undefined, { fullSweep: true });
+          console.log(`[ssotica-sync][full_sweep] empresa=${integ.company_id} contas_receber removed=${cr.removed} quitados=${cr.clientesQuitados.length}`);
 
-        const v = await syncVendas(supabase, integ, false, cr.clientesQuitados);
-        console.log(`[ssotica-sync][full_sweep] empresa=${integ.company_id} vendas processed=${v.processed} created=${v.created}`);
+          const v = await syncVendas(supabase, integ, false, cr.clientesQuitados);
+          console.log(`[ssotica-sync][full_sweep] empresa=${integ.company_id} vendas processed=${v.processed} created=${v.created}`);
 
-        const reconciled = await reconcileRenovacoesVsCobrancas(supabase, integ.company_id);
-        console.log(`[ssotica-sync][full_sweep] empresa=${integ.company_id} reconciliação removeu ${reconciled} renovações`);
+          const reconciled = await reconcileRenovacoesVsCobrancas(supabase, integ.company_id);
+          console.log(`[ssotica-sync][full_sweep] empresa=${integ.company_id} reconciliação removeu ${reconciled} renovações`);
 
-        const finishedAt = new Date().toISOString();
-        await supabase.from("ssotica_integrations").update({
-          sync_status: "idle",
-          last_sync_receber_at: finishedAt,
-          last_sync_vendas_at: finishedAt,
-          last_error: null,
-        }).eq("id", integ.id);
+          const finishedAt = new Date().toISOString();
+          await supabase.from("ssotica_integrations").update({
+            sync_status: "idle",
+            last_sync_receber_at: finishedAt,
+            last_sync_vendas_at: finishedAt,
+            last_error: null,
+          }).eq("id", integ.id);
 
-        if (logId) {
-          await supabase.from("ssotica_sync_logs").update({
-            finished_at: finishedAt,
-            status: "success",
-            items_processed: cr.processed + v.processed,
-            items_created: cr.created + v.created,
-            items_updated: cr.updated + v.updated,
-            details: { mode: "full_sweep", contas_receber: cr, vendas: v, reconciled },
-          }).eq("id", logId);
+          if (logId) {
+            await supabase.from("ssotica_sync_logs").update({
+              finished_at: finishedAt,
+              status: "success",
+              items_processed: cr.processed + v.processed,
+              items_created: cr.created + v.created,
+              items_updated: cr.updated + v.updated,
+              details: { mode: "full_sweep", contas_receber: cr, vendas: v, reconciled },
+            }).eq("id", logId);
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(`[ssotica-sync][full_sweep] empresa=${integ.company_id} falhou:`, msg);
+          await supabase.from("ssotica_integrations").update({
+            sync_status: "error",
+            last_error: msg.slice(0, 1000),
+          }).eq("id", integ.id);
+          if (logId) {
+            await supabase.from("ssotica_sync_logs").update({
+              finished_at: new Date().toISOString(),
+              status: "error",
+              error_message: msg.slice(0, 2000),
+            }).eq("id", logId);
+          }
         }
+      };
 
-        return new Response(JSON.stringify({
-          ok: true,
-          mode: "full_sweep",
-          integration_id: integ.id,
-          contas_receber: cr,
-          vendas: v,
-          reconciled,
-          message: `Varredura concluída: ${cr.removed} cobranças removidas, ${cr.clientesQuitados.length} clientes movidos para Renovação.`,
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error(`[ssotica-sync][full_sweep] empresa=${integ.company_id} falhou:`, msg);
-        await supabase.from("ssotica_integrations").update({
-          sync_status: "error",
-          last_error: msg.slice(0, 1000),
-        }).eq("id", integ.id);
-        if (logId) {
-          await supabase.from("ssotica_sync_logs").update({
-            finished_at: new Date().toISOString(),
-            status: "error",
-            error_message: msg.slice(0, 2000),
-          }).eq("id", logId);
-        }
-        return new Response(JSON.stringify({ ok: false, error: msg }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      // @ts-ignore EdgeRuntime existe no runtime do Supabase self-hosted
+      if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any)?.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(runSweep());
+      } else {
+        runSweep();
       }
+
+      return new Response(JSON.stringify({
+        ok: true,
+        mode: "full_sweep",
+        integration_id: integ.id,
+        log_id: logId,
+        status: "started",
+        message: "Varredura iniciada em segundo plano. Acompanhe pelos logs de sincronização (pode levar alguns minutos).",
+      }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ========== MODO 4 (default): sync incremental ==========

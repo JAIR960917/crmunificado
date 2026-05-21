@@ -492,11 +492,10 @@ export default function SSoticaIntegrationsPage() {
       if (!(data as any)?.ok) {
         throw new Error((data as any)?.error ?? "Erro desconhecido");
       }
-      const cr = (data as any).contas_receber;
-      const v = (data as any).vendas;
       toast({
-        title: "Varredura concluída",
-        description: `${cr?.removed ?? 0} cobranças removidas, ${cr?.clientesQuitados?.length ?? 0} clientes movidos para Renovação. Vendas: +${v?.created ?? 0} renovações criadas.`,
+        title: "Varredura iniciada",
+        description:
+          "Rodando em segundo plano (pode levar alguns minutos). Acompanhe pelos logs de sincronização — o status vai para 'success' ao terminar.",
       });
       await fetchAll();
     } catch (e: any) {
