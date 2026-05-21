@@ -356,6 +356,23 @@ function applyTemplateVars(template: string, vars: Record<string, string>): stri
   return out;
 }
 
+function resolveCardEnteredAt(card: any): Date {
+  const data = (card?.data && typeof card.data === "object") ? card.data : {};
+  const currentStatus = String(card?.status || "");
+  const enteredStatusKey = String(data?.status_entered_status_key || "");
+  const enteredAtRaw = data?.status_entered_at;
+
+  if (enteredAtRaw && enteredStatusKey === currentStatus) {
+    const parsed = new Date(String(enteredAtRaw));
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+
+  const fallback = new Date(card?.updated_at);
+  if (!Number.isNaN(fallback.getTime())) return fallback;
+
+  return new Date();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -497,6 +514,8 @@ serve(async (req) => {
           }
 
           const data = typeof card.data === "object" ? (card.data as Record<string, any>) : {};
+          const alreadyTriggeredForStatus = isCobrancas && data.gatilho_status_key === statusKey && data.gatilho_enviado_em;
+          if (alreadyTriggeredForStatus) continue;
           const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
           if (!phone) continue;
 
@@ -684,13 +703,13 @@ serve(async (req) => {
           }
 
           const sentStepIds = sendsByCard.get(card.id) || new Set();
-          const enteredAt = new Date(card.updated_at);
+          const enteredAt = resolveCardEnteredAt(card);
           const now = new Date();
           const daysSinceEntry = Math.floor((now.getTime() - enteredAt.getTime()) / (1000 * 60 * 60 * 24));
 
           // Regra: 1 gatilho por entrada na coluna.
           // Se já houve envio bem-sucedido APÓS o card entrar na coluna atual,
-          // não envia novamente até que o card saia e volte (updated_at muda).
+          // não envia novamente até que o card saia e volte (status_entered_at muda).
           const lastSentTs = lastSentAtByCard.get(card.id) || 0;
           if (lastSentTs >= enteredAt.getTime()) continue;
 
@@ -708,10 +727,25 @@ serve(async (req) => {
               const result = await sendMessage(session!, APIFULL_API_KEY, cp, messageBody, step.image_url);
               const instanceName = sessionToInstanceName.get(session!) || session!;
               if (result.ok) {
-                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
+                const sentAt = new Date().toISOString();
+                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: sentAt });
                 totalSent++;
                 triggerSentNow++;
                 if (isCobrancas) {
+                  await supabase
+                    .from("crm_cobrancas")
+                    .update({
+                      data: {
+                        ...data,
+                        status_entered_at: data.status_entered_at ?? sentAt,
+                        status_entered_status_key: data.status_entered_status_key ?? statusKey,
+                        gatilho_enviado_em: sentAt,
+                        gatilho_status_key: statusKey,
+                        gatilho_campaign_id: tc.id,
+                        gatilho_campaign_name: tc.name,
+                      },
+                    })
+                    .eq("id", card.id);
                   await supabase.from("crm_cobranca_flow_events").insert({
                     cobranca_id: card.id,
                     status_id: tc.status_id,
@@ -720,7 +754,7 @@ serve(async (req) => {
                     event_type: "gatilho_enviado",
                     whatsapp_trigger_campaign_id: tc.id,
                     whatsapp_trigger_campaign_name: tc.name,
-                    details: { phone: cp, session, instance_name: instanceName, step_position: step.position, sent_at: new Date().toISOString() },
+                    details: { phone: cp, session, instance_name: instanceName, step_position: step.position, sent_at: sentAt },
                   });
                 }
               } else {

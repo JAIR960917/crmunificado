@@ -241,15 +241,27 @@ export default function CobrancasPage() {
     const valor = parseFloat(formValor) || 0;
 
     if (editingCobranca) {
+      const statusChanged = editingCobranca.status !== formStatus;
+      const nextData = {
+        ...(formData || {}),
+        status_entered_at: statusChanged
+          ? new Date().toISOString()
+          : ((formData as any)?.status_entered_at ?? (editingCobranca.data as any)?.status_entered_at ?? null),
+        status_entered_status_key: formStatus,
+      };
       const { error } = await supabase.from("crm_cobrancas").update({
-        data: formData, status: formStatus, assigned_to: formAssigned || null, valor,
+        data: nextData, status: formStatus, assigned_to: formAssigned || null, valor,
         company_id: formCompanyId || null,
       }).eq("id", editingCobranca.id);
       if (error) toast.error("Erro ao atualizar");
       else toast.success("Cobrança atualizada");
     } else {
       const { data: created, error } = await supabase.from("crm_cobrancas").insert({
-        data: formData, status: formStatus, assigned_to: formAssigned || null,
+        data: {
+          ...(formData || {}),
+          status_entered_at: new Date().toISOString(),
+          status_entered_status_key: formStatus,
+        }, status: formStatus, assigned_to: formAssigned || null,
         created_by: user?.id, valor, company_id: formCompanyId || null,
       }).select().single();
       if (error) toast.error("Erro ao criar cobrança");
@@ -338,7 +350,12 @@ export default function CobrancasPage() {
       || (searchResults || []).find((it) => it.id === cobrancaId);
 
     updateItemStatus(cobrancaId, fromStatus, newStatus, item);
-    await supabase.from("crm_cobrancas").update({ status: newStatus }).eq("id", cobrancaId);
+    const nextData = {
+      ...((item?.data && typeof item.data === "object") ? item.data : {}),
+      status_entered_at: new Date().toISOString(),
+      status_entered_status_key: newStatus,
+    };
+    await supabase.from("crm_cobrancas").update({ status: newStatus, data: nextData }).eq("id", cobrancaId);
   };
 
   const getProfileName = (userId: string | null) => {

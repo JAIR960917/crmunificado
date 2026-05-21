@@ -983,6 +983,10 @@ async function syncContasReceber(
     // Preserva marcas do fluxo automático (cobranca-flow-advance) para que o
     // sync NÃO reset o gatilho/tratativa e cause reenvio do WhatsApp.
     const prevData = (existingCobranca?.data ?? {}) as Record<string, any>;
+    const statusChanged = existingCobranca ? existingCobranca.status !== colunaKey : true;
+    const statusEnteredAt = statusChanged
+      ? new Date().toISOString()
+      : prevData.status_entered_at ?? prevData.gatilho_enviado_em ?? prevData.tratativa_em ?? null;
     const data = {
       ...prevData,
       nome: cliente.nome ?? "Cliente SSótica",
@@ -1001,6 +1005,8 @@ async function syncContasReceber(
       qtd_parcelas_atrasadas: parcelasMerged.length,
       situacao_especial: hasAjuizadoMerged ? "ajuizado" : hasNegativadoSerasaMerged ? "negativado_serasa" : null,
       ssotica_raw: maisAntiga.ssotica_raw,
+      status_entered_at: statusEnteredAt,
+      status_entered_status_key: colunaKey,
       // Mantém explicitamente as marcas do fluxo (caso prevData não as tenha, ficam undefined)
       gatilho_enviado_em: prevData.gatilho_enviado_em,
       gatilho_status_key: prevData.gatilho_status_key,
