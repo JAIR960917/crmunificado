@@ -109,15 +109,44 @@ serve(async (req) => {
     const fetchOpts: RequestInit = { method, headers };
     if (method === "POST" && body) fetchOpts.body = body;
 
-    const response = await fetch(`${APIFULL_BASE}${endpoint}`, fetchOpts);
+    const url = `${APIFULL_BASE}${endpoint}`;
+    console.log(`[apifull] -> ${method} ${url}`, body ? `body=${body}` : "");
+
+    const controller = new AbortController();
+    const timeoutMs = 25000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    fetchOpts.signal = controller.signal;
+
+    const t0 = Date.now();
+    let response: Response;
+    try {
+      response = await fetch(url, fetchOpts);
+    } catch (e: any) {
+      clearTimeout(timeoutId);
+      const ms = Date.now() - t0;
+      const aborted = e?.name === "AbortError";
+      console.error(`[apifull] FAIL ${action} after ${ms}ms (aborted=${aborted}):`, e?.message || e);
+      return new Response(
+        JSON.stringify({
+          error: aborted
+            ? `Timeout: API Full não respondeu em ${timeoutMs}ms`
+            : `Falha de rede ao chamar API Full: ${e?.message || e}`,
+        }),
+        { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    clearTimeout(timeoutId);
+    const ms = Date.now() - t0;
+
     const responseText = await response.text();
-    
+    console.log(`[apifull] <- ${response.status} ${action} (${ms}ms) bytes=${responseText.length}`);
+
     let result: any;
     try {
       result = JSON.parse(responseText);
     } catch {
-      // API returned non-JSON (plain text error)
       if (!response.ok) {
+        console.error(`[apifull] non-JSON error body:`, responseText.slice(0, 500));
         return new Response(
           JSON.stringify({ error: responseText || `HTTP ${response.status}` }),
           { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -127,6 +156,7 @@ serve(async (req) => {
     }
 
     if (!response.ok) {
+      console.error(`[apifull] error ${response.status} ${action}:`, result);
       return new Response(
         JSON.stringify({ error: result.message || result.error || `HTTP ${response.status}`, details: result }),
         { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }

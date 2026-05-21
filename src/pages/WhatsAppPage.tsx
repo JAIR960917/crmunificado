@@ -165,12 +165,33 @@ export default function WhatsAppPage() {
   useEffect(() => { fetchData(); /* eslint-disable-next-line */ }, [user?.id, isAdmin, isGerente]);
 
   const callApiFull = async (action: string, session: string, extraBody: Record<string, any> = {}) => {
-    const { data, error } = await supabase.functions.invoke("apifull-whatsapp", {
-      body: { action, session, ...extraBody },
-    });
-    if (error) throw new Error(error.message);
-    if (data?.error) throw new Error(data.error);
-    return data;
+    const tag = `[apifull:${action}${session ? `:${session}` : ""}]`;
+    console.groupCollapsed(`${tag} request`);
+    console.log("payload:", { action, session, ...extraBody });
+    const t0 = performance.now();
+    try {
+      const { data, error } = await supabase.functions.invoke("apifull-whatsapp", {
+        body: { action, session, ...extraBody },
+      });
+      const ms = Math.round(performance.now() - t0);
+      console.log(`response (${ms}ms):`, { data, error });
+      if (error) {
+        console.error(`${tag} edge function error:`, error);
+        throw new Error(error.message);
+      }
+      if (data?.error) {
+        console.error(`${tag} API Full retornou erro:`, data);
+        throw new Error(data.error);
+      }
+      console.log(`${tag} ok`);
+      return data;
+    } catch (e: any) {
+      const ms = Math.round(performance.now() - t0);
+      console.error(`${tag} falhou após ${ms}ms:`, e?.message || e);
+      throw e;
+    } finally {
+      console.groupEnd();
+    }
   };
 
   const handleCreateInstance = async () => {
