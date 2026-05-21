@@ -2541,35 +2541,36 @@ Deno.serve(async (req) => {
     }
 
     // ========== MODO 4 (default): sync incremental ==========
-    // 🔒 EXCLUSIVIDADE: clique manual em "Sincronizar" de UMA loja pausa as
-    // demais para evitar sobrecarregar a SSótica com requisições paralelas.
-    if (onlyIntegrationId && manualRecent) {
-      await supabase
-        .from("ssotica_integrations")
-        .update({
-          sync_status: "idle",
-          backfill_status: "idle",
-          backfill_next_run_at: null,
-          last_error: "Pausado automaticamente — outra loja foi acionada manualmente.",
-          updated_at: new Date().toISOString(),
-        })
-        .neq("id", onlyIntegrationId)
-        .or("sync_status.eq.running,backfill_status.in.(running,scheduled)");
+    // Sincronização é 100% manual: integration_id é OBRIGATÓRIO. Fan-out automático
+    // para todas as lojas foi removido — cada loja é disparada individualmente pela UI.
+    if (!onlyIntegrationId) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: "integration_id_required",
+        message: "integration_id é obrigatório. Sincronização global automática foi desativada — dispare cada loja manualmente.",
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const query = supabase
+    // 🔒 LOCK GLOBAL: rejeita se outra loja está ocupada (apenas 1 por vez).
+    // Como getOtherBusyIntegration exclui o próprio onlyIntegrationId, a auto-
+    // continuação de chunks via pg_net da MESMA loja passa normalmente.
+    {
+      const busy = await getOtherBusyIntegration(supabase, onlyIntegrationId);
+      if (busy) return busyResponse(busy);
+    }
+
+    const { data: integrations, error: intErr } = await supabase
       .from("ssotica_integrations")
       .select("*")
-      .eq("is_active", true);
-    if (onlyIntegrationId) query.eq("id", onlyIntegrationId);
-
-    const { data: integrations, error: intErr } = await query;
+      .eq("is_active", true)
+      .eq("id", onlyIntegrationId);
     if (intErr) throw intErr;
     if (!integrations || integrations.length === 0) {
       return new Response(JSON.stringify({ ok: true, message: "Nenhuma integração ativa" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
     // 🧹 LIMPEZA AUTOMÁTICA: SEMPRE roda (fan-out OU sub-invocação single).
     // Libera integrações que ficaram presas em "running" há mais de
