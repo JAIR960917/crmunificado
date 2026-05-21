@@ -22,6 +22,15 @@ import { createContext, useCallback, useContext, useEffect, useState, ReactNode 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
+const BRANDING_SETTING_KEYS = [
+  "system_name",
+  "primary_color",
+  "background_color",
+  "text_color",
+  "button_color",
+  "logo_url",
+] as const;
+
 /** Forma das configurações persistidas. */
 type Settings = {
   system_name: string;
@@ -121,7 +130,8 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
 
     const { data, error } = await supabase
       .from("system_settings")
-      .select("setting_key, setting_value");
+      .select("setting_key, setting_value")
+      .in("setting_key", [...BRANDING_SETTING_KEYS]);
 
     if (error || !data) {
       setSettings(defaults);
