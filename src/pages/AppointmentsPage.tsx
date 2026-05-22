@@ -61,8 +61,8 @@ const VENDA_OPTIONS = ["Pendente", "Vendido", "Não Vendido", "Laudo", "Doença 
 const FORMA_PAGAMENTO_CONSULTA_OPTIONS = ["PIX", "Cartão", "Dinheiro"];
 
 const RECEBIMENTO_CONSULTA_OPTIONS: { value: string; label: string }[] = [
-  { value: "consulta_paga", label: "Consulta paga" },
-  { value: "pagamento_no_dia", label: "Pagamento no dia do exame" },
+  { value: "consulta_paga", label: "Consulta paga no dia do agendamento" },
+  { value: "pagamento_no_dia", label: "Consulta paga no dia do exame" },
 ];
 
 const CANAIS = [
@@ -450,10 +450,9 @@ export default function AppointmentsPage() {
                 const cpaga = appt.consulta_paga;
                 const carChangedSameDay = isSameDay(appt.consulta_a_receber_updated_at, appt.scheduled_datetime);
                 let rowColor = "";
-                if (cpaga === true) rowColor = "bg-green-700/25 hover:bg-green-700/35";
-                else if (car === "consulta_paga" && carChangedSameDay) rowColor = "bg-green-500/15 hover:bg-green-500/25";
-                else if (car === "consulta_paga") rowColor = "bg-green-700/25 hover:bg-green-700/35";
-                else if (car === "pagamento_no_dia") rowColor = "bg-orange-500/20 hover:bg-orange-500/30";
+                if (car === "consulta_paga") rowColor = "bg-green-700/30 hover:bg-green-700/40";
+                else if (car === "pagamento_no_dia") rowColor = "bg-green-500/15 hover:bg-green-500/25";
+                else if (cpaga === true) rowColor = "bg-green-700/25 hover:bg-green-700/35";
                 return (
                   <tr key={appt.id} className={cn("transition-colors", rowColor || "hover:bg-muted/30")}>
                     <td className="px-3 py-2 font-medium">{appt.nome || "—"}</td>
