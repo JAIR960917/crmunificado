@@ -198,14 +198,19 @@ export default function AppointmentsPage() {
       setNvMotivo(appt?.nao_vendido_motivo || "");
       setNvFezOrcamento(appt?.fez_orcamento ? "sim" : appt?.fez_orcamento === false && appt?.nao_vendido_motivo ? "nao" : null);
       setNvValor(appt?.orcamento_valor != null ? String(appt.orcamento_valor) : "");
-      setNvProdutos(appt?.orcamento_produtos || "");
+      const existing = (appt?.orcamento_produtos_itens as ProdutoItem[] | null | undefined);
+      setNvProdutosItens(existing && existing.length > 0 ? existing.map(p => ({ nome: p.nome || "", valor: p.valor || "" })) : [{ nome: "", valor: "" }]);
       setNvObservacao(appt?.orcamento_observacao || "");
       setNvDialogOpen(true);
       return;
     }
-    const { error } = await supabase.from("crm_appointments").update({ [field]: value } as any).eq("id", id);
+    const payload: any = { [field]: value };
+    if (field === "consulta_a_receber") {
+      payload.consulta_a_receber_updated_at = new Date().toISOString();
+    }
+    const { error } = await supabase.from("crm_appointments").update(payload).eq("id", id);
     if (error) toast.error("Erro ao atualizar");
-    setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...payload } : a));
     if (field === "venda" && value === "Vendido") {
       const appt = appointments.find(a => a.id === id);
       if (appt?.lead_id) {
@@ -218,8 +223,9 @@ export default function AppointmentsPage() {
     if (!nvApptId) return;
     if (!nvMotivo.trim()) { toast.error("Informe o motivo da não compra"); return; }
     if (!nvFezOrcamento) { toast.error("Informe se foi feito orçamento"); return; }
-    if (nvFezOrcamento === "sim" && (!nvValor || !nvProdutos.trim())) {
-      toast.error("Preencha valor e produtos do orçamento");
+    const itensValidos = nvProdutosItens.filter(p => p.nome.trim() && p.valor);
+    if (nvFezOrcamento === "sim" && (!nvValor || itensValidos.length === 0)) {
+      toast.error("Preencha valor e ao menos um produto com nome e valor");
       return;
     }
     setNvSaving(true);
@@ -228,7 +234,8 @@ export default function AppointmentsPage() {
       nao_vendido_motivo: nvMotivo.trim(),
       fez_orcamento: nvFezOrcamento === "sim",
       orcamento_valor: nvFezOrcamento === "sim" ? (parseFloat(nvValor) || 0) : null,
-      orcamento_produtos: nvFezOrcamento === "sim" ? nvProdutos.trim() : null,
+      orcamento_produtos: nvFezOrcamento === "sim" ? itensValidos.map(p => `${p.nome} - R$ ${p.valor}`).join("; ") : null,
+      orcamento_produtos_itens: nvFezOrcamento === "sim" ? itensValidos : [],
       orcamento_observacao: nvObservacao.trim() || null,
     };
     const { error } = await supabase.from("crm_appointments").update(payload).eq("id", nvApptId);
@@ -238,6 +245,7 @@ export default function AppointmentsPage() {
     setNvDialogOpen(false);
     setNvApptId(null);
     fetchAll();
+
   };
 
 
