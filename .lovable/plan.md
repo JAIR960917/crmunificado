@@ -1,58 +1,67 @@
-## Visão geral
+## Mudanças solicitadas
 
-Adicionar à tela **Configurações** uma seção **Funções e Permissões** onde o admin pode:
-- Editar permissões de páginas das 4 funções existentes (admin, gerente, vendedor, financeiro)
-- Criar novas funções customizadas (ex: "Supervisor", "Atendente")
-- Marcar/desmarcar quais páginas cada função acessa
-- Renomear ou excluir funções customizadas
+### 1. Bug: lead criado como "Recomendação" continua na coluna mesmo após tratativa
 
-A nova função aparece automaticamente no dropdown "Papel" da tela de Usuários.
+**Diagnóstico:** A reavaliação atual em `LeadFormDialog.tsx` (linha 929) usa `resolveLeadStatusFromData` com `excludeFieldsMappingTo: [formStatus]` e fallback para o próprio `formStatus`. Quando o lead foi criado **sem responder** os campos do funil (data do exame, sintomas, etc.), nenhuma regra resolve e o fallback mantém em "recomendacao".
 
-## Como funções customizadas funcionam
+**Solução:** Após registrar a tratativa, se nenhuma regra resolveu para um status diferente, mover automaticamente para o status inicial padrão do funil de leads (primeira coluna após "recomendacao", normalmente "novo_lead" ou similar). Buscar a primeira coluna ativa de `crm_statuses` que **não** seja a atual e usar como fallback. Alternativa mais segura: usar o status padrão configurado em `system_settings` (`lead_default_status`), se existir; caso contrário, primeira coluna por `position`.
 
-Toda função customizada **herda de uma função base** (admin/gerente/vendedor/financeiro). Isso preserva todas as regras de segurança (RLS) do banco que dependem do enum atual — a herança define apenas o nível de acesso aos dados; a função customizada apenas filtra ainda mais quais **páginas** ficam visíveis.
+### 2. Botão "Não atendeu" deve exibir campo de observação
 
-Exemplo: "Supervisor" herda de gerente + só acessa /cobrancas e /dashboard.
+**Arquivo:** `src/components/leads/ContactAttemptForm.tsx`
 
-## Mudanças no banco
+Hoje, ao clicar em "Não atendeu", o form salva apenas a nota fixa "Cliente NÃO ATENDEU". Adicionar um `Textarea` "Como tentou contato? (descreva as tentativas)" exibido quando `atendeu === "nao"`, obrigatório, e incluí-lo em `buildNoteContent`.
 
-1. **`role_definitions`** — catálogo de funções:
-   - `key` (texto, ex: "admin", "supervisor_loja")
-   - `label` (texto exibido, ex: "Supervisor de Loja")
-   - `is_system` (bool — true para as 4 nativas, não podem ser excluídas)
-   - `base_role` (admin/gerente/vendedor/financeiro — usado pelo RLS)
+Aplicar a mesma mudança em `RenovacaoContactAttemptForm.tsx` e `CobrancaContactAttemptForm.tsx` para consistência.
 
-2. **`role_page_permissions`** — quais páginas cada função vê:
-   - `role_key` + `page_key` + `allowed` (bool)
+### 3. Expandir opções do campo "Venda" na tela Agendamentos
 
-3. **`user_roles`** ganha coluna opcional `role_key`. Quando preenchida, indica a função customizada. A coluna `role` (enum) recebe o `base_role` para o RLS continuar funcionando.
+**Arquivo:** `src/pages/AppointmentsPage.tsx`
 
-Seed: insere as 4 funções nativas com todas as páginas liberadas (admin vê tudo; outros mantêm o comportamento atual).
-
-## Mudanças no frontend
-
-- **SettingsPage**: nova seção "Funções e Permissões" com lista de funções, edição inline de permissões (checkboxes por página), botão "+ Nova função" (escolhe nome + função base), e botão excluir para customizadas.
-- **AuthContext**: passa a ler `role_key` (cai para `role` se vazio) e carrega o array de páginas permitidas dessa função.
-- **RoleGate**: bloqueia acesso a rota se a página não estiver permitida para a função do usuário.
-- **AppSidebar**: oculta itens de menu que não estiverem permitidos.
-- **UsersPage**: dropdown "Papel" passa a listar TODAS as funções (nativas + customizadas).
-- **Edge functions** `create-user` e `manage-user`: validam contra a tabela `role_definitions` em vez da lista fixa, e gravam `role_key` + `role` (base).
-
-## Catálogo de páginas
-
-Definido em código (`src/lib/pagePermissions.ts`) com label amigável e path. Cobre todas as ~22 rotas existentes do sistema.
-
-## Detalhes técnicos
-
-- `role_key` em `user_roles` é `text` nullable; quando NULL o sistema usa o nome do enum como key (admin/gerente/vendedor/financeiro).
-- RLS continua usando `has_role(uid, 'admin'::app_role)` — funciona porque o `role` enum sempre é gravado.
-- /perfil, /notificacoes e /instalar ficam sempre liberados (não bloqueáveis).
-- Admin nativo (`is_system=true` + key='admin') sempre tem acesso a tudo, independente do que estiver na tabela de permissões.
-
-## Deploy
-
-Após aprovação:
-```bash
-cd /opt/crm && ./deploy.sh
+Trocar `VENDA_OPTIONS` de `["Pendente", "Vendido", "Não Vendido"]` para:
 ```
-(roda migrations + functions + frontend)
+["Pendente", "Vendido", "Não Vendido", "Laudo", "Doença no Olho"]
+```
+
+**Novo fluxo "Não Vendido":** ao selecionar essa opção (tanto no inline select da tabela quanto no dialog de edição), abrir `Dialog` com:
+- "Por que o cliente não comprou?" (textarea, obrigatório)
+- "Fez orçamento para o cliente?" (Sim/Não)
+- Se Sim: "Valor do orçamento" (number) + "Produtos passados" (textarea)
+- "Observação" (textarea, sempre visível, opcional)
+
+Persistir os dados em colunas novas em `crm_appointments`:
+- `nao_vendido_motivo TEXT`
+- `fez_orcamento BOOLEAN DEFAULT false`
+- `orcamento_valor NUMERIC`
+- `orcamento_produtos TEXT`
+- `orcamento_observacao TEXT`
+
+A migration adiciona apenas colunas (sem mudar RLS existente).
+
+### 4. Tela "Orçamentos"
+
+Quando o agendamento é marcado como "Não Vendido" com "Fez orçamento = Sim", o registro fica disponível em uma nova página `/orcamentos` (item de menu).
+
+**Implementação:**
+- Nova rota `OrcamentosPage.tsx` que lista `crm_appointments` filtrando `fez_orcamento = true`.
+- Colunas: Cliente, Telefone, Data do agendamento, Valor do orçamento, Produtos, Observação, Vendedor, Ações (editar).
+- Filtros: data range e empresa (mesma lógica de filtros do AppointmentsPage).
+- Botão para reabrir o dialog "Não Vendido" e editar os dados do orçamento.
+- O registro **continua aparecendo** na tela Agendamentos (não é movido, apenas espelhado por filtro).
+- Adicionar entrada no `AppSidebar` ("Orçamentos") e em `pagePermissions.ts` (`page_orcamentos`).
+- Adicionar rota em `App.tsx`.
+
+### Ordem de execução
+
+1. Criar migration (colunas novas em `crm_appointments`).
+2. Corrigir bug do status pós-tratativa em `LeadFormDialog.tsx`.
+3. Adicionar campo de observação no `ContactAttemptForm.tsx` (e nas variações renovação/cobrança).
+4. Atualizar `VENDA_OPTIONS` + dialog "Não Vendido" em `AppointmentsPage.tsx`.
+5. Criar `OrcamentosPage.tsx`, registrar rota, sidebar e permissão.
+
+### Deploy
+
+Após implementar, na VPS:
+```
+cd /opt/crm && ./deploy.sh --migrations --frontend
+```
