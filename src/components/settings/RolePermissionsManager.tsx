@@ -140,9 +140,9 @@ export default function RolePermissionsManager() {
     if (!key) return toast.error("Nome inválido");
     if (roles.some((r) => r.key === key)) key = `${key}_${Date.now().toString(36).slice(-4)}`;
 
-    const { error } = await supabase.from("role_definitions").insert({
-      key, label, is_system: false, base_role: newBaseRole,
-    });
+    const { error } = await supabase.from("role_definitions").insert([{
+      key, label, is_system: false, base_role: newBaseRole as any,
+    }]);
     if (error) return toast.error(error.message);
 
     // Cria entradas zeradas de permissão (todas false por padrão; admin marca depois)
