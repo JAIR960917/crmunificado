@@ -44,6 +44,8 @@ const navItems: NavItem[] = [
   { path: "/cobrancas",            label: "Cobranças",              icon: Receipt },
   { path: "/cobrancas/fluxo",      label: "Fluxo Cobrança",         icon: Workflow },
   { path: "/agendamentos",         label: "Agendamentos",           icon: CalendarCheck },
+  { path: "/orcamentos",           label: "Orçamentos",             icon: Receipt },
+
   { path: "/clientes-ativos",      label: "Renovação",              icon: UserCheck },
   { path: "/usuarios",             label: "Usuários",               icon: Users },
   { path: "/empresas",             label: "Empresas",               icon: Building2 },
