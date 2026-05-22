@@ -224,10 +224,8 @@ export default function TriggerCampaigns({ instances }: Props) {
     setSaving(true);
 
     try {
-      // Para Cobranças, o backend faz round-robin entre instâncias sem empresa vinculada.
-      const effectiveInstanceId = moduleKey === "cobrancas" ? null : (instanceId || null);
-      // Round-robin entre instâncias selecionadas (qualquer módulo, exceto cobrancas que já usa o global).
-      const effectiveInstanceIds = moduleKey === "cobrancas" ? [] : instanceIds.filter(Boolean);
+      const effectiveInstanceIds = instanceIds.filter(Boolean);
+      const effectiveInstanceId = effectiveInstanceIds.length === 1 ? effectiveInstanceIds[0] : (instanceId || null);
 
       const basePayload: any = {
         name: name.trim(),
@@ -422,7 +420,6 @@ export default function TriggerCampaigns({ instances }: Props) {
                 const next = v as ModuleKey;
                 setModuleKey(next);
                 setStatusId("");
-                if (next === "cobrancas") setInstanceId("");
               }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
@@ -451,45 +448,41 @@ export default function TriggerCampaigns({ instances }: Props) {
             </div>
             <div className="space-y-2">
               <Label>Instância(s) WhatsApp</Label>
-              {moduleKey === "cobrancas" ? (
-                <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-primary/40 text-xs text-muted-foreground">
-                  🔁 Cobranças intercala envios entre instâncias sem empresa vinculada
+              <>
+                <div className="rounded-md border bg-background p-2 max-h-40 overflow-y-auto space-y-1">
+                  {availableInstances.length === 0 ? (
+                    <p className="text-xs text-muted-foreground p-1">Nenhuma instância disponível</p>
+                  ) : (
+                    availableInstances.map((i) => {
+                      const checked = instanceIds.includes(i.id) || (instanceIds.length === 0 && instanceId === i.id);
+                      return (
+                        <label key={i.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = new Set(instanceIds.length === 0 && instanceId ? [instanceId] : instanceIds);
+                              if (e.target.checked) next.add(i.id); else next.delete(i.id);
+                              const arr = Array.from(next);
+                              setInstanceIds(arr);
+                              setInstanceId(arr.length === 1 ? arr[0] : "");
+                            }}
+                          />
+                          <Smartphone className="h-3 w-3 text-muted-foreground" />
+                          <span>{i.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
                 </div>
-              ) : (
-                <>
-                  <div className="rounded-md border bg-background p-2 max-h-40 overflow-y-auto space-y-1">
-                    {availableInstances.length === 0 ? (
-                      <p className="text-xs text-muted-foreground p-1">Nenhuma instância disponível</p>
-                    ) : (
-                      availableInstances.map((i) => {
-                        const checked = instanceIds.includes(i.id) || (instanceIds.length === 0 && instanceId === i.id);
-                        return (
-                          <label key={i.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                const next = new Set(instanceIds.length === 0 && instanceId ? [instanceId] : instanceIds);
-                                if (e.target.checked) next.add(i.id); else next.delete(i.id);
-                                const arr = Array.from(next);
-                                setInstanceIds(arr);
-                                setInstanceId(arr.length === 1 ? arr[0] : "");
-                              }}
-                            />
-                            <Smartphone className="h-3 w-3 text-muted-foreground" />
-                            <span>{i.name}</span>
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    {companyId === "__GLOBAL__"
+                <p className="text-[10px] text-muted-foreground">
+                  {moduleKey === "cobrancas"
+                    ? "Marque 2 ou mais para intercalar nesta coluna de cobrança; se nenhuma for marcada, usa a configuração global de cobranças."
+                    : companyId === "__GLOBAL__"
                       ? "🌐 Se nenhuma marcada, usa a instância da empresa de cada lead."
                       : "Marque 2 ou mais para intercalar (alternar) os envios entre elas."}
-                  </p>
-                </>
-              )}
+                </p>
+              </>
             </div>
             <div className="space-y-2">
               <Label>Horário início diário *</Label>
@@ -608,9 +601,9 @@ export default function TriggerCampaigns({ instances }: Props) {
                         ) : (
                           <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-500 border-blue-500/30">🌐 Global (todas as empresas)</Badge>
                         )}
-                        {Array.isArray(c.instance_ids) && c.instance_ids.length >= 2 ? (
+                        {Array.isArray(c.instance_ids) && c.instance_ids.length > 0 ? (
                           <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
-                            <Smartphone className="h-3 w-3" /> 🔁 {c.instance_ids.map(getInstanceName).join(" ↔ ")}
+                            <Smartphone className="h-3 w-3" /> {c.instance_ids.length >= 2 ? `🔁 ${c.instance_ids.map(getInstanceName).join(" ↔ ")}` : getInstanceName(c.instance_ids[0])}
                           </Badge>
                         ) : c.instance_id && (
                           <Badge variant="secondary" className="text-[10px] flex items-center gap-1">

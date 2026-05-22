@@ -606,28 +606,29 @@ serve(async (req) => {
         if (!cfg) continue;
 
         // ----- Estratégia de sessão -----
-        // 1) Cobranças: round-robin global (instâncias sem empresa)
-        // 2) instance_ids (>=2): round-robin entre instâncias escolhidas na campanha (qualquer módulo)
-        // 3) Global sem empresa: sessão da empresa de cada lead
-        // 4) Padrão: instance_id único
+        // 1) instance_ids da própria campanha: round-robin se vier 2+
+        // 2) instance_id / instance_ids(1) da própria campanha: sessão fixa
+        // 3) Cobranças sem instância definida na campanha: fallback global
+        // 4) Campanha global sem instância definida: sessão da empresa do card
         const isCobrancas = moduleKey === "cobrancas";
         const rawInstanceIds = Array.isArray((tc as any).instance_ids)
           ? ((tc as any).instance_ids as any[]).filter((v) => typeof v === "string" && v)
           : [];
-        const multiSessions: string[] = [];
-        if (rawInstanceIds.length >= 2) {
-          for (const iid of rawInstanceIds) {
-            const s = await resolveSession(supabase, iid);
-            if (s) multiSessions.push(s);
-          }
+        const selectedSessions: string[] = [];
+        for (const iid of rawInstanceIds) {
+          const s = await resolveSession(supabase, iid);
+          if (s) selectedSessions.push(s);
         }
-        const useMultiRoundRobin = multiSessions.length >= 2;
+        const useMultiRoundRobin = selectedSessions.length >= 2;
+        const fixedSelectedSession = selectedSessions.length === 1 ? selectedSessions[0] : null;
+        const fixedSession = fixedSelectedSession || (!useMultiRoundRobin && tc.instance_id
+          ? await resolveSession(supabase, tc.instance_id)
+          : null);
+        const useGlobalCobrancasFallback = isCobrancas && !useMultiRoundRobin && !fixedSession;
+        const useCompanySessionFallback = isGlobal && !isCobrancas && !useMultiRoundRobin && !fixedSession;
 
-        const fixedSession = (isGlobal || isCobrancas || useMultiRoundRobin)
-          ? null
-          : await resolveSession(supabase, tc.instance_id);
-        if (!isGlobal && !isCobrancas && !useMultiRoundRobin && !fixedSession) continue;
-        if (isCobrancas && cobrancasSessions.length === 0) {
+        if (!useMultiRoundRobin && !fixedSession && !useGlobalCobrancasFallback && !useCompanySessionFallback) continue;
+        if (useGlobalCobrancasFallback && cobrancasSessions.length === 0) {
           console.warn(`[trigger ${tc.id}] cobranças sem instâncias sem empresa vinculada — pulando`);
           continue;
         }
@@ -726,11 +727,11 @@ serve(async (req) => {
 
           // Resolve sessão por card
           let session = fixedSession;
-          if (isCobrancas) {
+          if (useGlobalCobrancasFallback) {
             session = pickRoundRobinSession(rrIndex);
           } else if (useMultiRoundRobin) {
-            session = multiSessions[rrIndex % multiSessions.length];
-          } else if (isGlobal) {
+            session = selectedSessions[rrIndex % selectedSessions.length];
+          } else if (useCompanySessionFallback) {
             const cardCompanyId = resolveCardCompanyId(card, userToCompany);
             if (!cardCompanyId) {
               skippedNoCompany++;
