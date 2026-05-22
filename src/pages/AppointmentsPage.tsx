@@ -99,6 +99,18 @@ export default function AppointmentsPage() {
   const [saleSaving, setSaleSaving] = useState(false);
   const [saleEntrada, setSaleEntrada] = useState("");
 
+  // Não Vendido dialog
+  const [nvDialogOpen, setNvDialogOpen] = useState(false);
+  const [nvApptId, setNvApptId] = useState<string | null>(null);
+  const [nvMotivo, setNvMotivo] = useState("");
+  const [nvFezOrcamento, setNvFezOrcamento] = useState<"sim" | "nao" | null>(null);
+  const [nvValor, setNvValor] = useState("");
+  const [nvProdutos, setNvProdutos] = useState("");
+  const [nvObservacao, setNvObservacao] = useState("");
+  const [nvSaving, setNvSaving] = useState(false);
+
+
+
   const fetchAll = async () => {
     setLoading(true);
     let query = supabase.from("crm_appointments").select("*").eq("status", "agendado").order("scheduled_datetime");
