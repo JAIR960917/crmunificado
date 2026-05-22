@@ -226,6 +226,8 @@ export default function TriggerCampaigns({ instances }: Props) {
     try {
       // Para Cobranças, o backend faz round-robin entre instâncias sem empresa vinculada.
       const effectiveInstanceId = moduleKey === "cobrancas" ? null : (instanceId || null);
+      // Round-robin entre instâncias selecionadas (qualquer módulo, exceto cobrancas que já usa o global).
+      const effectiveInstanceIds = moduleKey === "cobrancas" ? [] : instanceIds.filter(Boolean);
 
       const basePayload: any = {
         name: name.trim(),
@@ -234,7 +236,8 @@ export default function TriggerCampaigns({ instances }: Props) {
         start_time: startTime,
         end_time: endTime,
         created_by: user.id,
-        instance_id: effectiveInstanceId,
+        instance_id: effectiveInstanceIds.length >= 2 ? null : effectiveInstanceId,
+        instance_ids: effectiveInstanceIds,
       };
 
       const buildSteps = (campaignId: string) =>
