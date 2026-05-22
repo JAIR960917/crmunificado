@@ -42,6 +42,7 @@ type TriggerCampaign = {
   module: ModuleKey;
   status_id: string;
   instance_id: string | null;
+  instance_ids?: string[] | null;
   company_id: string | null;
   is_active: boolean;
   start_time: string;
