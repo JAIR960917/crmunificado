@@ -183,7 +183,23 @@ export default function ContactAttemptForm({ leadId, userId, leadStatus, leadSna
         </div>
       </div>
 
+      {/* Step 2a: If "não atendeu", ask for description of attempts */}
+      {atendeu === "nao" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Como tentou contato? <span className="text-destructive">*</span></Label>
+          <Textarea
+            value={tentativasObs}
+            onChange={(e) => setTentativasObs(e.target.value)}
+            rows={3}
+            placeholder="Descreva as formas que tentou contato (ligação, WhatsApp, etc)..."
+            className="text-sm min-h-[80px]"
+            maxLength={1000}
+          />
+        </div>
+      )}
+
       {/* Step 2: If answered, ask for tratativa + marcou */}
+
       {atendeu === "sim" && (
         <>
           <div className="space-y-1.5">
