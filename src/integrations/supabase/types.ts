@@ -93,9 +93,12 @@ export type Database = {
           canal_agendamento: string
           comparecimento: string
           confirmacao: string
+          consulta_a_receber: string | null
+          consulta_a_receber_updated_at: string | null
           created_at: string
           fez_orcamento: boolean
           forma_pagamento: string
+          forma_pagamento_consulta: string | null
           forma_pagamento_venda: string
           id: string
           idade: string
@@ -104,6 +107,7 @@ export type Database = {
           nome: string
           orcamento_observacao: string | null
           orcamento_produtos: string | null
+          orcamento_produtos_itens: Json
           orcamento_valor: number | null
           previous_status: string
           renovacao_id: string | null
@@ -122,9 +126,12 @@ export type Database = {
           canal_agendamento?: string
           comparecimento?: string
           confirmacao?: string
+          consulta_a_receber?: string | null
+          consulta_a_receber_updated_at?: string | null
           created_at?: string
           fez_orcamento?: boolean
           forma_pagamento?: string
+          forma_pagamento_consulta?: string | null
           forma_pagamento_venda?: string
           id?: string
           idade?: string
@@ -133,6 +140,7 @@ export type Database = {
           nome?: string
           orcamento_observacao?: string | null
           orcamento_produtos?: string | null
+          orcamento_produtos_itens?: Json
           orcamento_valor?: number | null
           previous_status?: string
           renovacao_id?: string | null
@@ -151,9 +159,12 @@ export type Database = {
           canal_agendamento?: string
           comparecimento?: string
           confirmacao?: string
+          consulta_a_receber?: string | null
+          consulta_a_receber_updated_at?: string | null
           created_at?: string
           fez_orcamento?: boolean
           forma_pagamento?: string
+          forma_pagamento_consulta?: string | null
           forma_pagamento_venda?: string
           id?: string
           idade?: string
@@ -162,6 +173,7 @@ export type Database = {
           nome?: string
           orcamento_observacao?: string | null
           orcamento_produtos?: string | null
+          orcamento_produtos_itens?: Json
           orcamento_valor?: number | null
           previous_status?: string
           renovacao_id?: string | null
