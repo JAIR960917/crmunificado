@@ -33,6 +33,7 @@ type Appointment = {
   forma_pagamento_consulta: string | null;
   consulta_a_receber: string | null;
   consulta_a_receber_updated_at: string | null;
+  consulta_paga: boolean | null;
   canal_agendamento: string;
   confirmacao: string;
   comparecimento: string;
@@ -57,7 +58,9 @@ const CONFIRMACAO_OPTIONS = ["Pendente", "Confirmado", "Cancelado"];
 const COMPARECIMENTO_OPTIONS = ["Pendente", "Compareceu", "Não Compareceu"];
 const VENDA_OPTIONS = ["Pendente", "Vendido", "Não Vendido", "Laudo", "Doença no Olho"];
 
-const CONSULTA_PAGAMENTO_OPTIONS: { value: string; label: string }[] = [
+const FORMA_PAGAMENTO_CONSULTA_OPTIONS = ["PIX", "Cartão", "Dinheiro"];
+
+const RECEBIMENTO_CONSULTA_OPTIONS: { value: string; label: string }[] = [
   { value: "consulta_paga", label: "Consulta paga" },
   { value: "pagamento_no_dia", label: "Pagamento no dia do exame" },
 ];
@@ -79,8 +82,8 @@ const isSameDay = (a: string | null | undefined, b: string | null | undefined) =
   } catch { return false; }
 };
 
-const consultaLabel = (v: string | null | undefined) =>
-  CONSULTA_PAGAMENTO_OPTIONS.find(o => o.value === v)?.label || "—";
+const recebimentoLabel = (v: string | null | undefined) =>
+  RECEBIMENTO_CONSULTA_OPTIONS.find(o => o.value === v)?.label || "—";
 
 
 type Company = { id: string; name: string };
@@ -208,6 +211,9 @@ export default function AppointmentsPage() {
     if (field === "consulta_a_receber") {
       payload.consulta_a_receber_updated_at = new Date().toISOString();
     }
+    if (field === "consulta_paga") {
+      payload.consulta_paga = value === "sim" ? true : value === "nao" ? false : null;
+    }
     const { error } = await supabase.from("crm_appointments").update(payload).eq("id", id);
     if (error) toast.error("Erro ao atualizar");
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...payload } : a));
@@ -224,16 +230,17 @@ export default function AppointmentsPage() {
     if (!nvMotivo.trim()) { toast.error("Informe o motivo da não compra"); return; }
     if (!nvFezOrcamento) { toast.error("Informe se foi feito orçamento"); return; }
     const itensValidos = nvProdutosItens.filter(p => p.nome.trim() && p.valor);
-    if (nvFezOrcamento === "sim" && (!nvValor || itensValidos.length === 0)) {
-      toast.error("Preencha valor e ao menos um produto com nome e valor");
+    if (nvFezOrcamento === "sim" && itensValidos.length === 0) {
+      toast.error("Adicione ao menos um produto com nome e valor");
       return;
     }
+    const valorSoma = itensValidos.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0);
     setNvSaving(true);
     const payload: any = {
       venda: "Não Vendido",
       nao_vendido_motivo: nvMotivo.trim(),
       fez_orcamento: nvFezOrcamento === "sim",
-      orcamento_valor: nvFezOrcamento === "sim" ? (parseFloat(nvValor) || 0) : null,
+      orcamento_valor: nvFezOrcamento === "sim" ? valorSoma : null,
       orcamento_produtos: nvFezOrcamento === "sim" ? itensValidos.map(p => `${p.nome} - R$ ${p.valor}`).join("; ") : null,
       orcamento_produtos_itens: nvFezOrcamento === "sim" ? itensValidos : [],
       orcamento_observacao: nvObservacao.trim() || null,
@@ -424,7 +431,8 @@ export default function AppointmentsPage() {
                 <th className="text-left px-3 py-2.5 font-medium">Agendado por</th>
                 <th className="text-left px-3 py-2.5 font-medium">Valor</th>
                 <th className="text-left px-3 py-2.5 font-medium">Forma de pagamento da consulta</th>
-                <th className="text-left px-3 py-2.5 font-medium">Consulta a receber</th>
+                <th className="text-left px-3 py-2.5 font-medium">Recebimento da consulta</th>
+                <th className="text-left px-3 py-2.5 font-medium">Consulta paga</th>
                 <th className="text-left px-3 py-2.5 font-medium">Canal de Agendamento</th>
                 <th className="text-left px-3 py-2.5 font-medium">Confirmação</th>
                 <th className="text-left px-3 py-2.5 font-medium">Comparecimento</th>
@@ -439,11 +447,13 @@ export default function AppointmentsPage() {
                 try { dtFormatted = format(new Date(appt.scheduled_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR }); } catch {}
                 const fpc = appt.forma_pagamento_consulta;
                 const car = appt.consulta_a_receber;
+                const cpaga = appt.consulta_paga;
                 const carChangedSameDay = isSameDay(appt.consulta_a_receber_updated_at, appt.scheduled_datetime);
                 let rowColor = "";
-                if (car === "consulta_paga" && carChangedSameDay) rowColor = "bg-green-500/15 hover:bg-green-500/25";
-                else if (fpc === "consulta_paga") rowColor = "bg-green-700/25 hover:bg-green-700/35";
-                else if (fpc === "pagamento_no_dia") rowColor = "bg-orange-500/20 hover:bg-orange-500/30";
+                if (cpaga === true) rowColor = "bg-green-700/25 hover:bg-green-700/35";
+                else if (car === "consulta_paga" && carChangedSameDay) rowColor = "bg-green-500/15 hover:bg-green-500/25";
+                else if (car === "consulta_paga") rowColor = "bg-green-700/25 hover:bg-green-700/35";
+                else if (car === "pagamento_no_dia") rowColor = "bg-orange-500/20 hover:bg-orange-500/30";
                 return (
                   <tr key={appt.id} className={cn("transition-colors", rowColor || "hover:bg-muted/30")}>
                     <td className="px-3 py-2 font-medium">{appt.nome || "—"}</td>
@@ -454,14 +464,23 @@ export default function AppointmentsPage() {
                     <td className="px-3 py-2">R$ {Number(appt.valor).toFixed(2)}</td>
                     <td className="px-3 py-2">
                       <Select value={fpc || ""} onValueChange={(v) => updateField(appt.id, "forma_pagamento_consulta", v)}>
-                        <SelectTrigger className="h-8 text-xs w-[170px]"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                        <SelectContent>{CONSULTA_PAGAMENTO_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                        <SelectTrigger className="h-8 text-xs w-[140px]"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                        <SelectContent>{FORMA_PAGAMENTO_CONSULTA_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                       </Select>
                     </td>
                     <td className="px-3 py-2">
                       <Select value={car || ""} onValueChange={(v) => updateField(appt.id, "consulta_a_receber", v)}>
-                        <SelectTrigger className="h-8 text-xs w-[170px]"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                        <SelectContent>{CONSULTA_PAGAMENTO_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                        <SelectTrigger className="h-8 text-xs w-[180px]"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                        <SelectContent>{RECEBIMENTO_CONSULTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Select value={cpaga === true ? "sim" : cpaga === false ? "nao" : ""} onValueChange={(v) => updateField(appt.id, "consulta_paga", v)}>
+                        <SelectTrigger className="h-8 text-xs w-[100px]"><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="sim">Sim</SelectItem>
+                          <SelectItem value="nao">Não</SelectItem>
+                        </SelectContent>
                       </Select>
                     </td>
                     <td className="px-3 py-2">{appt.canal_agendamento}</td>
@@ -570,7 +589,7 @@ export default function AppointmentsPage() {
               <Label>Forma de pagamento da consulta <span className="text-destructive">*</span></Label>
               <Select value={formPagamentoConsulta} onValueChange={setFormPagamentoConsulta}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{CONSULTA_PAGAMENTO_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{FORMA_PAGAMENTO_CONSULTA_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
@@ -682,10 +701,6 @@ export default function AppointmentsPage() {
             {nvFezOrcamento === "sim" && (
               <>
                 <div className="space-y-1.5">
-                  <Label>Valor do orçamento (R$) <span className="text-destructive">*</span></Label>
-                  <Input type="number" step="0.01" min="0" value={nvValor} onChange={(e) => setNvValor(e.target.value)} placeholder="0.00" />
-                </div>
-                <div className="space-y-1.5">
                   <Label>Produtos passados <span className="text-destructive">*</span></Label>
                   <div className="space-y-2">
                     {nvProdutosItens.map((item, idx) => (
@@ -717,7 +732,12 @@ export default function AppointmentsPage() {
                     </Button>
                   </div>
                 </div>
-
+                <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  <span className="font-medium">Valor total do orçamento</span>
+                  <span className="font-bold">
+                    R$ {nvProdutosItens.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0).toFixed(2)}
+                  </span>
+                </div>
               </>
             )}
             <div className="space-y-1.5">
