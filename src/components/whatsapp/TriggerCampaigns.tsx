@@ -162,6 +162,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     setModuleKey("leads");
     setStatusId("");
     setInstanceId("");
+    setInstanceIds([]);
     setCompanyId("");
     setStartTime("08:00");
     setEndTime("18:00");
@@ -175,6 +176,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     setModuleKey((c.module || "leads") as ModuleKey);
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || "");
+    setInstanceIds(Array.isArray(c.instance_ids) ? (c.instance_ids as string[]) : []);
     setCompanyId(c.company_id || "__GLOBAL__");
     setStartTime((c.start_time || "08:00").slice(0, 5));
     setEndTime((c.end_time || "18:00").slice(0, 5));
