@@ -58,7 +58,9 @@ const CONFIRMACAO_OPTIONS = ["Pendente", "Confirmado", "Cancelado"];
 const COMPARECIMENTO_OPTIONS = ["Pendente", "Compareceu", "Não Compareceu"];
 const VENDA_OPTIONS = ["Pendente", "Vendido", "Não Vendido", "Laudo", "Doença no Olho"];
 
-const CONSULTA_PAGAMENTO_OPTIONS: { value: string; label: string }[] = [
+const FORMA_PAGAMENTO_CONSULTA_OPTIONS = ["PIX", "Cartão", "Dinheiro"];
+
+const RECEBIMENTO_CONSULTA_OPTIONS: { value: string; label: string }[] = [
   { value: "consulta_paga", label: "Consulta paga" },
   { value: "pagamento_no_dia", label: "Pagamento no dia do exame" },
 ];
