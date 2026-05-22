@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -35,13 +38,19 @@ type Appointment = {
   nome: string;
   telefone: string;
   idade: string;
+  nao_vendido_motivo?: string | null;
+  fez_orcamento?: boolean | null;
+  orcamento_valor?: number | null;
+  orcamento_produtos?: string | null;
+  orcamento_observacao?: string | null;
 };
 
 type Profile = { user_id: string; full_name: string };
 
 const CONFIRMACAO_OPTIONS = ["Pendente", "Confirmado", "Cancelado"];
 const COMPARECIMENTO_OPTIONS = ["Pendente", "Compareceu", "Não Compareceu"];
-const VENDA_OPTIONS = ["Pendente", "Vendido", "Não Vendido"];
+const VENDA_OPTIONS = ["Pendente", "Vendido", "Não Vendido", "Laudo", "Doença no Olho"];
+
 
 const CANAIS = [
   "Ligação Leads", "Ligação Renovação", "Loja", "Rede Social", "Ação Adam",
@@ -92,6 +101,18 @@ export default function AppointmentsPage() {
   const [salePagamento, setSalePagamento] = useState("");
   const [saleSaving, setSaleSaving] = useState(false);
   const [saleEntrada, setSaleEntrada] = useState("");
+
+  // Não Vendido dialog
+  const [nvDialogOpen, setNvDialogOpen] = useState(false);
+  const [nvApptId, setNvApptId] = useState<string | null>(null);
+  const [nvMotivo, setNvMotivo] = useState("");
+  const [nvFezOrcamento, setNvFezOrcamento] = useState<"sim" | "nao" | null>(null);
+  const [nvValor, setNvValor] = useState("");
+  const [nvProdutos, setNvProdutos] = useState("");
+  const [nvObservacao, setNvObservacao] = useState("");
+  const [nvSaving, setNvSaving] = useState(false);
+
+
 
   const fetchAll = async () => {
     setLoading(true);
@@ -149,6 +170,17 @@ export default function AppointmentsPage() {
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
   const updateField = async (id: string, field: string, value: string) => {
+    if (field === "venda" && value === "Não Vendido") {
+      const appt = appointments.find(a => a.id === id);
+      setNvApptId(id);
+      setNvMotivo(appt?.nao_vendido_motivo || "");
+      setNvFezOrcamento(appt?.fez_orcamento ? "sim" : appt?.fez_orcamento === false && appt?.nao_vendido_motivo ? "nao" : null);
+      setNvValor(appt?.orcamento_valor != null ? String(appt.orcamento_valor) : "");
+      setNvProdutos(appt?.orcamento_produtos || "");
+      setNvObservacao(appt?.orcamento_observacao || "");
+      setNvDialogOpen(true);
+      return;
+    }
     const { error } = await supabase.from("crm_appointments").update({ [field]: value } as any).eq("id", id);
     if (error) toast.error("Erro ao atualizar");
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
@@ -159,6 +191,33 @@ export default function AppointmentsPage() {
       }
     }
   };
+
+  const handleNvSubmit = async () => {
+    if (!nvApptId) return;
+    if (!nvMotivo.trim()) { toast.error("Informe o motivo da não compra"); return; }
+    if (!nvFezOrcamento) { toast.error("Informe se foi feito orçamento"); return; }
+    if (nvFezOrcamento === "sim" && (!nvValor || !nvProdutos.trim())) {
+      toast.error("Preencha valor e produtos do orçamento");
+      return;
+    }
+    setNvSaving(true);
+    const payload: any = {
+      venda: "Não Vendido",
+      nao_vendido_motivo: nvMotivo.trim(),
+      fez_orcamento: nvFezOrcamento === "sim",
+      orcamento_valor: nvFezOrcamento === "sim" ? (parseFloat(nvValor) || 0) : null,
+      orcamento_produtos: nvFezOrcamento === "sim" ? nvProdutos.trim() : null,
+      orcamento_observacao: nvObservacao.trim() || null,
+    };
+    const { error } = await supabase.from("crm_appointments").update(payload).eq("id", nvApptId);
+    if (error) toast.error("Erro ao salvar");
+    else toast.success("Registrado!");
+    setNvSaving(false);
+    setNvDialogOpen(false);
+    setNvApptId(null);
+    fetchAll();
+  };
+
 
   const returnAppt = appointments.find(a => a.id === returnId);
   const isFromRenovacao = !!returnAppt?.renovacao_id;
@@ -542,6 +601,54 @@ export default function AppointmentsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Não Vendido Dialog */}
+      <Dialog open={nvDialogOpen} onOpenChange={(open) => { if (!open) { setNvDialogOpen(false); setNvApptId(null); } }}>
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Não Vendido — informações</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Por que o cliente não comprou? <span className="text-destructive">*</span></Label>
+              <Textarea value={nvMotivo} onChange={(e) => setNvMotivo(e.target.value)} rows={3} maxLength={1000} placeholder="Ex.: achou caro, vai pensar, etc." />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Fez orçamento para o cliente? <span className="text-destructive">*</span></Label>
+              <RadioGroup value={nvFezOrcamento ?? ""} onValueChange={(v) => setNvFezOrcamento(v as "sim" | "nao")} className="flex gap-4">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="sim" id="nv-orc-sim" />
+                  <Label htmlFor="nv-orc-sim" className="cursor-pointer">Sim</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="nao" id="nv-orc-nao" />
+                  <Label htmlFor="nv-orc-nao" className="cursor-pointer">Não</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            {nvFezOrcamento === "sim" && (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Valor do orçamento (R$) <span className="text-destructive">*</span></Label>
+                  <Input type="number" step="0.01" min="0" value={nvValor} onChange={(e) => setNvValor(e.target.value)} placeholder="0.00" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Produtos passados <span className="text-destructive">*</span></Label>
+                  <Textarea value={nvProdutos} onChange={(e) => setNvProdutos(e.target.value)} rows={3} maxLength={1000} placeholder="Liste os produtos do orçamento..." />
+                </div>
+              </>
+            )}
+            <div className="space-y-1.5">
+              <Label>Observação</Label>
+              <Textarea value={nvObservacao} onChange={(e) => setNvObservacao(e.target.value)} rows={3} maxLength={1000} placeholder="Observações adicionais..." />
+            </div>
+            <Button className="w-full" disabled={nvSaving} onClick={handleNvSubmit}>
+              {nvSaving ? "Salvando..." : "Salvar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
+

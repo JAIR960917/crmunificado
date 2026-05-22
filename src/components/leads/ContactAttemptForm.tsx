@@ -47,6 +47,7 @@ type Marcou = "sim" | "nao" | null;
 export default function ContactAttemptForm({ leadId, userId, leadStatus, leadSnapshot, onSaved }: Props) {
   const [atendeu, setAtendeu] = useState<Atendeu>(null);
   const [tratativa, setTratativa] = useState("");
+  const [tentativasObs, setTentativasObs] = useState("");
   const [marcou, setMarcou] = useState<Marcou>(null);
   const [dateStr, setDateStr] = useState("");
   const [time, setTime] = useState("09:00");
@@ -57,6 +58,7 @@ export default function ContactAttemptForm({ leadId, userId, leadStatus, leadSna
   const reset = () => {
     setAtendeu(null);
     setTratativa("");
+    setTentativasObs("");
     setMarcou(null);
     setDateStr("");
     setTime("09:00");
@@ -75,9 +77,12 @@ export default function ContactAttemptForm({ leadId, userId, leadStatus, leadSna
       } else if (marcou === "nao") {
         lines.push("❌ Consulta NÃO marcada");
       }
+    } else if (atendeu === "nao") {
+      if (tentativasObs.trim()) lines.push(`Tentativas de contato: ${tentativasObs.trim()}`);
     }
     return lines.join("\n");
   };
+
 
   const handleSave = async () => {
     if (!atendeu) {
@@ -88,6 +93,11 @@ export default function ContactAttemptForm({ leadId, userId, leadStatus, leadSna
       toast.error("Descreva a tratativa do contato");
       return;
     }
+    if (atendeu === "nao" && !tentativasObs.trim()) {
+      toast.error("Descreva como tentou contato com o cliente");
+      return;
+    }
+
     if (atendeu === "sim" && marcou === "sim") {
       if (!dateStr || !time || !formaPagamento || !canal) {
         toast.error("Preencha todos os campos do agendamento");
@@ -173,7 +183,23 @@ export default function ContactAttemptForm({ leadId, userId, leadStatus, leadSna
         </div>
       </div>
 
+      {/* Step 2a: If "não atendeu", ask for description of attempts */}
+      {atendeu === "nao" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Como tentou contato? <span className="text-destructive">*</span></Label>
+          <Textarea
+            value={tentativasObs}
+            onChange={(e) => setTentativasObs(e.target.value)}
+            rows={3}
+            placeholder="Descreva as formas que tentou contato (ligação, WhatsApp, etc)..."
+            className="text-sm min-h-[80px]"
+            maxLength={1000}
+          />
+        </div>
+      )}
+
       {/* Step 2: If answered, ask for tratativa + marcou */}
+
       {atendeu === "sim" && (
         <>
           <div className="space-y-1.5">

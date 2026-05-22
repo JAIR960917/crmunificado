@@ -94,12 +94,17 @@ export type Database = {
           comparecimento: string
           confirmacao: string
           created_at: string
+          fez_orcamento: boolean
           forma_pagamento: string
           forma_pagamento_venda: string
           id: string
           idade: string
           lead_id: string | null
+          nao_vendido_motivo: string | null
           nome: string
+          orcamento_observacao: string | null
+          orcamento_produtos: string | null
+          orcamento_valor: number | null
           previous_status: string
           renovacao_id: string | null
           resumo: string | null
@@ -118,12 +123,17 @@ export type Database = {
           comparecimento?: string
           confirmacao?: string
           created_at?: string
+          fez_orcamento?: boolean
           forma_pagamento?: string
           forma_pagamento_venda?: string
           id?: string
           idade?: string
           lead_id?: string | null
+          nao_vendido_motivo?: string | null
           nome?: string
+          orcamento_observacao?: string | null
+          orcamento_produtos?: string | null
+          orcamento_valor?: number | null
           previous_status?: string
           renovacao_id?: string | null
           resumo?: string | null
@@ -142,12 +152,17 @@ export type Database = {
           comparecimento?: string
           confirmacao?: string
           created_at?: string
+          fez_orcamento?: boolean
           forma_pagamento?: string
           forma_pagamento_venda?: string
           id?: string
           idade?: string
           lead_id?: string | null
+          nao_vendido_motivo?: string | null
           nome?: string
+          orcamento_observacao?: string | null
+          orcamento_produtos?: string | null
+          orcamento_valor?: number | null
           previous_status?: string
           renovacao_id?: string | null
           resumo?: string | null

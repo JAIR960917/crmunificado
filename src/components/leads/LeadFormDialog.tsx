@@ -926,11 +926,23 @@ export default function LeadFormDialog({
                     // do campo de captação no formulário.
                     try {
                       if (!leadId) return;
-                      const newStatus = resolveLeadStatusFromData(
+                      let newStatus = resolveLeadStatusFromData(
                         formData,
                         fields as any,
-                        { excludeFieldsMappingTo: [formStatus], fallbackStatus: formStatus },
+                        { excludeFieldsMappingTo: [formStatus], fallbackStatus: undefined },
                       );
+
+                      // Se nenhuma regra resolveu, move para a primeira coluna do funil
+                      // que não seja a atual (evita lead "preso" em Recomendação).
+                      if (!newStatus) {
+                        const { data: statuses } = await supabase
+                          .from("crm_statuses")
+                          .select("key, position")
+                          .order("position", { ascending: true });
+                        const first = (statuses ?? []).find((s: any) => s.key !== formStatus);
+                        if (first) newStatus = (first as any).key;
+                      }
+
                       if (newStatus && newStatus !== formStatus) {
                         const { error: upErr } = await supabase
                           .from("crm_leads")
@@ -945,6 +957,7 @@ export default function LeadFormDialog({
                       console.error("[tratativa] falha ao reavaliar status:", e);
                     }
                   }}
+
                 />
               </div>
             )}

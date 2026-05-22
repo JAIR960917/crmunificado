@@ -18,6 +18,8 @@ export const APP_PAGES: AppPage[] = [
   { key: "leads",                label: "Leads",                  path: "/" },
   { key: "novo_lead",            label: "Novo Lead",              path: "/novo-lead" },
   { key: "agendamentos",         label: "Agendamentos",           path: "/agendamentos" },
+  { key: "page_orcamentos",      label: "Orçamentos",             path: "/orcamentos" },
+
   { key: "clientes_ativos",      label: "Renovação",              path: "/clientes-ativos" },
   { key: "cobrancas",            label: "Cobranças",              path: "/cobrancas" },
   { key: "cobrancas_fluxo",      label: "Fluxo de Cobrança",      path: "/cobrancas/fluxo" },
