@@ -668,8 +668,37 @@ export default function AppointmentsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Produtos passados <span className="text-destructive">*</span></Label>
-                  <Textarea value={nvProdutos} onChange={(e) => setNvProdutos(e.target.value)} rows={3} maxLength={1000} placeholder="Liste os produtos do orçamento..." />
+                  <div className="space-y-2">
+                    {nvProdutosItens.map((item, idx) => (
+                      <div key={idx} className="flex gap-2 items-start">
+                        <Input
+                          placeholder="Nome do produto"
+                          value={item.nome}
+                          onChange={(e) => setNvProdutosItens(prev => prev.map((p, i) => i === idx ? { ...p, nome: e.target.value } : p))}
+                          className="flex-1"
+                        />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="Valor"
+                          value={item.valor}
+                          onChange={(e) => setNvProdutosItens(prev => prev.map((p, i) => i === idx ? { ...p, valor: e.target.value } : p))}
+                          className="w-28"
+                        />
+                        {nvProdutosItens.length > 1 && (
+                          <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setNvProdutosItens(prev => prev.filter((_, i) => i !== idx))}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                    <Button type="button" variant="outline" size="sm" onClick={() => setNvProdutosItens(prev => [...prev, { nome: "", valor: "" }])}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar produto
+                    </Button>
+                  </div>
                 </div>
+
               </>
             )}
             <div className="space-y-1.5">
