@@ -1,39 +1,36 @@
 /**
  * ============================================================================
- * AuthContext.tsx — Estado global de autenticação e papéis (roles)
+ * AuthContext.tsx — Estado global de autenticação, papéis e permissões
  * ============================================================================
- * O QUE FAZ:
- *   - Restaura a sessão do Supabase ao carregar a página
- *   - Escuta mudanças de auth (login, logout, refresh de token)
- *   - Busca os papéis do usuário na tabela `user_roles`
- *   - Expõe `useAuth()` com: session, user, roles, flags (isAdmin, ...), signOut
+ * - Restaura sessão Supabase + escuta mudanças de auth
+ * - Carrega papéis do usuário (enum app_role) E o role_key (função customizada)
+ * - Carrega o conjunto de páginas permitidas para a função do usuário
+ * - Expõe useAuth() com isAdmin/isGerente/isFinanceiro + canAccessPath()
  *
- * SEGURANÇA:
- *   - Papéis NÃO ficam no JWT — sempre lidos do banco com RLS
- *   - Lista de papéis: 'admin' | 'gerente' | 'vendedor' | 'financeiro'
- *
- * DETALHE IMPORTANTE (não remover sem entender):
- *   - Em TOKEN_REFRESHED com sessão null (falha temporária de rede), NÃO
- *     limpamos a sessão — isso evitava o CRM "deslogar sozinho" do usuário.
- *   - Só SIGNED_OUT explícito limpa o estado.
+ * REGRAS DE PERMISSÃO DE PÁGINA:
+ *   - admin (key='admin') sempre vê tudo
+ *   - demais: precisa ter a página marcada como allowed=true em role_page_permissions
+ *   - rotas sempre liberadas: /perfil, /notificacoes, /instalar, /login
  * ============================================================================
  */
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { ALWAYS_ALLOWED_PATHS, pageKeyForPath } from "@/lib/pagePermissions";
 
-/** Tipos de papel reconhecidos pelo sistema (espelha o enum app_role no DB). */
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
 
-/** Forma do contexto exposto via useAuth(). */
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   roles: AppRole[];
+  roleKey: string | null;          // chave da função (custom ou nome do enum)
   isAdmin: boolean;
   isGerente: boolean;
   isFinanceiro: boolean;
   loading: boolean;
+  /** true se a página atual (path) está permitida para a função do usuário. */
+  canAccessPath: (path: string) => boolean;
   signOut: () => Promise<void>;
 }
 
@@ -53,57 +50,51 @@ function syncPersistedAuthWithCurrentBackend() {
   const currentBackendUrl = runtimeConfig?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL || "";
   const currentPublishableKey =
     runtimeConfig?.supabasePublishableKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
-
   if (!currentBackendUrl) return;
-
   const currentBackendFingerprint = `${currentBackendUrl}::${currentPublishableKey}`;
-
   const previousBackendFingerprint = localStorage.getItem(BACKEND_STORAGE_KEY);
-
   if (previousBackendFingerprint && previousBackendFingerprint !== currentBackendFingerprint) {
     clearPersistedAuthTokens();
-
-    console.warn("[Auth] Backend alterado; sessão local anterior foi limpa para evitar token inválido.", {
-      previousBackendFingerprint,
-      currentBackendFingerprint,
-    });
   }
-
   localStorage.setItem(BACKEND_STORAGE_KEY, currentBackendFingerprint);
 }
 
-/**
- * Busca os papéis do usuário no banco.
- * Falhas retornam array vazio (usuário sem papel = sem permissão extra).
- * @param userId UUID do usuário autenticado
- */
-async function fetchRoles(userId: string): Promise<AppRole[]> {
+type RoleRow = { role: AppRole; role_key: string | null };
+
+async function fetchRoles(userId: string): Promise<RoleRow[]> {
   try {
     const { data } = await supabase
       .from("user_roles")
-      .select("role")
+      .select("role, role_key")
       .eq("user_id", userId);
-
-    return (data || []).map((r) => r.role as AppRole);
+    return (data || []) as RoleRow[];
   } catch {
     return [];
   }
 }
 
-/**
- * Provider que envolve a aplicação e fornece o contexto de autenticação.
- * Deve ficar DENTRO do BrowserRouter (App.tsx).
- */
+async function fetchAllowedPages(roleKey: string): Promise<Set<string>> {
+  try {
+    const { data } = await supabase
+      .from("role_page_permissions")
+      .select("page_key, allowed")
+      .eq("role_key", roleKey)
+      .eq("allowed", true);
+    return new Set((data || []).map((r: any) => r.page_key as string));
+  } catch {
+    return new Set();
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
+  const [roleKey, setRoleKey] = useState<string | null>(null);
+  const [allowedPages, setAllowedPages] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
-  // ----- Efeito 1: restaurar sessão + escutar eventos do Supabase Auth -----
   useEffect(() => {
-    let mounted = true; // evita setState após unmount
-
-    /** Lê a sessão persistida no localStorage (refresh da página). */
+    let mounted = true;
     const restoreSession = async () => {
       try {
         syncPersistedAuthWithCurrentBackend();
@@ -116,23 +107,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     void restoreSession();
 
-    // Listener de eventos de auth (login, logout, refresh de token...).
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted) return;
-
-      // INITIAL_SESSION já foi tratado por restoreSession() acima — ignoramos.
       if (event === "INITIAL_SESSION") return;
-
-      // Logout explícito ou usuário deletado: limpa tudo.
       if (event === "SIGNED_OUT") {
         setSession(null);
         setRoles([]);
+        setRoleKey(null);
+        setAllowedPages(new Set());
         setLoading(false);
         return;
       }
-
-      // Demais eventos (SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED) só atualizam
-      // se nextSession existe — evita "deslogar fantasma" em refresh falho.
       if (nextSession) {
         setSession(nextSession);
         setLoading(false);
@@ -145,49 +130,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // ----- Efeito 2: buscar papéis sempre que o usuário muda -----
   useEffect(() => {
     let mounted = true;
     const userId = session?.user?.id;
-
     if (!userId) {
-      setRoles([]);
+      setRoles([]); setRoleKey(null); setAllowedPages(new Set());
       return;
     }
 
-    setRoles([]); // reseta enquanto carrega (evita papéis "antigos" piscando)
+    setRoles([]);
+    setAllowedPages(new Set());
 
-    void fetchRoles(userId).then((nextRoles) => {
-      if (mounted) setRoles(nextRoles);
-    });
+    (async () => {
+      const rows = await fetchRoles(userId);
+      if (!mounted) return;
+      const enumRoles = rows.map((r) => r.role);
+      // role_key: usa o primeiro role_key não-nulo; senão usa o nome do enum
+      const primary = rows[0];
+      const key = primary?.role_key || primary?.role || null;
+      setRoles(enumRoles);
+      setRoleKey(key);
+      if (key) {
+        const pages = await fetchAllowedPages(key);
+        if (mounted) setAllowedPages(pages);
+      }
+    })();
 
     return () => { mounted = false; };
   }, [session?.user?.id]);
 
-  /** Faz logout no Supabase — o listener acima limpa o estado. */
-  const signOut = async () => {
-    await supabase.auth.signOut();
+  const signOut = async () => { await supabase.auth.signOut(); };
+
+  const canAccessPath = (path: string) => {
+    if (ALWAYS_ALLOWED_PATHS.has(path)) return true;
+    if (roleKey === "admin") return true;
+    const key = pageKeyForPath(path);
+    if (!key) return true; // rota não catalogada → não bloqueia (ex: dialogs)
+    return allowedPages.has(key);
   };
 
-  // Valor exposto a quem chama useAuth().
   const value: AuthContextType = {
     session,
     user: session?.user ?? null,
     roles,
+    roleKey,
     isAdmin: roles.includes("admin"),
     isGerente: roles.includes("gerente"),
     isFinanceiro: roles.includes("financeiro"),
     loading,
+    canAccessPath,
     signOut,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-/**
- * Hook para consumir o contexto de autenticação.
- * @throws se usado fora de <AuthProvider>
- */
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
