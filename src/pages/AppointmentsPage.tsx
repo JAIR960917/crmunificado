@@ -106,7 +106,7 @@ export default function AppointmentsPage() {
   const [formDate, setFormDate] = useState<Date | undefined>();
   const [formTime, setFormTime] = useState("09:00");
   const [formValor, setFormValor] = useState("");
-  const [formPagamento, setFormPagamento] = useState("");
+  const [formPagamentoConsulta, setFormPagamentoConsulta] = useState("");
   const [formCanal, setFormCanal] = useState("");
 
   // Delete
