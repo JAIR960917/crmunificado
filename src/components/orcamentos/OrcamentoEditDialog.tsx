@@ -181,10 +181,6 @@ export default function OrcamentoEditDialog({ open, onOpenChange, orcamento, onS
                 <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} />
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs">Observação</Label>
-                <Textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} rows={6} className="text-sm" />
-              </div>
             </div>
           </ScrollArea>
 
@@ -257,6 +253,13 @@ export default function OrcamentoEditDialog({ open, onOpenChange, orcamento, onS
                       </Button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {tab === "atividade" && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Observação</Label>
+                  <Textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} rows={6} className="text-sm" />
                 </div>
               )}
 
