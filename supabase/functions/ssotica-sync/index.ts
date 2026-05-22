@@ -1202,11 +1202,14 @@ async function syncContasReceber(
   }
 
   // ===== Pós-processamento: remover cards de clientes que não têm mais nenhuma parcela em atraso =====
-  // ATENÇÃO: pulamos este passo em modo backfill (chunk antigo) porque vimos só 12 meses
-  // específicos da API — não dá pra concluir que uma parcela "sumiu" baseado numa janela parcial.
-  // O delete só roda no sync incremental (que cobre 12 meses recentes + 60 dias futuros).
+  // Em modo backfill (chunk antigo) só removemos quando há EVIDÊNCIA DIRETA
+  // (parcela retornada como paga/cancelada/renegociada/baixada/estornada).
+  // A remoção por AUSÊNCIA na janela continua restrita ao sync incremental
+  // (que cobre 12 meses recentes + 60 dias futuros) porque o backfill só vê
+  // uma fatia de 12 meses e ausência ali não é evidência confiável de quitação.
   const clientesQuitadosSet = new Set<number>();
-  if (!isBackfillChunk) {
+  {
+
     const { data: cobrancasNoBanco } = await supabase
       .from("crm_cobrancas")
       .select("id, ssotica_parcela_id, ssotica_cliente_id, vencimento, data, assigned_to")
