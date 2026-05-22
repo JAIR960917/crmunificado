@@ -92,13 +92,10 @@ export default function UsersPage() {
   };
 
   const roleOptions = isAdmin
-    ? [
-        { value: "admin", label: "Admin" },
-        { value: "gerente", label: "Gerente" },
-        { value: "financeiro", label: "Financeiro" },
-        { value: "vendedor", label: "Vendedor" },
-      ]
-    : [{ value: "gerente", label: "Gerente" }, { value: "vendedor", label: "Vendedor" }];
+    ? roleDefs.map((r) => ({ value: r.key, label: r.label }))
+    : roleDefs
+        .filter((r) => r.base_role === "gerente" || r.base_role === "vendedor")
+        .map((r) => ({ value: r.key, label: r.label }));
 
   const toggleCompanyInList = (list: string[], setList: (v: string[]) => void, companyId: string) => {
     setList(list.includes(companyId) ? list.filter((id) => id !== companyId) : [...list, companyId]);
