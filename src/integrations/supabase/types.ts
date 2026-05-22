@@ -95,6 +95,7 @@ export type Database = {
           confirmacao: string
           consulta_a_receber: string | null
           consulta_a_receber_updated_at: string | null
+          consulta_paga: boolean | null
           created_at: string
           fez_orcamento: boolean
           forma_pagamento: string
@@ -128,6 +129,7 @@ export type Database = {
           confirmacao?: string
           consulta_a_receber?: string | null
           consulta_a_receber_updated_at?: string | null
+          consulta_paga?: boolean | null
           created_at?: string
           fez_orcamento?: boolean
           forma_pagamento?: string
@@ -161,6 +163,7 @@ export type Database = {
           confirmacao?: string
           consulta_a_receber?: string | null
           consulta_a_receber_updated_at?: string | null
+          consulta_paga?: boolean | null
           created_at?: string
           fez_orcamento?: boolean
           forma_pagamento?: string
