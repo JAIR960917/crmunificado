@@ -548,10 +548,10 @@ export default function AppointmentsPage() {
               <Input type="number" step="0.01" min="0" value={formValor} onChange={e => setFormValor(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
-              <Label>Forma de Pagamento <span className="text-destructive">*</span></Label>
-              <Select value={formPagamento} onValueChange={setFormPagamento}>
+              <Label>Forma de pagamento da consulta <span className="text-destructive">*</span></Label>
+              <Select value={formPagamentoConsulta} onValueChange={setFormPagamentoConsulta}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{FORMAS_PAGAMENTO.map(fp => <SelectItem key={fp} value={fp}>{fp}</SelectItem>)}</SelectContent>
+                <SelectContent>{CONSULTA_PAGAMENTO_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
@@ -561,9 +561,10 @@ export default function AppointmentsPage() {
                 <SelectContent>{CANAIS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <Button type="submit" className="w-full" disabled={saving || !formDate || !formPagamento || !formCanal || !formNome}>
+            <Button type="submit" className="w-full" disabled={saving || !formDate || !formPagamentoConsulta || !formCanal || !formNome}>
               {saving ? "Salvando..." : editingAppt ? "Atualizar" : "Criar Agendamento"}
             </Button>
+
           </form>
         </DialogContent>
       </Dialog>
