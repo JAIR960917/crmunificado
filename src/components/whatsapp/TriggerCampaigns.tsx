@@ -608,7 +608,11 @@ export default function TriggerCampaigns({ instances }: Props) {
                         ) : (
                           <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-500 border-blue-500/30">🌐 Global (todas as empresas)</Badge>
                         )}
-                        {c.instance_id && (
+                        {Array.isArray(c.instance_ids) && c.instance_ids.length >= 2 ? (
+                          <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
+                            <Smartphone className="h-3 w-3" /> 🔁 {c.instance_ids.map(getInstanceName).join(" ↔ ")}
+                          </Badge>
+                        ) : c.instance_id && (
                           <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
                             <Smartphone className="h-3 w-3" /> {getInstanceName(c.instance_id)}
                           </Badge>
