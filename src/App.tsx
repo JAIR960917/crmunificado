@@ -75,40 +75,21 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Rotas que o papel "financeiro" pode acessar.
- * Qualquer outra URL redireciona para /cobrancas.
- */
-const FINANCEIRO_ALLOWED = new Set([
-  "/cobrancas",
-  "/perfil",
-  "/notificacoes",
-  "/instalar",
-]);
-
-/**
- * Wrapper principal de rotas privadas: exige sessão + valida papel.
- * Regras:
- *   - financeiro (sem ser admin/gerente) → só vê páginas de FINANCEIRO_ALLOWED
- *   - /dashboard e /relatorio-vendas → exclusivos de admin
+ * Wrapper principal de rotas privadas: exige sessão + valida acesso à página
+ * com base nas permissões da função do usuário (tabela role_page_permissions).
  */
 function RoleGate({ children }: { children: React.ReactNode }) {
-  const { session, loading, isFinanceiro, isAdmin, isGerente } = useAuth();
+  const { session, loading, canAccessPath, roleKey } = useAuth();
   if (loading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>;
   if (!session) return <Navigate to="/login" replace />;
 
+  // Espera o roleKey carregar antes de decidir (evita redirect prematuro).
+  if (!roleKey) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>;
+
   const path = window.location.pathname;
-
-  // Financeiro puro: restrito a um conjunto pequeno de páginas.
-  if (isFinanceiro && !isAdmin && !isGerente) {
-    if (!FINANCEIRO_ALLOWED.has(path)) {
-      return <Navigate to="/cobrancas" replace />;
-    }
+  if (!canAccessPath(path)) {
+    return <Navigate to={canAccessPath("/") ? "/" : "/perfil"} replace />;
   }
-
-  // Dashboard e Relatório de Vendas só para admin.
-  if (path === "/dashboard" && !isAdmin) return <Navigate to="/" replace />;
-  if (path === "/relatorio-vendas" && !isAdmin) return <Navigate to="/" replace />;
-
   return <>{children}</>;
 }
 
