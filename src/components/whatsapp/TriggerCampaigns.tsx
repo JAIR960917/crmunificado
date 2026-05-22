@@ -92,6 +92,7 @@ export default function TriggerCampaigns({ instances }: Props) {
   const [moduleKey, setModuleKey] = useState<ModuleKey>("leads");
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
+  const [instanceIds, setInstanceIds] = useState<string[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("18:00");
