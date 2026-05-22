@@ -33,6 +33,7 @@ type Appointment = {
   forma_pagamento_consulta: string | null;
   consulta_a_receber: string | null;
   consulta_a_receber_updated_at: string | null;
+  consulta_paga: boolean | null;
   canal_agendamento: string;
   confirmacao: string;
   comparecimento: string;
