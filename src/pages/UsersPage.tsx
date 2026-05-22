@@ -211,10 +211,7 @@ export default function UsersPage() {
 
   const canManageUser = (p: Profile) => {
     if (p.user_id === user?.id) return false;
-    if (isAdmin) return true;
-    const targetRoles = getRoles(p.user_id);
-    if (targetRoles.includes("admin")) return false;
-    return true;
+    return isAdmin;
   };
 
   const getUserCompanyNames = (p: Profile) => {
