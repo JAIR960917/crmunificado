@@ -174,7 +174,6 @@ export default function OrcamentosPage() {
                         size="icon"
                         className="h-7 w-7"
                         title={o.lead_id ? "Editar lead e registrar tentativa de contato" : "Sem lead vinculado"}
-                        disabled={!o.lead_id}
                         onClick={() => handleEdit(o)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
