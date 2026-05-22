@@ -289,7 +289,7 @@ export default function TriggerCampaigns({ instances }: Props) {
         // Global: usa instância da empresa do lead (ou round-robin se Cobranças)
         const { data, error } = await supabase
           .from("whatsapp_trigger_campaigns")
-          .insert({ ...basePayload, company_id: null, instance_id: effectiveInstanceId, is_active: false })
+          .insert({ ...basePayload, company_id: null, is_active: false })
           .select("id")
           .single();
         if (error) throw error;
