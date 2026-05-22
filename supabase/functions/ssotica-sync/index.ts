@@ -227,6 +227,55 @@ function getDispatchConfig(req: Request): DispatchConfig {
   };
 }
 
+async function enqueueSsoticaSyncDispatch(
+  supabase: any,
+  dispatchConfig: DispatchConfig,
+  payload: Record<string, unknown>,
+  context: string,
+): Promise<"fetch" | "rpc"> {
+  if (dispatchConfig.url && dispatchConfig.auth) {
+    const dispatchPromise = fetch(dispatchConfig.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: dispatchConfig.auth,
+      },
+      body: JSON.stringify(payload),
+    }).then(async (response) => {
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`HTTP ${response.status}${body ? ` · ${body.slice(0, 300)}` : ""}`);
+      }
+    });
+
+    // @ts-ignore EdgeRuntime existe no runtime do ambiente self-hosted
+    if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any)?.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(dispatchPromise.catch((error) => {
+        console.error(`[ssotica-sync][dispatch][${context}] falha no fetch assíncrono:`, error);
+      }));
+      return "fetch";
+    }
+
+    await dispatchPromise;
+    return "fetch";
+  }
+
+  const integrationId = typeof payload.integration_id === "string" ? payload.integration_id : null;
+  if (!integrationId) {
+    throw new Error(`Configuração de dispatch ausente para ${context}`);
+  }
+
+  const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
+    _url: dispatchConfig.url,
+    _auth: dispatchConfig.auth,
+    _integration_id: integrationId,
+    _force_full: payload.force_full === true,
+  });
+  if (dispatchErr) throw dispatchErr;
+  return "rpc";
+}
+
 // Quebra um intervalo em janelas de até 30 dias (limite SSótica)
 function buildWindows(start: Date, end: Date): Array<{ start: string; end: string }> {
   const windows: Array<{ start: string; end: string }> = [];
@@ -855,6 +904,11 @@ async function syncContasReceber(
   const allowMissingAsPaid = !!manualRecentWindow;
   let removedByDirectEvidence = 0;
   let removedByAbsence = 0;
+  if (isBackfillChunk && processed === 0) {
+    console.log(
+      `[ssotica-sync][cobrancas] empresa=${integ.company_id} chunk histórico vazio (${ymd(overallStart)}→${ymd(overallEnd)}); seguindo para o próximo lote sem erro.`,
+    );
+  }
   console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_em_atraso=${parcelasPorCliente.size} backfill_chunk=${isBackfillChunk}${manualRecentWindow ? " manual_recent=true" : incrementalWindow ? ` slot=${incrementalWindow.slot + 1}/${INCREMENTAL_COBRANCAS_SLICES}` : ""}`);
 
   // Janela atual em formato YYYY-MM-DD para decidir quais parcelas existentes
@@ -2188,22 +2242,13 @@ async function runBackfillChunk(
 
     if (!finished && !wasPausedByUser) {
       try {
-        if (!dispatchConfig.url || !dispatchConfig.auth) {
-          console.warn(`[ssotica-sync][backfill] empresa=${integ.company_id} continuação automática não disparada agora; runner agendado continuará pelo backfill_next_run_at`);
-        } else {
-          const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
-            _url: dispatchConfig.url,
-            _auth: dispatchConfig.auth,
-            _integration_id: integ.id,
-            _force_full: false,
-          });
-
-          if (dispatchErr) {
-            console.error(`[ssotica-sync][backfill] empresa=${integ.company_id} erro ao enfileirar continuação automática:`, dispatchErr.message);
-          } else {
-            console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} próxima execução enfileirada via pg_net`);
-          }
-        }
+        const dispatchMethod = await enqueueSsoticaSyncDispatch(
+          supabase,
+          dispatchConfig,
+          { integration_id: integ.id, force_full: false },
+          `continuar backfill empresa=${integ.company_id}`,
+        );
+        console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} próxima execução enfileirada via ${dispatchMethod}`);
       } catch (dispatchError) {
         console.error(`[ssotica-sync][backfill] empresa=${integ.company_id} falha ao disparar continuação automática:`, dispatchError);
       }
@@ -2513,17 +2558,12 @@ Deno.serve(async (req) => {
         .select("*")
         .single();
       if (error || !integ) throw error ?? new Error("Integração não encontrada");
-      if (!dispatchConfig.url || !dispatchConfig.auth) {
-        throw new Error("Configuração de dispatch ausente para enfileirar o backfill");
-      }
-
-      const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
-        _url: dispatchConfig.url,
-        _auth: dispatchConfig.auth,
-        _integration_id: onlyIntegrationId,
-        _force_full: false,
-      });
-      if (dispatchErr) throw dispatchErr;
+      await enqueueSsoticaSyncDispatch(
+        supabase,
+        dispatchConfig,
+        { integration_id: onlyIntegrationId, force_full: false },
+        "enfileirar o backfill",
+      );
 
       const scopeLabel = scope === "renovacoes" ? "renovações" : scope === "cobrancas" ? "cobranças" : "completo";
       return new Response(JSON.stringify({
@@ -2606,17 +2646,12 @@ Deno.serve(async (req) => {
         });
       }
 
-      if (!dispatchConfig.url || !dispatchConfig.auth) {
-        throw new Error("Configuração de dispatch ausente para retomar o backfill");
-      }
-
-      const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
-        _url: dispatchConfig.url,
-        _auth: dispatchConfig.auth,
-        _integration_id: onlyIntegrationId,
-        _force_full: false,
-      });
-      if (dispatchErr) throw dispatchErr;
+      await enqueueSsoticaSyncDispatch(
+        supabase,
+        dispatchConfig,
+        { integration_id: onlyIntegrationId, force_full: false },
+        "retomar o backfill",
+      );
 
       return new Response(JSON.stringify({
         ok: true,
@@ -2682,28 +2717,12 @@ Deno.serve(async (req) => {
         })
         .eq("id", integ.id);
 
-      if (!dispatchConfig.url || !dispatchConfig.auth) {
-        throw new Error("Configuração de dispatch ausente para enfileirar a varredura de quitações");
-      }
-
-      const dispatchSweep = fetch(dispatchConfig.url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: dispatchConfig.auth,
-        },
-        body: JSON.stringify({ mode: "run_full_sweep", integration_id: onlyIntegrationId }),
-      }).catch((dispatchErr) => {
-        console.error("[ssotica-sync][full_sweep] falha ao disparar execução dedicada:", dispatchErr);
-      });
-
-      // @ts-ignore EdgeRuntime existe no runtime do ambiente self-hosted
-      if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any)?.waitUntil) {
-        // @ts-ignore
-        EdgeRuntime.waitUntil(dispatchSweep);
-      } else {
-        await dispatchSweep;
-      }
+      await enqueueSsoticaSyncDispatch(
+        supabase,
+        dispatchConfig,
+        { mode: "run_full_sweep", integration_id: onlyIntegrationId },
+        "enfileirar a varredura de quitações",
+      );
 
       return new Response(JSON.stringify({
         ok: true,
