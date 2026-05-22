@@ -51,7 +51,6 @@ Deno.serve(async (req) => {
 
   const { email, password, full_name, role, company_id, extra_company_ids } = await req.json();
 
-  const validRoles = ["admin", "vendedor", "gerente", "financeiro"];
   if (!email || !password || !role) {
     return new Response(JSON.stringify({ error: "Email, senha e papel são obrigatórios" }), {
       status: 400,
@@ -59,12 +58,21 @@ Deno.serve(async (req) => {
     });
   }
 
-  if (!validRoles.includes(role)) {
+  // Resolve role (pode ser key de função nativa ou customizada)
+  const { data: roleDef } = await supabaseAdmin
+    .from("role_definitions")
+    .select("key, base_role")
+    .eq("key", role)
+    .maybeSingle();
+
+  if (!roleDef) {
     return new Response(JSON.stringify({ error: "Papel inválido" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
+  const baseRole = roleDef.base_role as string;
+  const roleKey = roleDef.key as string;
 
   if (typeof email !== "string" || email.length > 254 || typeof password !== "string" || password.length < 8 || password.length > 128) {
     return new Response(JSON.stringify({ error: "Email ou senha inválidos" }), {
@@ -73,8 +81,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Gerentes cannot create admins or financeiros
-  if (isGerente && !isAdmin && (role === "admin" || role === "financeiro")) {
+  if (isGerente && !isAdmin && (baseRole === "admin" || baseRole === "financeiro")) {
     return new Response(JSON.stringify({ error: "Gerentes não podem criar administradores ou financeiros" }), {
       status: 403,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
