@@ -1,14 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
@@ -17,8 +13,11 @@ import { ptBR } from "date-fns/locale";
 import { Receipt, CalendarIcon, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type ProdutoItem = { nome: string; valor: string };
+
 type Orcamento = {
   id: string;
+  lead_id: string | null;
   scheduled_by: string;
   scheduled_datetime: string;
   nome: string;
@@ -29,6 +28,7 @@ type Orcamento = {
   fez_orcamento: boolean;
   orcamento_valor: number | null;
   orcamento_produtos: string | null;
+  orcamento_produtos_itens: ProdutoItem[] | null;
   orcamento_observacao: string | null;
 };
 
@@ -38,6 +38,7 @@ type ProfileFull = { user_id: string; full_name: string; company_id: string | nu
 
 export default function OrcamentosPage() {
   const { isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState<Orcamento[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [profilesFull, setProfilesFull] = useState<ProfileFull[]>([]);
@@ -45,14 +46,6 @@ export default function OrcamentosPage() {
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState<Date | undefined>();
   const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
-
-  const [editing, setEditing] = useState<Orcamento | null>(null);
-  const [motivo, setMotivo] = useState("");
-  const [fezOrc, setFezOrc] = useState<"sim" | "nao">("sim");
-  const [valor, setValor] = useState("");
-  const [produtos, setProdutos] = useState("");
-  const [observacao, setObservacao] = useState("");
-  const [saving, setSaving] = useState(false);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -84,30 +77,26 @@ export default function OrcamentosPage() {
 
   const getName = (uid: string) => profiles.find(p => p.user_id === uid)?.full_name || "—";
 
-  const openEdit = (o: Orcamento) => {
-    setEditing(o);
-    setMotivo(o.nao_vendido_motivo || "");
-    setFezOrc(o.fez_orcamento ? "sim" : "nao");
-    setValor(o.orcamento_valor != null ? String(o.orcamento_valor) : "");
-    setProdutos(o.orcamento_produtos || "");
-    setObservacao(o.orcamento_observacao || "");
+  const handleEdit = (o: Orcamento) => {
+    if (o.lead_id) {
+      navigate(`/?edit=${o.lead_id}`);
+    } else {
+      toast.info("Este orçamento não está vinculado a um lead.");
+    }
   };
 
-  const handleSave = async () => {
-    if (!editing) return;
-    setSaving(true);
-    const payload: any = {
-      nao_vendido_motivo: motivo.trim() || null,
-      fez_orcamento: fezOrc === "sim",
-      orcamento_valor: fezOrc === "sim" ? (parseFloat(valor) || 0) : null,
-      orcamento_produtos: fezOrc === "sim" ? produtos.trim() : null,
-      orcamento_observacao: observacao.trim() || null,
-    };
-    const { error } = await supabase.from("crm_appointments").update(payload).eq("id", editing.id);
-    if (error) toast.error("Erro ao salvar"); else toast.success("Atualizado!");
-    setSaving(false);
-    setEditing(null);
-    fetchAll();
+  const renderProdutos = (o: Orcamento) => {
+    const itens = Array.isArray(o.orcamento_produtos_itens) ? o.orcamento_produtos_itens : [];
+    if (itens.length > 0) {
+      return (
+        <div className="space-y-0.5 text-xs">
+          {itens.map((p, i) => (
+            <div key={i} className="truncate">{p.nome} — R$ {Number(p.valor || 0).toFixed(2)}</div>
+          ))}
+        </div>
+      );
+    }
+    return <span className="text-xs">{o.orcamento_produtos || "—"}</span>;
   };
 
   return (
@@ -176,11 +165,18 @@ export default function OrcamentosPage() {
                     <td className="px-3 py-2 whitespace-nowrap">{dt}</td>
                     <td className="px-3 py-2">{getName(o.scheduled_by)}</td>
                     <td className="px-3 py-2 whitespace-nowrap">R$ {Number(o.orcamento_valor || 0).toFixed(2)}</td>
-                    <td className="px-3 py-2 max-w-[220px] truncate" title={o.orcamento_produtos || ""}>{o.orcamento_produtos || "—"}</td>
+                    <td className="px-3 py-2 max-w-[240px]">{renderProdutos(o)}</td>
                     <td className="px-3 py-2 max-w-[200px] truncate" title={o.nao_vendido_motivo || ""}>{o.nao_vendido_motivo || "—"}</td>
                     <td className="px-3 py-2 max-w-[200px] truncate" title={o.orcamento_observacao || ""}>{o.orcamento_observacao || "—"}</td>
                     <td className="px-3 py-2">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(o)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title={o.lead_id ? "Editar lead e registrar tentativa de contato" : "Sem lead vinculado"}
+                        disabled={!o.lead_id}
+                        onClick={() => handleEdit(o)}
+                      >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     </td>
@@ -191,44 +187,6 @@ export default function OrcamentosPage() {
           </table>
         </div>
       )}
-
-      <Dialog open={!!editing} onOpenChange={(open) => { if (!open) setEditing(null); }}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Editar Orçamento</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Por que o cliente não comprou?</Label>
-              <Textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} maxLength={1000} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Fez orçamento?</Label>
-              <RadioGroup value={fezOrc} onValueChange={(v) => setFezOrc(v as "sim" | "nao")} className="flex gap-4">
-                <div className="flex items-center gap-2"><RadioGroupItem value="sim" id="o-sim" /><Label htmlFor="o-sim" className="cursor-pointer">Sim</Label></div>
-                <div className="flex items-center gap-2"><RadioGroupItem value="nao" id="o-nao" /><Label htmlFor="o-nao" className="cursor-pointer">Não</Label></div>
-              </RadioGroup>
-            </div>
-            {fezOrc === "sim" && (
-              <>
-                <div className="space-y-1.5">
-                  <Label>Valor do orçamento (R$)</Label>
-                  <Input type="number" step="0.01" min="0" value={valor} onChange={(e) => setValor(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Produtos passados</Label>
-                  <Textarea value={produtos} onChange={(e) => setProdutos(e.target.value)} rows={3} maxLength={1000} />
-                </div>
-              </>
-            )}
-            <div className="space-y-1.5">
-              <Label>Observação</Label>
-              <Textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} rows={3} maxLength={1000} />
-            </div>
-            <Button className="w-full" disabled={saving} onClick={handleSave}>
-              {saving ? "Salvando..." : "Salvar"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </AppLayout>
   );
 }
