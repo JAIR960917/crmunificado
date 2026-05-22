@@ -1744,6 +1744,7 @@ export type Database = {
           end_time: string
           id: string
           instance_id: string | null
+          instance_ids: Json
           is_active: boolean
           module: string
           name: string
@@ -1758,6 +1759,7 @@ export type Database = {
           end_time?: string
           id?: string
           instance_id?: string | null
+          instance_ids?: Json
           is_active?: boolean
           module?: string
           name: string
@@ -1772,6 +1774,7 @@ export type Database = {
           end_time?: string
           id?: string
           instance_id?: string | null
+          instance_ids?: Json
           is_active?: boolean
           module?: string
           name?: string

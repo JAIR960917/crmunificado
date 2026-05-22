@@ -605,10 +605,28 @@ serve(async (req) => {
         const cfg = MODULE_CONFIG[moduleKey];
         if (!cfg) continue;
 
-        // Cobranças: round-robin entre instâncias sem empresa vinculada.
+        // ----- Estratégia de sessão -----
+        // 1) Cobranças: round-robin global (instâncias sem empresa)
+        // 2) instance_ids (>=2): round-robin entre instâncias escolhidas na campanha (qualquer módulo)
+        // 3) Global sem empresa: sessão da empresa de cada lead
+        // 4) Padrão: instance_id único
         const isCobrancas = moduleKey === "cobrancas";
-        const fixedSession = (isGlobal || isCobrancas) ? null : await resolveSession(supabase, tc.instance_id);
-        if (!isGlobal && !isCobrancas && !fixedSession) continue;
+        const rawInstanceIds = Array.isArray((tc as any).instance_ids)
+          ? ((tc as any).instance_ids as any[]).filter((v) => typeof v === "string" && v)
+          : [];
+        const multiSessions: string[] = [];
+        if (rawInstanceIds.length >= 2) {
+          for (const iid of rawInstanceIds) {
+            const s = await resolveSession(supabase, iid);
+            if (s) multiSessions.push(s);
+          }
+        }
+        const useMultiRoundRobin = multiSessions.length >= 2;
+
+        const fixedSession = (isGlobal || isCobrancas || useMultiRoundRobin)
+          ? null
+          : await resolveSession(supabase, tc.instance_id);
+        if (!isGlobal && !isCobrancas && !useMultiRoundRobin && !fixedSession) continue;
         if (isCobrancas && cobrancasSessions.length === 0) {
           console.warn(`[trigger ${tc.id}] cobranças sem instâncias sem empresa vinculada — pulando`);
           continue;
@@ -620,7 +638,6 @@ serve(async (req) => {
         const statusKey = await resolveStatusKey(supabase, cfg.statusTable, tc.status_id);
         if (!statusKey) continue;
 
-        // Busca label da coluna para o log
         const { data: tcStatusRow } = await supabase
           .from(cfg.statusTable)
           .select("label, key")
@@ -645,7 +662,6 @@ serve(async (req) => {
           .select("lead_id, step_id, status, sent_at").eq("campaign_id", tc.id);
 
         const sendsByCard = new Map<string, Set<string>>();
-        // Última data de envio bem-sucedido por card (para regra "1 envio por entrada na coluna")
         const lastSentAtByCard = new Map<string, number>();
         for (const s of (existingSends || []) as any[]) {
           if (s.status === "sent") {
@@ -657,7 +673,6 @@ serve(async (req) => {
           }
         }
 
-        // Cards que tinham steps pendentes ANTES desta execução
         const totalSteps = steps.length;
         const cardsWithPendingBefore = cards.filter((c: any) => {
           const sent = sendsByCard.get(c.id) || new Set();
@@ -667,7 +682,7 @@ serve(async (req) => {
         let triggerSentNow = 0;
         let triggerErrorsNow = 0;
         let aborted = false;
-        // Round-robin: começa a partir do número de envios já feitos (qualquer step)
+        // Round-robin: começa do total de envios bem-sucedidos já feitos (alterna entre execuções)
         let rrIndex = 0;
         for (const s of (existingSends || []) as any[]) {
           if (s.status === "sent") rrIndex++;
@@ -684,11 +699,37 @@ serve(async (req) => {
           const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
           if (!phone) continue;
 
+          // ----- LOCK por entrada na coluna (todos os módulos) -----
+          // Se já houve envio desta campanha enquanto o card está nesta coluna,
+          // NÃO envia de novo, independente do tempo. O lock só é liberado
+          // quando o card sair e voltar para a coluna (ver leitura do data abaixo).
+          if (
+            data.gatilho_campaign_id === tc.id &&
+            data.gatilho_status_key === statusKey &&
+            data.gatilho_enviado_em
+          ) {
+            continue;
+          }
+
+          // Reforço: se já existe envio bem-sucedido registrado para esta campanha
+          // e este card, pula até que o card mude de coluna (o lock acima é a fonte
+          // primária; este é um fallback para campanhas antigas sem o lock no data).
+          if ((sendsByCard.get(card.id)?.size || 0) > 0) {
+            // Sem status_entered_at confiável, considerar já enviado nesta entrada.
+            const lastSentTs = lastSentAtByCard.get(card.id) || 0;
+            const enteredAt = resolveCardEnteredAt(card);
+            if (lastSentTs >= enteredAt.getTime()) continue;
+            // Caso updated_at seja maior (card foi movido para outra coluna e voltou)
+            // mas só liberamos se o status_entered_status_key bater com o atual.
+            if (data.status_entered_status_key !== statusKey) continue;
+          }
+
           // Resolve sessão por card
           let session = fixedSession;
           if (isCobrancas) {
             session = pickRoundRobinSession(rrIndex);
-            rrIndex++;
+          } else if (useMultiRoundRobin) {
+            session = multiSessions[rrIndex % multiSessions.length];
           } else if (isGlobal) {
             const cardCompanyId = resolveCardCompanyId(card, userToCompany);
             if (!cardCompanyId) {
@@ -706,12 +747,6 @@ serve(async (req) => {
           const enteredAt = resolveCardEnteredAt(card);
           const now = new Date();
           const daysSinceEntry = Math.floor((now.getTime() - enteredAt.getTime()) / (1000 * 60 * 60 * 24));
-
-          // Regra: 1 gatilho por entrada na coluna.
-          // Se já houve envio bem-sucedido APÓS o card entrar na coluna atual,
-          // não envia novamente até que o card saia e volte (status_entered_at muda).
-          const lastSentTs = lastSentAtByCard.get(card.id) || 0;
-          if (lastSentTs >= enteredAt.getTime()) continue;
 
           for (const step of steps) {
             if (sentStepIds.has(step.id)) continue;
@@ -731,21 +766,24 @@ serve(async (req) => {
                 await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: sentAt });
                 totalSent++;
                 triggerSentNow++;
+                // avança round-robin (cobrancas / instance_ids) somente após envio bem-sucedido
+                rrIndex++;
+                // Grava lock "gatilho enviado nesta entrada na coluna" em TODOS os módulos
+                await supabase
+                  .from(cfg.dataTable)
+                  .update({
+                    data: {
+                      ...data,
+                      status_entered_at: data.status_entered_at ?? sentAt,
+                      status_entered_status_key: data.status_entered_status_key ?? statusKey,
+                      gatilho_enviado_em: sentAt,
+                      gatilho_status_key: statusKey,
+                      gatilho_campaign_id: tc.id,
+                      gatilho_campaign_name: tc.name,
+                    },
+                  })
+                  .eq("id", card.id);
                 if (isCobrancas) {
-                  await supabase
-                    .from("crm_cobrancas")
-                    .update({
-                      data: {
-                        ...data,
-                        status_entered_at: data.status_entered_at ?? sentAt,
-                        status_entered_status_key: data.status_entered_status_key ?? statusKey,
-                        gatilho_enviado_em: sentAt,
-                        gatilho_status_key: statusKey,
-                        gatilho_campaign_id: tc.id,
-                        gatilho_campaign_name: tc.name,
-                      },
-                    })
-                    .eq("id", card.id);
                   await supabase.from("crm_cobranca_flow_events").insert({
                     cobranca_id: card.id,
                     status_id: tc.status_id,

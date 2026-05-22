@@ -42,6 +42,7 @@ type TriggerCampaign = {
   module: ModuleKey;
   status_id: string;
   instance_id: string | null;
+  instance_ids?: string[] | null;
   company_id: string | null;
   is_active: boolean;
   start_time: string;
@@ -91,6 +92,7 @@ export default function TriggerCampaigns({ instances }: Props) {
   const [moduleKey, setModuleKey] = useState<ModuleKey>("leads");
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
+  const [instanceIds, setInstanceIds] = useState<string[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("18:00");
@@ -160,6 +162,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     setModuleKey("leads");
     setStatusId("");
     setInstanceId("");
+    setInstanceIds([]);
     setCompanyId("");
     setStartTime("08:00");
     setEndTime("18:00");
@@ -173,6 +176,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     setModuleKey((c.module || "leads") as ModuleKey);
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || "");
+    setInstanceIds(Array.isArray(c.instance_ids) ? (c.instance_ids as string[]) : []);
     setCompanyId(c.company_id || "__GLOBAL__");
     setStartTime((c.start_time || "08:00").slice(0, 5));
     setEndTime((c.end_time || "18:00").slice(0, 5));
@@ -222,6 +226,8 @@ export default function TriggerCampaigns({ instances }: Props) {
     try {
       // Para Cobranças, o backend faz round-robin entre instâncias sem empresa vinculada.
       const effectiveInstanceId = moduleKey === "cobrancas" ? null : (instanceId || null);
+      // Round-robin entre instâncias selecionadas (qualquer módulo, exceto cobrancas que já usa o global).
+      const effectiveInstanceIds = moduleKey === "cobrancas" ? [] : instanceIds.filter(Boolean);
 
       const basePayload: any = {
         name: name.trim(),
@@ -230,7 +236,8 @@ export default function TriggerCampaigns({ instances }: Props) {
         start_time: startTime,
         end_time: endTime,
         created_by: user.id,
-        instance_id: effectiveInstanceId,
+        instance_id: effectiveInstanceIds.length >= 2 ? null : effectiveInstanceId,
+        instance_ids: effectiveInstanceIds,
       };
 
       const buildSteps = (campaignId: string) =>
@@ -282,7 +289,7 @@ export default function TriggerCampaigns({ instances }: Props) {
         // Global: usa instância da empresa do lead (ou round-robin se Cobranças)
         const { data, error } = await supabase
           .from("whatsapp_trigger_campaigns")
-          .insert({ ...basePayload, company_id: null, instance_id: effectiveInstanceId, is_active: false })
+          .insert({ ...basePayload, company_id: null, is_active: false })
           .select("id")
           .single();
         if (error) throw error;
@@ -443,28 +450,45 @@ export default function TriggerCampaigns({ instances }: Props) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Instância WhatsApp</Label>
+              <Label>Instância(s) WhatsApp</Label>
               {moduleKey === "cobrancas" ? (
                 <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-primary/40 text-xs text-muted-foreground">
                   🔁 Cobranças intercala envios entre instâncias sem empresa vinculada
                 </div>
-              ) : companyId === "__GLOBAL__" ? (
-                <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-border text-xs text-muted-foreground">
-                  🌐 Será usada a instância da empresa de cada lead
-                </div>
               ) : (
-                <Select value={instanceId} onValueChange={setInstanceId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableInstances.map((i) => (
-                      <SelectItem key={i.id} value={i.id}>
-                        {i.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <>
+                  <div className="rounded-md border bg-background p-2 max-h-40 overflow-y-auto space-y-1">
+                    {availableInstances.length === 0 ? (
+                      <p className="text-xs text-muted-foreground p-1">Nenhuma instância disponível</p>
+                    ) : (
+                      availableInstances.map((i) => {
+                        const checked = instanceIds.includes(i.id) || (instanceIds.length === 0 && instanceId === i.id);
+                        return (
+                          <label key={i.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = new Set(instanceIds.length === 0 && instanceId ? [instanceId] : instanceIds);
+                                if (e.target.checked) next.add(i.id); else next.delete(i.id);
+                                const arr = Array.from(next);
+                                setInstanceIds(arr);
+                                setInstanceId(arr.length === 1 ? arr[0] : "");
+                              }}
+                            />
+                            <Smartphone className="h-3 w-3 text-muted-foreground" />
+                            <span>{i.name}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {companyId === "__GLOBAL__"
+                      ? "🌐 Se nenhuma marcada, usa a instância da empresa de cada lead."
+                      : "Marque 2 ou mais para intercalar (alternar) os envios entre elas."}
+                  </p>
+                </>
               )}
             </div>
             <div className="space-y-2">
@@ -584,7 +608,11 @@ export default function TriggerCampaigns({ instances }: Props) {
                         ) : (
                           <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-500 border-blue-500/30">🌐 Global (todas as empresas)</Badge>
                         )}
-                        {c.instance_id && (
+                        {Array.isArray(c.instance_ids) && c.instance_ids.length >= 2 ? (
+                          <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
+                            <Smartphone className="h-3 w-3" /> 🔁 {c.instance_ids.map(getInstanceName).join(" ↔ ")}
+                          </Badge>
+                        ) : c.instance_id && (
                           <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
                             <Smartphone className="h-3 w-3" /> {getInstanceName(c.instance_id)}
                           </Badge>
