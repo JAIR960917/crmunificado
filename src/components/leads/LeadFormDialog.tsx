@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { resolveLeadIdentity } from "@/lib/leadIdentity";
 import ContactAttemptForm from "./ContactAttemptForm";
 import { recordCardOpen } from "@/lib/cardOpens";
+import { resolveLeadStatusFromData } from "@/lib/resolveLeadStatus";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null; company_id?: string | null };
 type Company = { id: string; name: string };
@@ -914,10 +915,35 @@ export default function LeadFormDialog({
                       idade: identity.idade || "",
                     };
                   })()}
-                  onSaved={() => {
+                  onSaved={async () => {
                     setTratativaRegistrada(true);
                     fetchNotes();
                     onActivityChange?.();
+
+                    // Após registrar uma tratativa, se o lead está em uma coluna
+                    // definida pela "Forma de captação" (ex.: Recomendação), reavalia
+                    // o status usando as demais regras do funil — sem alterar o valor
+                    // do campo de captação no formulário.
+                    try {
+                      if (!leadId) return;
+                      const newStatus = resolveLeadStatusFromData(
+                        formData,
+                        fields as any,
+                        { excludeFieldsMappingTo: [formStatus], fallbackStatus: formStatus },
+                      );
+                      if (newStatus && newStatus !== formStatus) {
+                        const { error: upErr } = await supabase
+                          .from("crm_leads")
+                          .update({ status: newStatus })
+                          .eq("id", leadId);
+                        if (!upErr) {
+                          setFormStatus(newStatus);
+                          onActivityChange?.();
+                        }
+                      }
+                    } catch (e) {
+                      console.error("[tratativa] falha ao reavaliar status:", e);
+                    }
                   }}
                 />
               </div>
