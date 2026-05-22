@@ -256,6 +256,13 @@ export default function OrcamentoEditDialog({ open, onOpenChange, orcamento, onS
                 </div>
               )}
 
+              {tab === "atividade" && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Observação</Label>
+                  <Textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} rows={6} className="text-sm" />
+                </div>
+              )}
+
               {tab === "comentario" && (
                 <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
                   <Label className="text-xs">Adicionar comentário</Label>
