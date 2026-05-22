@@ -281,6 +281,7 @@ export default function UsersPage() {
             {isGerente && !isAdmin ? "Usuários da sua empresa" : "Gerencie os usuários do sistema"} — {profiles.length} usuário{profiles.length !== 1 ? "s" : ""} cadastrado{profiles.length !== 1 ? "s" : ""}
           </p>
         </div>
+        {isAdmin && (
         <Dialog open={openCreate} onOpenChange={setOpenCreate}>
           <DialogTrigger asChild>
             <Button size="sm" className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" />Novo Usuário</Button>
