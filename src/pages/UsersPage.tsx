@@ -15,8 +15,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 type Company = { id: string; name: string };
 type Profile = { id: string; user_id: string; full_name: string; email: string; company_id: string | null };
-type UserRole = { user_id: string; role: string };
+type UserRole = { user_id: string; role: string; role_key: string | null };
 type ManagerCompany = { user_id: string; company_id: string };
+type RoleDef = { key: string; label: string; is_system: boolean; base_role: string };
 
 export default function UsersPage() {
   const { isAdmin, isGerente, user } = useAuth();
