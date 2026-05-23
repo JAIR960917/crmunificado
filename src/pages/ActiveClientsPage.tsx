@@ -602,10 +602,16 @@ export default function ActiveClientsPage() {
       const aPrio = renovacaoTaskPriority.get(a.id) || 0;
       const bPrio = renovacaoTaskPriority.get(b.id) || 0;
       if (aPrio !== bPrio) return bPrio - aPrio;
-      // 2) When no pending task, cards with recent interaction go to the END
-      const aHasRecent = renovacoesWithRecentActivity.has(a.id) ? 1 : 0;
-      const bHasRecent = renovacoesWithRecentActivity.has(b.id) ? 1 : 0;
-      return aHasRecent - bHasRecent;
+      // 2) When no pending task, cards with recent interaction (note OR tratativa registrada) go to the END
+      const aTratativa = (a.data as any)?.tratativa_em ? 1 : 0;
+      const bTratativa = (b.data as any)?.tratativa_em ? 1 : 0;
+      const aHasRecent = (renovacoesWithRecentActivity.has(a.id) || aTratativa) ? 1 : 0;
+      const bHasRecent = (renovacoesWithRecentActivity.has(b.id) || bTratativa) ? 1 : 0;
+      if (aHasRecent !== bHasRecent) return aHasRecent - bHasRecent;
+      // 3) Among recently-touched, the most recently tratada vai mais ao fim
+      const aT = (a.data as any)?.tratativa_em ? new Date((a.data as any).tratativa_em).getTime() : 0;
+      const bT = (b.data as any)?.tratativa_em ? new Date((b.data as any).tratativa_em).getTime() : 0;
+      return aT - bT;
     });
   }, [renovacaoTaskPriority, renovacoesWithRecentActivity]);
 
