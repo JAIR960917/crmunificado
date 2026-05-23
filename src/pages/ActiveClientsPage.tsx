@@ -401,25 +401,37 @@ export default function ActiveClientsPage() {
       const found = paginatedColumns[k]?.items.find((it) => it.id === deleteConfirmId);
       if (found) { snapshot = found as Renovacao; break; }
     }
-    const { error } = await supabase.from("crm_renovacoes").delete().eq("id", deleteConfirmId);
+    // Soft-delete: move para coluna "Excluídos"
+    const { error } = await supabase.from("crm_renovacoes").update({
+      status: "excluidos",
+      previous_status_before_exclude: snapshot?.status ?? null,
+      previous_assigned_before_exclude: snapshot?.assigned_to ?? null,
+      excluded_at: new Date().toISOString(),
+      excluded_by: user?.id ?? null,
+    } as any).eq("id", deleteConfirmId);
     if (error) toast.error("Erro ao excluir");
     else {
-      toast.success("Renovação excluída");
-      const statusLabel = statuses.find((s) => s.key === snapshot?.status)?.label ?? snapshot?.status ?? null;
+      const myName = profiles.find((p) => p.user_id === user?.id)?.full_name || "usuário";
+      await supabase.from("crm_renovacao_notes").insert({
+        renovacao_id: deleteConfirmId,
+        user_id: user!.id,
+        content: `🗑️ Card excluído por ${myName}`,
+      } as any);
+      toast.success("Renovação movida para Excluídos");
       await logTransition({
         cliente_nome: String((snapshot?.data as any)?.nome ?? "Cliente"),
         from_module: "renovacao",
         to_module: "none",
         to_status_key: snapshot?.status ?? null,
-        to_status_label: statusLabel,
+        to_status_label: statuses.find((s) => s.key === snapshot?.status)?.label ?? null,
         source_record_id: deleteConfirmId,
         ssotica_cliente_id: snapshot?.ssotica_cliente_id ?? null,
         company_id: snapshot?.ssotica_company_id ?? null,
         triggered_by: user?.id ?? null,
         trigger_source: "manual",
       });
+      setRefreshKey((k) => k + 1);
     }
-    removeItem(deleteConfirmId);
     setDeleteConfirmId(null);
   };
 

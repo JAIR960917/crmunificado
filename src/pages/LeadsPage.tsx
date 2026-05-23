@@ -503,9 +503,27 @@ export default function LeadsPage() {
 
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
-    const { error } = await supabase.from("crm_leads").delete().eq("id", deleteConfirmId);
-    if (error) toast.error("Erro ao remover");
-    else { toast.success("Lead removido"); fetchAll(); }
+    // Soft-delete: move para coluna "Excluídos" com comentário de quem excluiu
+    const lead = Object.values(paginatedColumns)
+      .flatMap((c) => c.items)
+      .find((l) => l.id === deleteConfirmId);
+    const { error } = await supabase.from("crm_leads").update({
+      status: "excluidos",
+      previous_status_before_exclude: lead?.status ?? null,
+      previous_assigned_before_exclude: lead?.assigned_to ?? null,
+      excluded_at: new Date().toISOString(),
+      excluded_by: user?.id ?? null,
+    } as any).eq("id", deleteConfirmId);
+    if (error) toast.error("Erro ao excluir");
+    else {
+      await supabase.from("crm_lead_notes").insert({
+        lead_id: deleteConfirmId,
+        user_id: user!.id,
+        content: `🗑️ Card excluído por ${currentUserName || "usuário"}`,
+      });
+      toast.success("Lead movido para Excluídos");
+      fetchAll();
+    }
     setDeleteConfirmId(null);
   };
 
