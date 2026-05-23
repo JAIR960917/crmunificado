@@ -50,6 +50,7 @@ type Appointment = {
   orcamento_produtos?: string | null;
   orcamento_produtos_itens?: ProdutoItem[] | null;
   orcamento_observacao?: string | null;
+  forma_pagamento_oculos?: string | null;
 };
 
 type Profile = { user_id: string; full_name: string };
@@ -57,6 +58,7 @@ type Profile = { user_id: string; full_name: string };
 const CONFIRMACAO_OPTIONS = ["Pendente", "Confirmado", "Cancelado"];
 const COMPARECIMENTO_OPTIONS = ["Pendente", "Compareceu", "Não Compareceu"];
 const VENDA_OPTIONS = ["Pendente", "Vendido", "Gerou Orçamento", "Não Gerou Orçamento", "Laudo", "Doença no Olho"];
+const FORMA_PAGAMENTO_OCULOS_OPTIONS = ["Cartão", "Pix", "Crediário Cora"];
 
 const FORMA_PAGAMENTO_CONSULTA_OPTIONS = ["PIX", "Cartão", "Dinheiro"];
 
@@ -437,6 +439,7 @@ export default function AppointmentsPage() {
                 <th className="text-left px-3 py-2.5 font-medium">Confirmação</th>
                 <th className="text-left px-3 py-2.5 font-medium">Comparecimento</th>
                 <th className="text-left px-3 py-2.5 font-medium">Venda</th>
+                <th className="text-left px-3 py-2.5 font-medium">Forma de Pagamento do Óculos</th>
                 <th className="text-left px-3 py-2.5 font-medium">Resumo</th>
                 <th className="text-left px-3 py-2.5 font-medium">Ações</th>
               </tr>
@@ -502,6 +505,12 @@ export default function AppointmentsPage() {
                       <Select value={appt.venda} onValueChange={(v) => updateField(appt.id, "venda", v)}>
                         <SelectTrigger className="h-8 text-xs w-[120px]"><SelectValue /></SelectTrigger>
                         <SelectContent>{VENDA_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Select value={appt.forma_pagamento_oculos || ""} onValueChange={(v) => updateField(appt.id, "forma_pagamento_oculos", v)}>
+                        <SelectTrigger className="h-8 text-xs w-[160px]"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                        <SelectContent>{FORMA_PAGAMENTO_OCULOS_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                       </Select>
                     </td>
                     <td className="px-3 py-2">
