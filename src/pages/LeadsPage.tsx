@@ -35,7 +35,7 @@ type Lead = {
 };
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null; company_id?: string | null };
 type CrmStatus = {
-  id: string; key: string; label: string; position: number; color: string;
+  id: string; key: string; label: string; position: number; color: string; is_system_excluded?: boolean;
 };
 type Company = { id: string; name: string };
 type FormFieldInfo = { id: string; label: string; position?: number; is_name_field: boolean; is_phone_field: boolean; show_on_card?: boolean; status_mapping?: Record<string, string> | null; date_status_ranges?: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null };
