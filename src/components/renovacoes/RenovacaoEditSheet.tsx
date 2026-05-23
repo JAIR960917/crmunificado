@@ -107,6 +107,7 @@ export default function RenovacaoEditSheet(props: Props) {
 
   // Mandatory tratativa: enforced for non-admin users
   const [tratativaRegistrada, setTratativaRegistrada] = useState(false);
+  const [contactDirty, setContactDirty] = useState(false);
   const requiresTratativa = isEditing && !isAdmin;
 
   const fetchTimeline = async () => {
