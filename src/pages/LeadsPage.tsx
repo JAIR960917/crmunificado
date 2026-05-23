@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
+import { useVisibleStatusKeys } from "@/hooks/use-visible-status-keys";
 import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
 
 type CrmColumn = {
