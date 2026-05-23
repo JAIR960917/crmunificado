@@ -294,6 +294,10 @@ export default function CobrancaEditSheet(props: Props) {
   const canCloseOrSave = !requiresContactRegistration || contactRegisteredInSession;
 
   const handleSheetOpenChange = (v: boolean) => {
+    if (!v && contactDirty) {
+      toast.error("Você iniciou uma tratativa. Clique em \"Salvar contato\" para concluir antes de fechar.");
+      return;
+    }
     if (!v && !canCloseOrSave) {
       toast.error("Registre uma tentativa de contato antes de fechar este card.");
       return;
