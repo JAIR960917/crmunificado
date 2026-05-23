@@ -370,16 +370,29 @@ export default function LeadsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.get("edit")]);
 
-  const resolveStatus = (data: Record<string, any>, excludeStatuses: string[] = []): string => {
+  const resolveStatus = (
+    data: Record<string, any>,
+    excludeStatuses: string[] = [],
+    options: { skipStatusMapping?: boolean } = {},
+  ): string => {
     const defaultStatus = statuses.length > 0 ? statuses[0].key : formStatus;
     const excludeSet = new Set(excludeStatuses);
 
     // Reúne TODAS as perguntas com regra (data ou opção) e processa por ordem do formulário.
     const ruleFields = formFields
-      .filter(f =>
-        f.date_status_ranges ||
-        (f.status_mapping && Object.keys(f.status_mapping).length > 0)
-      )
+      .filter(f => {
+        // Em modo edição, ignoramos completamente os mapeamentos por opção
+        // (ex.: "Forma de captação" → Recomendação). Esses mapeamentos só
+        // valem na criação do lead — depois disso o lead deve seguir o fluxo
+        // normal e não voltar para a coluna original.
+        if (options.skipStatusMapping && f.status_mapping && Object.keys(f.status_mapping).length > 0) {
+          return !!f.date_status_ranges;
+        }
+        return (
+          f.date_status_ranges ||
+          (f.status_mapping && Object.keys(f.status_mapping).length > 0)
+        );
+      })
       // Pula campos cujo status_mapping aponta para a coluna atual — assim um lead
       // que entrou em "Recomendação" via "Forma de captação" não fica preso lá
       // depois que outras regras (ex.: data do último exame) já se aplicam.
