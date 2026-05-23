@@ -144,7 +144,12 @@ export default function ActiveClientsPage() {
   const [schedulingItem, setSchedulingItem] = useState<Renovacao | null>(null);
   const [scheduleSaving, setScheduleSaving] = useState(false);
 
-  const statusKeys = useMemo(() => statuses.map((s) => s.key), [statuses]);
+  const { isVisible: isStatusVisible } = useVisibleStatusKeys("renovacao");
+  const visibleStatuses = useMemo(
+    () => statuses.filter((s) => isStatusVisible(s.key, s.is_system_excluded)),
+    [statuses, isStatusVisible],
+  );
+  const statusKeys = useMemo(() => visibleStatuses.map((s) => s.key), [visibleStatuses]);
 
   // Filter applied to every column query (server-side)
   const columnFilter = useMemo(() => ({
