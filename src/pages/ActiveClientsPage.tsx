@@ -847,7 +847,7 @@ export default function ActiveClientsPage() {
 
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
-          {statuses.map(status => {
+          {visibleStatuses.map(status => {
             const { items, total, hasMore, loading } = getByStatus(status.key);
             const colors = colorMap[status.color] || colorMap.blue;
             return (
