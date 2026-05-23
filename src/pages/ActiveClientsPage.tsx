@@ -282,8 +282,8 @@ export default function ActiveClientsPage() {
   useEffect(() => { refreshUnassignedCount(); }, [refreshUnassignedCount, refreshKey]);
 
   useEffect(() => {
-    if (statuses.length > 0 && !mobileTab) setMobileTab(statuses[0].key);
-  }, [statuses, mobileTab]);
+    if (visibleStatuses.length > 0 && !mobileTab) setMobileTab(visibleStatuses[0].key);
+  }, [visibleStatuses, mobileTab]);
 
   const statusOptions = statuses.map(s => s.key);
   const vendedorIds = useMemo(
