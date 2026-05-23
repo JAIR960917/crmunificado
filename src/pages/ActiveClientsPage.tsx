@@ -257,9 +257,21 @@ export default function ActiveClientsPage() {
       const allowed = Array.from(ids);
       setAllowedCompanyIds(allowed);
       setCompanies((comps || []).filter((c) => allowed.includes(c.id)));
+
+      // Restrict assignable users to those whose primary company belongs to the gerente's allowed companies
+      if (allowed.length > 0) {
+        const { data: companyProfiles } = await supabase
+          .from("profiles")
+          .select("user_id, company_id")
+          .in("company_id", allowed);
+        setAssignableUserIds(new Set((companyProfiles || []).map((p: any) => p.user_id)));
+      } else {
+        setAssignableUserIds(new Set());
+      }
     } else {
       setAllowedCompanyIds(null);
       setCompanies(comps || []);
+      setAssignableUserIds(null);
     }
   }, [isGerente, isAdmin, user?.id]);
 
