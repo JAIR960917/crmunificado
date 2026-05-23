@@ -109,7 +109,13 @@ export default function LeadsPage() {
   }, []);
 
   // -------- Paginated columns (50 leads/coluna sob demanda) --------
-  const statusKeys = useMemo(() => statuses.map(s => s.key), [statuses]);
+  const { isVisible: isStatusVisible } = useVisibleStatusKeys("leads");
+  const visibleStatuses = useMemo(
+    () => statuses.filter((s) => isStatusVisible(s.key, s.is_system_excluded)),
+    [statuses, isStatusVisible],
+  );
+  const statusKeys = useMemo(() => visibleStatuses.map(s => s.key), [visibleStatuses]);
+
 
   const columnFilter = useMemo(() => ({
     apply: (q: any) => {
