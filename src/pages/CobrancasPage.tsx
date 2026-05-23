@@ -414,15 +414,20 @@ export default function CobrancasPage() {
     const score = (g: CobrancaGroup) => {
       const allTreated = g.items.every((it) => (it.data as any)?.renegociou);
       const anyPrio = g.items.reduce((acc, it) => Math.max(acc, cobrancaTaskPriority.get(it.id) || 0), 0);
-      const anyRecent = g.items.some((it) => cobrancasWithRecentActivity.has(it.id));
-      return { allTreated: allTreated ? 1 : 0, anyPrio, anyRecent: anyRecent ? 1 : 0 };
+      const anyRecent = g.items.some((it) => cobrancasWithRecentActivity.has(it.id) || (it.data as any)?.tratativa_em);
+      const maxTratativa = g.items.reduce((acc, it) => {
+        const t = (it.data as any)?.tratativa_em;
+        return t ? Math.max(acc, new Date(t).getTime()) : acc;
+      }, 0);
+      return { allTreated: allTreated ? 1 : 0, anyPrio, anyRecent: anyRecent ? 1 : 0, maxTratativa };
     };
     return [...groups].sort((a, b) => {
       const sa = score(a);
       const sb = score(b);
       if (sa.allTreated !== sb.allTreated) return sa.allTreated - sb.allTreated;
       if (sa.anyPrio !== sb.anyPrio) return sb.anyPrio - sa.anyPrio;
-      return sa.anyRecent - sb.anyRecent;
+      if (sa.anyRecent !== sb.anyRecent) return sa.anyRecent - sb.anyRecent;
+      return sa.maxTratativa - sb.maxTratativa;
     });
   }, [cobrancaTaskPriority, cobrancasWithRecentActivity]);
 
