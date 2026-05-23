@@ -184,12 +184,6 @@ services:
       - "/home/deno/functions/main"
       - "--policy"
       - "per_worker"
-      - "--wall-clock-limit-ms"
-      - "180000"
-      - "--cpu-time-soft-limit-ms"
-      - "10000"
-      - "--cpu-time-hard-limit-ms"
-      - "60000"
 
   supabase-studio:
     container_name: supabase-studio
