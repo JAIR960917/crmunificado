@@ -146,6 +146,11 @@ export default function LeadCard({
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
               <Pencil className="h-3.5 w-3.5" />
             </Button>
+            {isAdmin && onRestore && lead.status === "excluidos" && (
+              <Button variant="ghost" size="icon" className="h-7 w-7" title="Restaurar / Atribuir" onClick={(e) => { e.stopPropagation(); onRestore(); }}>
+                <RotateCcw className="h-3.5 w-3.5 text-emerald-600" />
+              </Button>
+            )}
             {isAdmin && (
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
                 <Trash2 className="h-3.5 w-3.5 text-destructive" />
