@@ -323,10 +323,10 @@ export default function LeadsPage() {
 
   // Set default mobile tab when statuses load
   useEffect(() => {
-    if (statuses.length > 0 && !mobileTab) {
-      setMobileTab(statuses[0].key);
+    if (visibleStatuses.length > 0 && !mobileTab) {
+      setMobileTab(visibleStatuses[0].key);
     }
-  }, [statuses]);
+  }, [visibleStatuses, mobileTab]);
 
   // Derive labels and options from DB statuses
   const statusOptions = statuses.map(s => s.key);
