@@ -145,7 +145,12 @@ export default function OrcamentoEditDialog({ open, onOpenChange, orcamento, onS
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Telefone</Label>
-                <Input value={telefone} onChange={(e) => setTelefone(e.target.value)} />
+                <Input
+                  value={telefone}
+                  onChange={(e) => setTelefone(formatPhoneBR(e.target.value))}
+                  placeholder="(11) 98765-4321"
+                  inputMode="tel"
+                />
               </div>
 
               <div className="space-y-2 rounded-md border p-3">
