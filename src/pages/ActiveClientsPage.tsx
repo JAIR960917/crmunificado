@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2, CalendarPlus, RotateCcw } from "lucide-react";
+import { Search, Pencil, Trash2, Phone, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2, CalendarPlus, RotateCcw } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -103,6 +103,7 @@ export default function ActiveClientsPage() {
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [allowedCompanyIds, setAllowedCompanyIds] = useState<string[] | null>(null); // null = no restriction (admin)
+  const [assignableUserIds, setAssignableUserIds] = useState<Set<string> | null>(null); // null = no restriction (admin)
   const [fields, setFields] = useState<FormField[]>([]);
   const [activities, setActivities] = useState<RenovacaoActivity[]>([]);
   const [noteIds, setNoteIds] = useState<Set<string>>(new Set());
@@ -256,9 +257,21 @@ export default function ActiveClientsPage() {
       const allowed = Array.from(ids);
       setAllowedCompanyIds(allowed);
       setCompanies((comps || []).filter((c) => allowed.includes(c.id)));
+
+      // Restrict assignable users to those whose primary company belongs to the gerente's allowed companies
+      if (allowed.length > 0) {
+        const { data: companyProfiles } = await supabase
+          .from("profiles")
+          .select("user_id, company_id")
+          .in("company_id", allowed);
+        setAssignableUserIds(new Set((companyProfiles || []).map((p: any) => p.user_id)));
+      } else {
+        setAssignableUserIds(new Set());
+      }
     } else {
       setAllowedCompanyIds(null);
       setCompanies(comps || []);
+      setAssignableUserIds(null);
     }
   }, [isGerente, isAdmin, user?.id]);
 
@@ -292,6 +305,10 @@ export default function ActiveClientsPage() {
   const vendedorIds = useMemo(
     () => new Set(userRoles.filter((entry) => entry.role === "vendedor").map((entry) => entry.user_id)),
     [userRoles],
+  );
+  const assignableProfiles = useMemo(
+    () => profiles.filter(p => p.full_name?.trim() && (isAdmin || vendedorIds.has(p.user_id)) && (assignableUserIds === null || assignableUserIds.has(p.user_id))),
+    [profiles, isAdmin, vendedorIds, assignableUserIds],
   );
   const nameField = useMemo(() => fields.find(f => f.is_name_field), [fields]);
   const phoneField = useMemo(() => fields.find(f => f.is_phone_field), [fields]);
@@ -795,7 +812,7 @@ export default function ActiveClientsPage() {
               </SelectContent>
             </Select>
           )}
-          {(isAdmin || isGerente) && profiles.length > 0 && (
+          {(isAdmin || isGerente) && assignableProfiles.length > 0 && (
             <Select value={filterAssignedTo} onValueChange={setFilterAssignedTo}>
               <SelectTrigger className="h-9 w-full sm:w-56">
                 <SelectValue placeholder="Filtrar por vendedor" />
@@ -803,8 +820,7 @@ export default function ActiveClientsPage() {
               <SelectContent>
                 <SelectItem value="all">Todos os vendedores</SelectItem>
                 <SelectItem value="__unassigned__">— Sem responsável —</SelectItem>
-                {[...profiles]
-                  .filter(p => p.full_name?.trim() && (isAdmin || vendedorIds.has(p.user_id)))
+                {[...assignableProfiles]
                   .sort((a, b) => a.full_name.localeCompare(b.full_name))
                   .map(p => (
                     <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
@@ -828,9 +844,6 @@ export default function ActiveClientsPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-8 h-9 w-full sm:w-48" />
           </div>
-          <Button size="sm" onClick={() => openCreate()}>
-            <Plus className="mr-2 h-4 w-4" />Nova Renovação
-          </Button>
           {isAdmin && (
             <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
               <Trash2 className="mr-2 h-4 w-4" />Excluir todos
@@ -958,7 +971,7 @@ export default function ActiveClientsPage() {
         formValor={formValor}
         setFormValor={setFormValor}
         statuses={statuses}
-        profiles={profiles}
+        profiles={assignableProfiles}
         fields={fields}
         saving={saving}
         onSave={handleSave}
@@ -1044,7 +1057,7 @@ export default function ActiveClientsPage() {
             <Select value={restoreAssignee} onValueChange={setRestoreAssignee}>
               <SelectTrigger><SelectValue placeholder="Selecione o responsável" /></SelectTrigger>
               <SelectContent>
-                {profiles.map((p) => (
+                {assignableProfiles.map((p) => (
                   <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
                 ))}
               </SelectContent>
