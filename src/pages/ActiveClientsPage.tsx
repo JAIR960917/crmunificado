@@ -971,7 +971,7 @@ export default function ActiveClientsPage() {
         formValor={formValor}
         setFormValor={setFormValor}
         statuses={statuses}
-        profiles={profiles}
+        profiles={assignableProfiles}
         fields={fields}
         saving={saving}
         onSave={handleSave}
