@@ -127,11 +127,11 @@ export default function AppointmentsPage() {
   const [saleSaving, setSaleSaving] = useState(false);
   const [saleEntrada, setSaleEntrada] = useState("");
 
-  // Não Vendido dialog
+  // Não Vendido / Gerou Orçamento dialog
   const [nvDialogOpen, setNvDialogOpen] = useState(false);
   const [nvApptId, setNvApptId] = useState<string | null>(null);
+  const [nvVendaTipo, setNvVendaTipo] = useState<"Gerou Orçamento" | "Não Gerou Orçamento">("Gerou Orçamento");
   const [nvMotivo, setNvMotivo] = useState("");
-  const [nvFezOrcamento, setNvFezOrcamento] = useState<"sim" | "nao" | null>(null);
   const [nvValor, setNvValor] = useState("");
   const [nvProdutosItens, setNvProdutosItens] = useState<ProdutoItem[]>([{ nome: "", valor: "" }]);
   const [nvObservacao, setNvObservacao] = useState("");
