@@ -117,6 +117,9 @@ export default function ActiveClientsPage() {
   const [filterCompanyId, setFilterCompanyId] = useState("all");
   const [filterAssignedTo, setFilterAssignedTo] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
+  const [restoreItem, setRestoreItem] = useState<Renovacao | null>(null);
+  const [restoreAssignee, setRestoreAssignee] = useState<string>("");
+  const [restoring, setRestoring] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
