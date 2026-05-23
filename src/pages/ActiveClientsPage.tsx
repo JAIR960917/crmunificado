@@ -451,6 +451,7 @@ export default function ActiveClientsPage() {
         triggered_by: user?.id ?? null,
         trigger_source: "manual",
       });
+      removeItem(deleteConfirmId);
       setRefreshKey((k) => k + 1);
     }
     setDeleteConfirmId(null);
