@@ -100,6 +100,7 @@ export type Database = {
           fez_orcamento: boolean
           forma_pagamento: string
           forma_pagamento_consulta: string | null
+          forma_pagamento_oculos: string | null
           forma_pagamento_venda: string
           id: string
           idade: string
@@ -134,6 +135,7 @@ export type Database = {
           fez_orcamento?: boolean
           forma_pagamento?: string
           forma_pagamento_consulta?: string | null
+          forma_pagamento_oculos?: string | null
           forma_pagamento_venda?: string
           id?: string
           idade?: string
@@ -168,6 +170,7 @@ export type Database = {
           fez_orcamento?: boolean
           forma_pagamento?: string
           forma_pagamento_consulta?: string | null
+          forma_pagamento_oculos?: string | null
           forma_pagamento_venda?: string
           id?: string
           idade?: string
@@ -714,7 +717,11 @@ export type Database = {
           created_at: string
           created_by: string | null
           data: Json
+          excluded_at: string | null
+          excluded_by: string | null
           id: string
+          previous_assigned_before_exclude: string | null
+          previous_status_before_exclude: string | null
           scheduled_date: string | null
           status: string
           updated_at: string
@@ -725,7 +732,11 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data?: Json
+          excluded_at?: string | null
+          excluded_by?: string | null
           id?: string
+          previous_assigned_before_exclude?: string | null
+          previous_status_before_exclude?: string | null
           scheduled_date?: string | null
           status?: string
           updated_at?: string
@@ -736,7 +747,11 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data?: Json
+          excluded_at?: string | null
+          excluded_by?: string | null
           id?: string
+          previous_assigned_before_exclude?: string | null
+          previous_status_before_exclude?: string | null
           scheduled_date?: string | null
           status?: string
           updated_at?: string
@@ -901,6 +916,7 @@ export type Database = {
           color: string
           created_at: string
           id: string
+          is_system_excluded: boolean
           key: string
           label: string
           position: number
@@ -909,6 +925,7 @@ export type Database = {
           color?: string
           created_at?: string
           id?: string
+          is_system_excluded?: boolean
           key: string
           label: string
           position?: number
@@ -917,6 +934,7 @@ export type Database = {
           color?: string
           created_at?: string
           id?: string
+          is_system_excluded?: boolean
           key?: string
           label?: string
           position?: number
@@ -930,7 +948,11 @@ export type Database = {
           created_by: string | null
           data: Json
           data_ultima_compra: string | null
+          excluded_at: string | null
+          excluded_by: string | null
           id: string
+          previous_assigned_before_exclude: string | null
+          previous_status_before_exclude: string | null
           scheduled_date: string | null
           ssotica_cliente_id: number | null
           ssotica_company_id: string | null
@@ -945,7 +967,11 @@ export type Database = {
           created_by?: string | null
           data?: Json
           data_ultima_compra?: string | null
+          excluded_at?: string | null
+          excluded_by?: string | null
           id?: string
+          previous_assigned_before_exclude?: string | null
+          previous_status_before_exclude?: string | null
           scheduled_date?: string | null
           ssotica_cliente_id?: number | null
           ssotica_company_id?: string | null
@@ -960,7 +986,11 @@ export type Database = {
           created_by?: string | null
           data?: Json
           data_ultima_compra?: string | null
+          excluded_at?: string | null
+          excluded_by?: string | null
           id?: string
+          previous_assigned_before_exclude?: string | null
+          previous_status_before_exclude?: string | null
           scheduled_date?: string | null
           ssotica_cliente_id?: number | null
           ssotica_company_id?: string | null
@@ -984,6 +1014,7 @@ export type Database = {
           color: string
           created_at: string
           id: string
+          is_system_excluded: boolean
           key: string
           label: string
           position: number
@@ -992,6 +1023,7 @@ export type Database = {
           color?: string
           created_at?: string
           id?: string
+          is_system_excluded?: boolean
           key: string
           label: string
           position?: number
@@ -1000,6 +1032,7 @@ export type Database = {
           color?: string
           created_at?: string
           id?: string
+          is_system_excluded?: boolean
           key?: string
           label?: string
           position?: number
@@ -1317,6 +1350,33 @@ export type Database = {
             referencedColumns: ["key"]
           },
         ]
+      }
+      role_status_permissions: {
+        Row: {
+          created_at: string
+          id: string
+          module: string
+          role_key: string
+          status_key: string
+          visible: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          module: string
+          role_key: string
+          status_key: string
+          visible?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          module?: string
+          role_key?: string
+          status_key?: string
+          visible?: boolean
+        }
+        Relationships: []
       }
       scheduled_whatsapp_messages: {
         Row: {
