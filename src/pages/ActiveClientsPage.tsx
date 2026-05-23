@@ -1057,7 +1057,7 @@ export default function ActiveClientsPage() {
             <Select value={restoreAssignee} onValueChange={setRestoreAssignee}>
               <SelectTrigger><SelectValue placeholder="Selecione o responsável" /></SelectTrigger>
               <SelectContent>
-                {profiles.map((p) => (
+                {assignableProfiles.map((p) => (
                   <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
                 ))}
               </SelectContent>
