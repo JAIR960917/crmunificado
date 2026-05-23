@@ -44,7 +44,9 @@ export function useVisibleStatusKeys(module: Module) {
   }, [roleKey, isAdmin, module]);
 
   const isVisible = (statusKey: string, isSystemExcluded?: boolean) => {
-    if (isSystemExcluded) return isAdmin;
+    // Coluna "Excluídos" sempre restrita a admin (segurança extra caso o cache
+    // local ainda não tenha o flag is_system_excluded sincronizado).
+    if (isSystemExcluded || statusKey === "excluidos") return isAdmin;
     if (isAdmin) return true;
     return !hiddenKeys.has(statusKey);
   };
