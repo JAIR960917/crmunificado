@@ -103,6 +103,7 @@ export default function ActiveClientsPage() {
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [allowedCompanyIds, setAllowedCompanyIds] = useState<string[] | null>(null); // null = no restriction (admin)
+  const [assignableUserIds, setAssignableUserIds] = useState<Set<string> | null>(null); // null = no restriction (admin)
   const [fields, setFields] = useState<FormField[]>([]);
   const [activities, setActivities] = useState<RenovacaoActivity[]>([]);
   const [noteIds, setNoteIds] = useState<Set<string>>(new Set());
