@@ -195,11 +195,11 @@ export default function AppointmentsPage() {
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
   const updateField = async (id: string, field: string, value: string) => {
-    if (field === "venda" && value === "Não Vendido") {
+    if (field === "venda" && (value === "Gerou Orçamento" || value === "Não Gerou Orçamento")) {
       const appt = appointments.find(a => a.id === id);
       setNvApptId(id);
+      setNvVendaTipo(value as "Gerou Orçamento" | "Não Gerou Orçamento");
       setNvMotivo(appt?.nao_vendido_motivo || "");
-      setNvFezOrcamento(appt?.fez_orcamento ? "sim" : appt?.fez_orcamento === false && appt?.nao_vendido_motivo ? "nao" : null);
       setNvValor(appt?.orcamento_valor != null ? String(appt.orcamento_valor) : "");
       const existing = (appt?.orcamento_produtos_itens as ProdutoItem[] | null | undefined);
       setNvProdutosItens(existing && existing.length > 0 ? existing.map(p => ({ nome: p.nome || "", valor: p.valor || "" })) : [{ nome: "", valor: "" }]);
