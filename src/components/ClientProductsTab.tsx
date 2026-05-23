@@ -19,7 +19,7 @@ type ItemVenda = {
     grupo: string | null;
     grife: string | null;
   } | null;
-  ordem_servico: { numero: number; status_detalhado: string; entrega: string | null } | null;
+  ordem_servico: { numero: number; status_detalhado: string; entrega: string | null; responsavel_nome?: string | null } | null;
 };
 
 type Venda = {
