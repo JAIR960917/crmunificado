@@ -116,6 +116,24 @@ export default function ContactAttemptForm({ leadId, userId, leadStatus, leadSna
       });
       if (noteErr) throw noteErr;
 
+      // 1.1) Marca a tratativa no card (para colorir verde/vermelho e mandar para o final)
+      {
+        const { data: cur } = await supabase
+          .from("crm_leads")
+          .select("data")
+          .eq("id", leadId)
+          .maybeSingle();
+        const curData = ((cur?.data as Record<string, any>) || {});
+        const newData = {
+          ...curData,
+          tratativa_em: new Date().toISOString(),
+          tratativa_atendeu: atendeu,
+          tratativa_by: userId,
+        };
+        await supabase.from("crm_leads").update({ data: newData }).eq("id", leadId);
+      }
+
+
       // 2) If consultation was scheduled, create the appointment
       if (atendeu === "sim" && marcou === "sim") {
         const [y, mo, d] = dateStr.split("-").map(Number);
