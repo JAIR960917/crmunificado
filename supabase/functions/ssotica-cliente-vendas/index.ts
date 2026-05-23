@@ -1,8 +1,6 @@
 // Edge function: ssotica-cliente-vendas
 // Busca o histórico completo de vendas (com itens/produtos) de um cliente SSótica
-// em UMA OU MAIS lojas (integrações). Quando o cliente compra em duas lojas
-// diferentes (mesmo CPF), agrupa as vendas das duas lojas, marcando em cada
-// venda/item a qual loja pertence.
+// em UMA OU MAIS lojas (integrações).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
@@ -19,7 +17,7 @@ const addDays = (d: Date, days: number) => {
   return x;
 };
 
-function buildWindows(start: Date, end: Date, sizeDays = 30) {
+function buildWindows(start: Date, end: Date, sizeDays = 90) {
   const windows: { start: string; end: string }[] = [];
   let cur = new Date(start);
   while (cur <= end) {
@@ -47,6 +45,26 @@ async function fetchSSotica(url: string, token: string): Promise<any> {
   return res.json();
 }
 
+// Executa promessas em paralelo com limite de concorrência
+async function runPool<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= items.length) return;
+      try {
+        results[idx] = await worker(items[idx]);
+      } catch (e) {
+        // @ts-ignore
+        results[idx] = undefined;
+      }
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 type Target = {
   ssoticaClienteId: number;
   ssoticaCompanyId: string;
@@ -72,7 +90,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Valida usuário autenticado
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
@@ -90,14 +107,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ============================================================
-    // Descobre TODAS as integrações onde este mesmo cliente (CPF) está cadastrado.
-    // Estratégia:
-    //  - Sempre inclui o par (ssoticaClienteId, ssoticaCompanyId) recebido.
-    //  - Se temos CPF, procura em crm_cobrancas e crm_renovacoes outros pares
-    //    com mesmo CPF/documento mas company_id diferente — isso nos dá os
-    //    ssotica_cliente_id correspondentes em outras lojas.
-    // ============================================================
+    // Descobre outras lojas via CPF — usando filtro JSONB direto no banco
+    // (em vez de baixar tabelas inteiras para JS).
     const cpfDigits = onlyDigits(cpf || "");
     const targetSet = new Map<string, { ssoticaClienteId: number; ssoticaCompanyId: string }>();
     const mainKey = `${ssoticaCompanyId}:${ssoticaClienteId}`;
@@ -107,30 +118,33 @@ Deno.serve(async (req) => {
     });
 
     if (cpfDigits.length >= 11) {
-      const findInTable = async (table: string) => {
-        const { data } = await supabase
-          .from(table)
-          .select("ssotica_cliente_id, ssotica_company_id, data")
-          .not("ssotica_cliente_id", "is", null)
-          .not("ssotica_company_id", "is", null);
+      const orFilter = `data->>documento.eq.${cpfDigits},data->>cpf.eq.${cpfDigits}`;
+      const tables = ["crm_cobrancas", "crm_renovacoes"];
+      const results = await Promise.all(
+        tables.map((t) =>
+          supabase
+            .from(t)
+            .select("ssotica_cliente_id, ssotica_company_id")
+            .not("ssotica_cliente_id", "is", null)
+            .not("ssotica_company_id", "is", null)
+            .or(orFilter)
+            .limit(500),
+        ),
+      );
+      for (const { data } of results) {
         for (const r of (data ?? []) as any[]) {
-          const docDigits = onlyDigits(r?.data?.documento ?? r?.data?.cpf ?? "");
-          if (docDigits === cpfDigits && r.ssotica_cliente_id && r.ssotica_company_id) {
-            const key = `${r.ssotica_company_id}:${r.ssotica_cliente_id}`;
-            if (!targetSet.has(key)) {
-              targetSet.set(key, {
-                ssoticaClienteId: Number(r.ssotica_cliente_id),
-                ssoticaCompanyId: String(r.ssotica_company_id),
-              });
-            }
+          if (!r.ssotica_cliente_id || !r.ssotica_company_id) continue;
+          const key = `${r.ssotica_company_id}:${r.ssotica_cliente_id}`;
+          if (!targetSet.has(key)) {
+            targetSet.set(key, {
+              ssoticaClienteId: Number(r.ssotica_cliente_id),
+              ssoticaCompanyId: String(r.ssotica_company_id),
+            });
           }
         }
-      };
-      await findInTable("crm_cobrancas");
-      await findInTable("crm_renovacoes");
+      }
     }
 
-    // Carrega integrações + nome das empresas para todos os targets identificados
     const companyIds = Array.from(new Set(Array.from(targetSet.values()).map((t) => t.ssoticaCompanyId)));
     const [{ data: integs }, { data: companiesRows }] = await Promise.all([
       supabase
@@ -145,7 +159,6 @@ Deno.serve(async (req) => {
     const integByCompany = new Map<string, any>();
     for (const i of (integs ?? []) as any[]) {
       if (!i.is_active) continue;
-      // descriptografa token se necessário
       if (i.bearer_token && String(i.bearer_token).startsWith("enc:")) {
         const { data: dec } = await supabase.rpc("decrypt_secret", { _ciphertext: i.bearer_token });
         if (typeof dec === "string") i.bearer_token = dec;
@@ -153,7 +166,6 @@ Deno.serve(async (req) => {
       integByCompany.set(String(i.company_id), i);
     }
 
-    // Constrói lista final de "alvos" a varrer
     const targets: Target[] = [];
     for (const t of targetSet.values()) {
       const integ = integByCompany.get(t.ssoticaCompanyId);
@@ -174,92 +186,95 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Janela: padrão 24 meses, máximo 96
     const months = Math.min(Math.max(Number(monthsBack) || 24, 1), 96);
     const today = new Date();
     const start = new Date(today);
     start.setMonth(start.getMonth() - months);
-    const windows = buildWindows(start, today, 30);
+    const windows = buildWindows(start, today, 90);
+
+    // Constrói todas as tarefas (target × janela) e executa em paralelo
+    type Task = { tgt: Target; w: { start: string; end: string } };
+    const tasks: Task[] = [];
+    for (const tgt of targets) for (const w of windows) tasks.push({ tgt, w });
 
     const vendasCliente: any[] = [];
-    const lojasConsultadas: { company_id: string; loja_nome: string | null; ssotica_cliente_id: number; vendas_count: number }[] = [];
+    const counts = new Map<string, number>();
 
-    for (const tgt of targets) {
+    await runPool(tasks, 8, async ({ tgt, w }) => {
       const targetClienteId = Number(tgt.ssoticaClienteId);
-      let vendasNesseAlvo = 0;
-
-      for (const w of windows) {
-        const url = `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(tgt.cnpj)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
-        try {
-          const vendas = await fetchSSotica(url, tgt.bearer_token);
-          if (!Array.isArray(vendas)) continue;
-          for (const venda of vendas) {
-            if (venda?.cliente?.id === targetClienteId) {
-              vendasNesseAlvo++;
-              vendasCliente.push({
-                id: venda.id,
-                ssotica_company_id: tgt.ssoticaCompanyId,
-                loja_nome: tgt.loja_nome,
-                data: venda.data,
-                hora: venda.hora,
-                numero: venda.numero,
-                status: venda.status,
-                valor_bruto: Number(venda.valor_bruto ?? 0),
-                valor_liquido: Number(venda.valor_liquido ?? 0),
-                desconto: Number(venda.desconto ?? 0),
-                funcionario: venda.funcionario
-                  ? { id: venda.funcionario.id, nome: venda.funcionario.nome, funcao: venda.funcionario.funcao }
-                  : null,
-                formas_pagamento: Array.isArray(venda.formas_pagamento)
-                  ? venda.formas_pagamento.map((fp: any) => ({
-                      forma_pagamento: fp.forma_pagamento,
-                      valor: Number(fp.valor ?? 0),
-                      qtd_parcelas: fp.qtd_parcelas,
-                      data: fp.data,
-                    }))
-                  : [],
-                itens: Array.isArray(venda.itens)
-                  ? venda.itens.map((it: any) => ({
-                      id: it.id,
-                      quantidade: Number(it.quantidade ?? 0),
-                      valor_unitario_liquido: Number(it.valor_unitario_liquido ?? 0),
-                      valor_total_liquido: Number(it.valor_total_liquido ?? 0),
-                      produto: it.produto
-                        ? {
-                            id: it.produto.id,
-                            referencia: it.produto.referencia,
-                            descricao: it.produto.descricao,
-                            grupo: it.produto.grupo,
-                            grife: it.produto.grife,
-                          }
-                        : null,
-                      ordem_servico: it.ordem_servico
-                        ? {
-                            numero: it.ordem_servico.numero,
-                            status_detalhado: it.ordem_servico.status_detalhado,
-                            entrega: it.ordem_servico.entrega,
-                          }
-                        : null,
-                    }))
-                  : [],
-              });
-            }
-          }
-        } catch (err) {
-          console.error(`[ssotica-cliente-vendas] loja=${tgt.ssoticaCompanyId} janela ${w.start}→${w.end}`, err);
+      const url = `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(tgt.cnpj)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
+      try {
+        const vendas = await fetchSSotica(url, tgt.bearer_token);
+        if (!Array.isArray(vendas)) return;
+        for (const venda of vendas) {
+          if (venda?.cliente?.id !== targetClienteId) continue;
+          counts.set(tgt.ssoticaCompanyId, (counts.get(tgt.ssoticaCompanyId) || 0) + 1);
+          vendasCliente.push({
+            id: venda.id,
+            ssotica_company_id: tgt.ssoticaCompanyId,
+            loja_nome: tgt.loja_nome,
+            data: venda.data,
+            hora: venda.hora,
+            numero: venda.numero,
+            status: venda.status,
+            valor_bruto: Number(venda.valor_bruto ?? 0),
+            valor_liquido: Number(venda.valor_liquido ?? 0),
+            desconto: Number(venda.desconto ?? 0),
+            funcionario: venda.funcionario
+              ? { id: venda.funcionario.id, nome: venda.funcionario.nome, funcao: venda.funcionario.funcao }
+              : null,
+            itens: Array.isArray(venda.itens)
+              ? venda.itens.map((it: any) => {
+                  const os = it.ordem_servico;
+                  // Tenta extrair o nome do responsável pela OS de vários campos possíveis
+                  const osNome =
+                    os?.funcionario?.nome ??
+                    os?.vendedor?.nome ??
+                    os?.responsavel?.nome ??
+                    os?.usuario?.nome ??
+                    (typeof os?.funcionario === "string" ? os.funcionario : null) ??
+                    (typeof os?.vendedor === "string" ? os.vendedor : null) ??
+                    null;
+                  return {
+                    id: it.id,
+                    quantidade: Number(it.quantidade ?? 0),
+                    valor_unitario_liquido: Number(it.valor_unitario_liquido ?? 0),
+                    valor_total_liquido: Number(it.valor_total_liquido ?? 0),
+                    produto: it.produto
+                      ? {
+                          id: it.produto.id,
+                          referencia: it.produto.referencia,
+                          descricao: it.produto.descricao,
+                          grupo: it.produto.grupo,
+                          grife: it.produto.grife,
+                        }
+                      : null,
+                    ordem_servico: os
+                      ? {
+                          numero: os.numero,
+                          status_detalhado: os.status_detalhado,
+                          entrega: os.entrega,
+                          responsavel_nome: osNome,
+                        }
+                      : null,
+                  };
+                })
+              : [],
+          });
         }
+      } catch (err) {
+        console.error(`[ssotica-cliente-vendas] loja=${tgt.ssoticaCompanyId} janela ${w.start}→${w.end}`, err);
       }
+    });
 
-      lojasConsultadas.push({
-        company_id: tgt.ssoticaCompanyId,
-        loja_nome: tgt.loja_nome,
-        ssotica_cliente_id: targetClienteId,
-        vendas_count: vendasNesseAlvo,
-      });
-    }
-
-    // Ordena: venda mais recente primeiro
     vendasCliente.sort((a, b) => (b.data || "").localeCompare(a.data || ""));
+
+    const lojasConsultadas = targets.map((t) => ({
+      company_id: t.ssoticaCompanyId,
+      loja_nome: t.loja_nome,
+      ssotica_cliente_id: t.ssoticaClienteId,
+      vendas_count: counts.get(t.ssoticaCompanyId) || 0,
+    }));
 
     return new Response(
       JSON.stringify({
