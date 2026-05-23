@@ -228,21 +228,21 @@ export default function AppointmentsPage() {
   const handleNvSubmit = async () => {
     if (!nvApptId) return;
     if (!nvMotivo.trim()) { toast.error("Informe o motivo da não compra"); return; }
-    if (!nvFezOrcamento) { toast.error("Informe se foi feito orçamento"); return; }
+    const fezOrc = nvVendaTipo === "Gerou Orçamento";
     const itensValidos = nvProdutosItens.filter(p => p.nome.trim() && p.valor);
-    if (nvFezOrcamento === "sim" && itensValidos.length === 0) {
+    if (fezOrc && itensValidos.length === 0) {
       toast.error("Adicione ao menos um produto com nome e valor");
       return;
     }
     const valorSoma = itensValidos.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0);
     setNvSaving(true);
     const payload: any = {
-      venda: "Não Vendido",
+      venda: nvVendaTipo,
       nao_vendido_motivo: nvMotivo.trim(),
-      fez_orcamento: nvFezOrcamento === "sim",
-      orcamento_valor: nvFezOrcamento === "sim" ? valorSoma : null,
-      orcamento_produtos: nvFezOrcamento === "sim" ? itensValidos.map(p => `${p.nome} - R$ ${p.valor}`).join("; ") : null,
-      orcamento_produtos_itens: nvFezOrcamento === "sim" ? itensValidos : [],
+      fez_orcamento: fezOrc,
+      orcamento_valor: fezOrc ? valorSoma : null,
+      orcamento_produtos: fezOrc ? itensValidos.map(p => `${p.nome} - R$ ${p.valor}`).join("; ") : null,
+      orcamento_produtos_itens: fezOrc ? itensValidos : [],
       orcamento_observacao: nvObservacao.trim() || null,
     };
     const { error } = await supabase.from("crm_appointments").update(payload).eq("id", nvApptId);
