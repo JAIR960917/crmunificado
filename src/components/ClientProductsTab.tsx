@@ -19,7 +19,7 @@ type ItemVenda = {
     grupo: string | null;
     grife: string | null;
   } | null;
-  ordem_servico: { numero: number; status_detalhado: string; entrega: string | null } | null;
+  ordem_servico: { numero: number; status_detalhado: string; entrega: string | null; responsavel_nome?: string | null } | null;
 };
 
 type Venda = {
@@ -235,7 +235,9 @@ export default function ClientProductsTab({ ssoticaClienteId, ssoticaCompanyId, 
                           )}
                           {it.ordem_servico?.status_detalhado && (
                             <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                              OS {it.ordem_servico.numero}: {it.ordem_servico.status_detalhado}
+                              OS {it.ordem_servico.numero}
+                              {it.ordem_servico.responsavel_nome ? ` · ${it.ordem_servico.responsavel_nome}` : ""}
+                              {`: ${it.ordem_servico.status_detalhado}`}
                             </Badge>
                           )}
                         </div>
