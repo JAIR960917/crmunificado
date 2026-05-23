@@ -444,6 +444,41 @@ export default function ActiveClientsPage() {
     setDeleteConfirmId(null);
   };
 
+  const confirmRestore = async () => {
+    if (!restoreItem || !restoreAssignee) {
+      toast.error("Selecione um responsável");
+      return;
+    }
+    setRestoring(true);
+    const previous = (restoreItem as any).previous_status_before_exclude as string | null;
+    const newStatus = previous && previous !== "excluidos" ? previous : "novo";
+    const { error } = await supabase.from("crm_renovacoes").update({
+      status: newStatus,
+      assigned_to: restoreAssignee,
+      excluded_at: null,
+      excluded_by: null,
+      previous_status_before_exclude: null,
+      previous_assigned_before_exclude: null,
+    } as any).eq("id", restoreItem.id);
+    if (error) {
+      toast.error("Erro ao restaurar");
+    } else {
+      const myName = profiles.find((p) => p.user_id === user?.id)?.full_name || "admin";
+      const assigneeName = profiles.find((p) => p.user_id === restoreAssignee)?.full_name || "responsável";
+      await supabase.from("crm_renovacao_notes").insert({
+        renovacao_id: restoreItem.id,
+        user_id: user!.id,
+        content: `♻️ Card restaurado por ${myName} e atribuído a ${assigneeName}`,
+      } as any);
+      toast.success("Renovação restaurada");
+      setRefreshKey((k) => k + 1);
+    }
+    setRestoring(false);
+    setRestoreItem(null);
+    setRestoreAssignee("");
+  };
+
+
   const openScheduleDialog = (item: Renovacao) => {
     setSchedulingItem(item);
     setScheduleOpen(true);
