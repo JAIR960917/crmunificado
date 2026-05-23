@@ -2,12 +2,7 @@
  * RolePermissionsManager — UI para gerenciar funções e permissões de página.
  * Renderizada dentro de SettingsPage (acesso apenas para admin).
  *
- * Funcionalidades:
- *  - Lista todas as funções (system + custom)
- *  - Permite criar nova função (escolhe função base que define o RLS)
- *  - Permite renomear customizadas, excluir customizadas
- *  - Marcar/desmarcar páginas por função (checkboxes)
- *  - Admin nativo: todos os checkboxes ficam desabilitados (acesso total fixo)
+ * Agora gerencia também as colunas (status) visíveis por função em Leads e Renovação.
  */
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -32,6 +28,8 @@ type RoleDef = {
   base_role: "admin" | "gerente" | "vendedor" | "financeiro";
 };
 type Permission = { role_key: string; page_key: string; allowed: boolean };
+type StatusPerm = { role_key: string; module: "leads" | "renovacao"; status_key: string; visible: boolean };
+type StatusItem = { key: string; label: string; is_system_excluded?: boolean };
 
 const BASE_ROLE_OPTIONS = [
   { value: "admin",      label: "Admin (acesso total)" },
@@ -51,28 +49,35 @@ function slugify(s: string) {
 export default function RolePermissionsManager() {
   const [roles, setRoles] = useState<RoleDef[]>([]);
   const [perms, setPerms] = useState<Permission[]>([]);
+  const [statusPerms, setStatusPerms] = useState<StatusPerm[]>([]);
+  const [leadStatuses, setLeadStatuses] = useState<StatusItem[]>([]);
+  const [renovStatuses, setRenovStatuses] = useState<StatusItem[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Criação de nova função
   const [openCreate, setOpenCreate] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newBaseRole, setNewBaseRole] = useState("vendedor");
 
-  // Edição inline do label (apenas custom)
   const [editingLabel, setEditingLabel] = useState<string>("");
 
   const fetchAll = async () => {
     setLoading(true);
-    const [r, p] = await Promise.all([
+    const [r, p, sp, ls, rs] = await Promise.all([
       supabase.from("role_definitions").select("*").order("is_system", { ascending: false }).order("label"),
       supabase.from("role_page_permissions").select("*"),
+      supabase.from("role_status_permissions" as any).select("*"),
+      supabase.from("crm_statuses").select("key, label, is_system_excluded").order("position"),
+      supabase.from("crm_renovacao_statuses").select("key, label, is_system_excluded").order("position"),
     ]);
-    const rs = (r.data || []) as RoleDef[];
-    setRoles(rs);
+    const rs2 = (r.data || []) as RoleDef[];
+    setRoles(rs2);
     setPerms((p.data || []) as Permission[]);
-    if (rs.length && !selectedKey) setSelectedKey(rs[0].key);
+    setStatusPerms(((sp.data || []) as unknown) as StatusPerm[]);
+    setLeadStatuses((ls.data || []) as StatusItem[]);
+    setRenovStatuses((rs.data || []) as StatusItem[]);
+    if (rs2.length && !selectedKey) setSelectedKey(rs2[0].key);
     setLoading(false);
   };
 
@@ -106,24 +111,75 @@ export default function RolePermissionsManager() {
     });
   };
 
+  const isStatusVisible = (mod: "leads" | "renovacao", statusKey: string, isExcluded: boolean) => {
+    if (isExcluded) return isAdminNative; // coluna "Excluídos" só para admin
+    if (isAdminNative) return true;
+    if (!selectedKey) return false;
+    const found = statusPerms.find(
+      (s) => s.role_key === selectedKey && s.module === mod && s.status_key === statusKey,
+    );
+    // padrão: visível se não houver registro
+    return found ? found.visible : true;
+  };
+
+  const toggleStatus = (mod: "leads" | "renovacao", statusKey: string, value: boolean) => {
+    if (!selectedKey || isAdminNative) return;
+    setStatusPerms((prev) => {
+      const idx = prev.findIndex(
+        (s) => s.role_key === selectedKey && s.module === mod && s.status_key === statusKey,
+      );
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], visible: value };
+        return next;
+      }
+      return [...prev, { role_key: selectedKey, module: mod, status_key: statusKey, visible: value }];
+    });
+  };
+
   const handleSavePermissions = async () => {
     if (!selected || isAdminNative) return;
     setSaving(true);
     try {
-      // Renomeia se mudou
       if (editingLabel.trim() && editingLabel.trim() !== selected.label) {
         await supabase.from("role_definitions").update({ label: editingLabel.trim() }).eq("key", selected.key);
       }
-      // Salva todas as permissões da função selecionada (upsert)
-      const rows = APP_PAGES.map((pg) => ({
+      const pageRows = APP_PAGES.map((pg) => ({
         role_key: selected.key,
         page_key: pg.key,
         allowed: isAllowed(pg.key),
       }));
-      const { error } = await supabase
+      const { error: pErr } = await supabase
         .from("role_page_permissions")
-        .upsert(rows, { onConflict: "role_key,page_key" });
-      if (error) throw error;
+        .upsert(pageRows, { onConflict: "role_key,page_key" });
+      if (pErr) throw pErr;
+
+      const statusRows: any[] = [];
+      leadStatuses.forEach((s) => {
+        if (s.is_system_excluded) return; // não editável
+        statusRows.push({
+          role_key: selected.key,
+          module: "leads",
+          status_key: s.key,
+          visible: isStatusVisible("leads", s.key, false),
+        });
+      });
+      renovStatuses.forEach((s) => {
+        if (s.is_system_excluded) return;
+        statusRows.push({
+          role_key: selected.key,
+          module: "renovacao",
+          status_key: s.key,
+          visible: isStatusVisible("renovacao", s.key, false),
+        });
+      });
+      if (statusRows.length > 0) {
+        const { error: sErr } = await supabase
+          .from("role_status_permissions" as any)
+          .upsert(statusRows, { onConflict: "role_key,module,status_key" });
+        if (sErr) throw sErr;
+      }
+
       toast.success("Permissões salvas");
       await fetchAll();
     } catch (e: any) {
@@ -145,7 +201,6 @@ export default function RolePermissionsManager() {
     }]);
     if (error) return toast.error(error.message);
 
-    // Cria entradas zeradas de permissão (todas false por padrão; admin marca depois)
     const rows = APP_PAGES.map((pg) => ({ role_key: key, page_key: pg.key, allowed: false }));
     await supabase.from("role_page_permissions").insert(rows);
 
@@ -159,8 +214,7 @@ export default function RolePermissionsManager() {
 
   const handleDelete = async () => {
     if (!selected || selected.is_system) return;
-    if (!confirm(`Excluir a função "${selected.label}"? Usuários atribuídos a ela voltarão para a função base (${selected.base_role}).`)) return;
-    // Detach users from this role_key (they keep the base enum role)
+    if (!confirm(`Excluir a função "${selected.label}"?`)) return;
     await supabase.from("user_roles").update({ role_key: selected.base_role }).eq("role_key", selected.key);
     const { error } = await supabase.from("role_definitions").delete().eq("key", selected.key);
     if (error) return toast.error(error.message);
@@ -173,6 +227,30 @@ export default function RolePermissionsManager() {
     return <div className="text-sm text-muted-foreground">Carregando funções...</div>;
   }
 
+  const renderStatusList = (mod: "leads" | "renovacao", list: StatusItem[]) => (
+    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+      {list.map((s) => {
+        const isExcl = !!s.is_system_excluded;
+        return (
+          <label
+            key={s.key}
+            className={`flex items-center gap-2 rounded border px-3 py-2 text-sm ${
+              isAdminNative || isExcl ? "opacity-60" : "cursor-pointer hover:bg-muted/50"
+            }`}
+          >
+            <Checkbox
+              checked={isStatusVisible(mod, s.key, isExcl)}
+              onCheckedChange={(v) => toggleStatus(mod, s.key, !!v)}
+              disabled={isAdminNative || isExcl}
+            />
+            <span className="flex-1">{s.label}</span>
+            {isExcl && <code className="text-[10px] text-muted-foreground">só admin</code>}
+          </label>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -181,7 +259,7 @@ export default function RolePermissionsManager() {
             <Shield className="h-4 w-4" /> Funções e Permissões
           </h2>
           <p className="text-xs text-muted-foreground">
-            Defina quais páginas cada função do sistema pode acessar.
+            Defina quais páginas e colunas cada função pode visualizar.
           </p>
         </div>
         <Button size="sm" onClick={() => setOpenCreate(true)}>
@@ -190,8 +268,7 @@ export default function RolePermissionsManager() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4">
-        {/* Lista de funções */}
-        <div className="space-y-1 border rounded-md p-2 max-h-[420px] overflow-y-auto">
+        <div className="space-y-1 border rounded-md p-2 max-h-[480px] overflow-y-auto">
           {roles.map((r) => (
             <button
               key={r.key}
@@ -208,7 +285,6 @@ export default function RolePermissionsManager() {
           ))}
         </div>
 
-        {/* Detalhe da função */}
         <div className="border rounded-md p-4 space-y-4">
           {!selected ? (
             <div className="text-sm text-muted-foreground">Selecione uma função</div>
@@ -235,31 +311,46 @@ export default function RolePermissionsManager() {
 
               {isAdminNative && (
                 <div className="text-xs rounded bg-muted px-3 py-2">
-                  A função <strong>Admin nativo</strong> tem acesso total e não pode ter páginas restringidas.
+                  A função <strong>Admin nativo</strong> tem acesso total e não pode ter restrições.
                 </div>
               )}
 
-              <div>
-                <Label className="text-xs">Páginas permitidas</Label>
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {APP_PAGES.map((pg) => (
-                    <label
-                      key={pg.key}
-                      className={`flex items-center gap-2 rounded border px-3 py-2 text-sm ${
-                        isAdminNative ? "opacity-60" : "cursor-pointer hover:bg-muted/50"
-                      }`}
-                    >
-                      <Checkbox
-                        checked={isAllowed(pg.key)}
-                        onCheckedChange={(v) => togglePage(pg.key, !!v)}
-                        disabled={isAdminNative}
-                      />
-                      <span className="flex-1">{pg.label}</span>
-                      <code className="text-[10px] text-muted-foreground">{pg.path}</code>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <Tabs defaultValue="pages">
+                <TabsList>
+                  <TabsTrigger value="pages">Páginas</TabsTrigger>
+                  <TabsTrigger value="leads">Colunas — Leads</TabsTrigger>
+                  <TabsTrigger value="renov">Colunas — Renovação</TabsTrigger>
+                </TabsList>
+                <TabsContent value="pages">
+                  <Label className="text-xs">Páginas permitidas</Label>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {APP_PAGES.map((pg) => (
+                      <label
+                        key={pg.key}
+                        className={`flex items-center gap-2 rounded border px-3 py-2 text-sm ${
+                          isAdminNative ? "opacity-60" : "cursor-pointer hover:bg-muted/50"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={isAllowed(pg.key)}
+                          onCheckedChange={(v) => togglePage(pg.key, !!v)}
+                          disabled={isAdminNative}
+                        />
+                        <span className="flex-1">{pg.label}</span>
+                        <code className="text-[10px] text-muted-foreground">{pg.path}</code>
+                      </label>
+                    ))}
+                  </div>
+                </TabsContent>
+                <TabsContent value="leads">
+                  <Label className="text-xs">Colunas visíveis em Leads</Label>
+                  {renderStatusList("leads", leadStatuses)}
+                </TabsContent>
+                <TabsContent value="renov">
+                  <Label className="text-xs">Colunas visíveis em Renovação</Label>
+                  {renderStatusList("renovacao", renovStatuses)}
+                </TabsContent>
+              </Tabs>
 
               <Button onClick={handleSavePermissions} disabled={saving || isAdminNative}>
                 <Save className="mr-2 h-4 w-4" />
@@ -270,7 +361,6 @@ export default function RolePermissionsManager() {
         </div>
       </div>
 
-      {/* Dialog: criar função */}
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent>
           <DialogHeader>
@@ -295,10 +385,6 @@ export default function RolePermissionsManager() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                A função base determina o nível de acesso aos dados (RLS). As páginas exibidas
-                são controladas separadamente pelos checkboxes.
-              </p>
             </div>
           </div>
           <DialogFooter>
