@@ -537,6 +537,44 @@ export default function LeadsPage() {
     setDeleteConfirmId(null);
   };
 
+  const openRestore = (lead: Lead) => {
+    setRestoreLead(lead);
+    setRestoreAssignee(lead.assigned_to || "");
+  };
+
+  const confirmRestore = async () => {
+    if (!restoreLead || !restoreAssignee) {
+      toast.error("Selecione um responsável");
+      return;
+    }
+    setRestoring(true);
+    const previous = (restoreLead as any).previous_status_before_exclude as string | null;
+    const newStatus = previous && previous !== "excluidos" ? previous : "novo";
+    const { error } = await supabase.from("crm_leads").update({
+      status: newStatus,
+      assigned_to: restoreAssignee,
+      excluded_at: null,
+      excluded_by: null,
+      previous_status_before_exclude: null,
+      previous_assigned_before_exclude: null,
+    } as any).eq("id", restoreLead.id);
+    if (error) {
+      toast.error("Erro ao restaurar lead");
+    } else {
+      const assigneeName = profiles.find((p) => p.user_id === restoreAssignee)?.full_name || "responsável";
+      await supabase.from("crm_lead_notes").insert({
+        lead_id: restoreLead.id,
+        user_id: user!.id,
+        content: `♻️ Card restaurado por ${currentUserName || "admin"} e atribuído a ${assigneeName}`,
+      });
+      toast.success("Lead restaurado");
+      fetchAll();
+    }
+    setRestoring(false);
+    setRestoreLead(null);
+    setRestoreAssignee("");
+  };
+
   const getLeadDisplayStatus = useCallback((lead: Lead) => {
     const hasScheduledColumn = statuses.some((status) => status.key === "agendados");
     if (lead.scheduled_date && hasScheduledColumn) return "agendados";
