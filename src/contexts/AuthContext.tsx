@@ -137,18 +137,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
     const userId = session?.user?.id;
     if (!userId) {
-      setRoles([]); setRoleKey(null); setAllowedPages(new Set());
+      setRoles([]); setRoleKey(null); setAllowedPages(new Set()); setPermissionsLoaded(false);
       return;
     }
 
     setRoles([]);
     setAllowedPages(new Set());
+    setPermissionsLoaded(false);
 
     (async () => {
       const rows = await fetchRoles(userId);
       if (!mounted) return;
       const enumRoles = rows.map((r) => r.role);
-      // role_key: usa o primeiro role_key não-nulo; senão usa o nome do enum
       const primary = rows[0];
       const key = primary?.role_key || primary?.role || null;
       setRoles(enumRoles);
@@ -157,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const pages = await fetchAllowedPages(key);
         if (mounted) setAllowedPages(pages);
       }
+      if (mounted) setPermissionsLoaded(true);
     })();
 
     return () => { mounted = false; };
