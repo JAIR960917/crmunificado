@@ -256,12 +256,40 @@ export default function OrcamentoEditDialog({ open, onOpenChange, orcamento, onS
                 </div>
               )}
 
-              {tab === "atividade" && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Observação</Label>
-                  <Textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} rows={6} className="text-sm" />
-                </div>
-              )}
+              {tab === "atividade" && (() => {
+                const entries = observacao
+                  .split(/\n\n— /)
+                  .map(s => s.trim())
+                  .filter(Boolean)
+                  .map(block => {
+                    const m = block.match(/^(.*?) —\n([\s\S]*)$/);
+                    return m ? { when: m[1].replace(/^— /, ""), body: m[2] } : { when: "", body: block };
+                  })
+                  .reverse();
+                if (entries.length === 0) {
+                  return (
+                    <p className="text-center text-muted-foreground text-sm py-12">
+                      Nenhuma atividade registrada ainda.
+                    </p>
+                  );
+                }
+                return (
+                  <div className="relative pl-6">
+                    <div className="absolute left-2 top-1 bottom-1 w-px bg-border" />
+                    <div className="space-y-3">
+                      {entries.map((e, i) => (
+                        <div key={i} className="relative">
+                          <div className="absolute -left-[18px] top-1.5 w-2.5 h-2.5 rounded-full bg-primary" />
+                          <div className="rounded-lg border bg-muted/30 p-3">
+                            {e.when && <div className="text-[11px] text-muted-foreground mb-1">{e.when}</div>}
+                            <div className="text-sm whitespace-pre-wrap">{e.body}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {tab === "comentario" && (
                 <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
