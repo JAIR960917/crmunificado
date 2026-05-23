@@ -761,11 +761,9 @@ export default function ActiveClientsPage() {
               <RotateCcw className="h-3.5 w-3.5 text-emerald-600" />
             </Button>
           )}
-          {(isAdmin || isGerente) && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteConfirmId(item.id)}>
-              <Trash2 className="h-3 w-3 text-destructive" />
-            </Button>
-          )}
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="Excluir card" onClick={() => setDeleteConfirmId(item.id)}>
+            <Trash2 className="h-3 w-3 text-destructive" />
+          </Button>
         </div>
       </div>
     );
