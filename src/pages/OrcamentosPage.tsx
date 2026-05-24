@@ -196,15 +196,28 @@ export default function OrcamentosPage() {
                     <td className="px-3 py-2 max-w-[200px] truncate" title={o.nao_vendido_motivo || ""}>{o.nao_vendido_motivo || "—"}</td>
                     <td className="px-3 py-2 max-w-[200px] truncate" title={o.orcamento_observacao || ""}>{o.orcamento_observacao || "—"}</td>
                     <td className="px-3 py-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Editar orçamento"
-                        onClick={() => handleEdit(o)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Editar orçamento"
+                          onClick={() => handleEdit(o)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            title="Excluir orçamento"
+                            onClick={() => setDeleting(o)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
