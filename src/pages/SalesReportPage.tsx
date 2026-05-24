@@ -249,8 +249,22 @@ export default function SalesReportPage() {
       vendasUnicas: new Set(),
     });
 
+    const debugCombos: any[] = [];
     (vendas || []).forEach((v) => {
       v.itens.forEach((it) => {
+        const desc = (it.produto?.descricao || "").toLowerCase();
+        if (desc.includes("combo")) {
+          debugCombos.push({
+            venda: v.numero,
+            data: v.data,
+            status: v.status,
+            empresa: v.company_name,
+            grupo: it.produto?.grupo,
+            descricao: it.produto?.descricao,
+            qtd: it.quantidade,
+            classificadoComo: classificarItem(it.produto?.grupo, it.produto?.descricao),
+          });
+        }
         const cat = classificarItem(it.produto?.grupo, it.produto?.descricao);
         const cur = map.get(cat)!;
         cur.quantidade += Number(it.quantidade || 0);
@@ -258,6 +272,11 @@ export default function SalesReportPage() {
         cur.vendasUnicas.add(v.id);
       });
     });
+    if (debugCombos.length > 0) {
+      console.log("[Relatório] Itens com 'combo' encontrados:", debugCombos);
+    } else if ((vendas || []).length > 0) {
+      console.log("[Relatório] Nenhum item com 'combo' retornado pela SSótica neste período.");
+    }
 
     // Mostra apenas categorias com pelo menos 1 produto vendido,
     // mantendo a ordem fixa das CATEGORIAS e "Outros" no fim.
