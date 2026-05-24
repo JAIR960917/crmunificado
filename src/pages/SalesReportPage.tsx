@@ -180,6 +180,7 @@ export default function SalesReportPage() {
     "Armação",
     "Óculos Solar",
     "Lentes",
+    "Combo de Lentes",
     "Lentes de Contato",
     "Caixa 3 Pares",
     "Consulta A 50",
@@ -214,6 +215,9 @@ export default function SalesReportPage() {
 
     // Lentes de contato (verificar antes de "Lentes" genérico)
     if (/lente/.test(t) && /contato/.test(t)) return "Lentes de Contato";
+
+    // Combo de lentes (verificar antes de "Lentes" genérico)
+    if (/combo/.test(t) && /lente/.test(t)) return "Combo de Lentes";
 
     // Lentes oftálmicas / demais
     if (/lente/.test(t)) return "Lentes";
