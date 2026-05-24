@@ -180,6 +180,7 @@ export default function SalesReportPage() {
     "Armação",
     "Óculos Solar",
     "Lentes",
+    "Combo de Lentes",
     "Lentes de Contato",
     "Caixa 3 Pares",
     "Consulta A 50",
