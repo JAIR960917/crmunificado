@@ -233,6 +233,27 @@ export default function OrcamentosPage() {
         orcamento={editing}
         onSaved={fetchAll}
       />
+
+      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir orçamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O orçamento de <strong>{deleting?.nome || "—"}</strong> será removido. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDelete(); }}
+              disabled={deleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteLoading ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
