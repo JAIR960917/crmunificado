@@ -51,6 +51,31 @@ export default function OrcamentosPage() {
   const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Orcamento | null>(null);
+  const [deleting, setDeleting] = useState<Orcamento | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleting) return;
+    setDeleteLoading(true);
+    const { error } = await supabase
+      .from("crm_appointments")
+      .update({
+        fez_orcamento: false,
+        orcamento_valor: null,
+        orcamento_produtos: null,
+        orcamento_produtos_itens: null,
+        orcamento_observacao: null,
+      })
+      .eq("id", deleting.id);
+    setDeleteLoading(false);
+    if (error) {
+      toast.error("Erro ao excluir orçamento: " + error.message);
+      return;
+    }
+    toast.success("Orçamento excluído");
+    setDeleting(null);
+    fetchAll();
+  };
 
   const fetchAll = async () => {
     setLoading(true);
