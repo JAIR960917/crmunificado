@@ -184,8 +184,7 @@ export default function SalesReportPage() {
     "Combo de Lentes",
     "Lentes de Contato",
     "Caixa 3 Pares",
-    "Consulta A 50",
-    "Consulta A 100",
+    "Consulta",
   ] as const;
   type Categoria = typeof CATEGORIAS[number] | "Outros";
 
@@ -196,6 +195,10 @@ export default function SalesReportPage() {
       .replace(/[\u0300-\u036f]/g, "")
       .trim();
 
+  // Categorias cuja quantidade exibida é dividida por 2 (cada produto
+  // representa um par; SSótica retorna como unidades individuais).
+  const DIVIDE_POR_2 = new Set<Categoria>(["Combo de Lentes", "Lentes"]);
+
   function classificarItem(
     grupo: string | null | undefined,
     descricao: string | null | undefined,
@@ -205,8 +208,7 @@ export default function SalesReportPage() {
     const t = `${g} ${d}`;
 
     // Consultas (verificar antes de "armação" para evitar falsos positivos)
-    if (/consulta/.test(t) && /\b(a\s*100|a100|100)\b/.test(t)) return "Consulta A 100";
-    if (/consulta/.test(t) && /\b(a\s*50|a50|50)\b/.test(t)) return "Consulta A 50";
+    if (/consulta/.test(t)) return "Consulta";
 
     // Óculos Solar (verificar antes de "armação" porque solar pode conter armação)
     if (/solar/.test(t) || /\bsol\b/.test(t)) return "Óculos Solar";
