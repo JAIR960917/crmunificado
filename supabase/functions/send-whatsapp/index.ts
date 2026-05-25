@@ -655,7 +655,7 @@ serve(async (req) => {
         const tcStatusLabel = tcStatusRow?.label || statusKey;
 
         const { data: cardsRaw } = await supabase.from(cfg.dataTable)
-          .select(isCobrancas ? "id, data, status, updated_at, created_by, assigned_to, company_id, ssotica_company_id" : "id, data, status, updated_at, created_by, assigned_to").eq("status", statusKey);
+          .select(isCobrancas ? "id, data, status, created_at, updated_at, created_by, assigned_to, company_id, ssotica_company_id" : "id, data, status, created_at, updated_at, created_by, assigned_to").eq("status", statusKey);
         if (!cardsRaw || cardsRaw.length === 0) continue;
 
         let cards: any[];
