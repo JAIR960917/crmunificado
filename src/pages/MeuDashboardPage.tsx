@@ -51,12 +51,12 @@ export default function MeuDashboardPage() {
       const [leadIdsRes, renovIdsRes, leadFieldsRes, renovFieldsRes, leadStatusRes, renovStatusRes] = await Promise.all([
         supabase
           .from("crm_leads")
-          .select("id", { count: "exact" })
+          .select("id", { count: "exact", head: true })
           .neq("status", "excluidos")
           .or(`assigned_to.eq.${uid},created_by.eq.${uid}`),
         supabase
           .from("crm_renovacoes")
-          .select("id", { count: "exact" })
+          .select("id", { count: "exact", head: true })
           .neq("status", "excluidos")
           .or(`assigned_to.eq.${uid},created_by.eq.${uid}`),
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field"),
@@ -65,32 +65,28 @@ export default function MeuDashboardPage() {
         supabase.from("crm_renovacao_statuses").select("key, label"),
       ]);
 
-      const leadIds = (leadIdsRes.data || []).map((r: any) => r.id as string);
-      const renovIds = (renovIdsRes.data || []).map((r: any) => r.id as string);
       const leadFields = (leadFieldsRes.data || []) as LeadIdentityField[];
       const renovFields = (renovFieldsRes.data || []) as LeadIdentityField[];
       const leadStatuses = new Map(((leadStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
       const renovStatuses = new Map(((renovStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
 
-      // 2) Apenas atividades pendentes até o fim de hoje (hoje + atrasadas).
+      // 2) Atividades pendentes criadas pelo usuário (até o fim de hoje), independente
+      //    de quem está como assigned_to/created_by no lead/renovação.
       const [leadActsRes, renovActsRes] = await Promise.all([
-        leadIds.length
-          ? supabase
-              .from("lead_activities")
-              .select("id, lead_id, title, scheduled_date")
-              .is("completed_at", null)
-              .lte("scheduled_date", endTodayIso)
-              .in("lead_id", leadIds)
-          : Promise.resolve({ data: [] as any[] }),
-        renovIds.length
-          ? supabase
-              .from("renovacao_activities")
-              .select("id, renovacao_id, title, scheduled_date")
-              .is("completed_at", null)
-              .lte("scheduled_date", endTodayIso)
-              .in("renovacao_id", renovIds)
-          : Promise.resolve({ data: [] as any[] }),
+        supabase
+          .from("lead_activities")
+          .select("id, lead_id, title, scheduled_date")
+          .is("completed_at", null)
+          .lte("scheduled_date", endTodayIso)
+          .eq("created_by", uid),
+        supabase
+          .from("renovacao_activities")
+          .select("id, renovacao_id, title, scheduled_date")
+          .is("completed_at", null)
+          .lte("scheduled_date", endTodayIso)
+          .eq("created_by", uid),
       ]);
+
 
       const leadActs: Activity[] = ((leadActsRes.data || []) as any[]).map((a) => ({
         id: a.id, ref_id: a.lead_id, scheduled_date: a.scheduled_date, title: a.title,
