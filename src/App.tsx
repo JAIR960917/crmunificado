@@ -51,6 +51,7 @@ import SSoticaStatusPage from "./pages/SSoticaStatusPage";
 import TransitionLogsPage from "./pages/TransitionLogsPage";
 import DashboardPage from "./pages/DashboardPage";
 import SalesReportPage from "./pages/SalesReportPage";
+import MeuDashboardPage from "./pages/MeuDashboardPage";
 import NotFound from "./pages/NotFound";
 
 /** Cliente React Query — cache compartilhado de chamadas ao backend. */
@@ -137,6 +138,7 @@ const AppRoutes = () => {
       <Route path="/logs-movimentacao" element={<RoleGate><TransitionLogsPage /></RoleGate>} />
       <Route path="/dashboard" element={<RoleGate><DashboardPage /></RoleGate>} />
       <Route path="/relatorio-vendas" element={<RoleGate><SalesReportPage /></RoleGate>} />
+      <Route path="/meu-dashboard" element={<RoleGate><MeuDashboardPage /></RoleGate>} />
 
       {/* /instalar é semipública (orienta a instalar PWA) */}
       <Route path="/instalar" element={<InstallPage />} />

@@ -39,6 +39,7 @@ type NavItem = {
 /** Itens do menu principal — ORDEM IMPORTA (é a ordem visual). */
 const navItems: NavItem[] = [
   { path: "/dashboard",            label: "Dashboard",              icon: BarChart3 },
+  { path: "/meu-dashboard",        label: "Meu Dashboard",          icon: LayoutDashboard },
   { path: "/relatorio-vendas",     label: "Relatório de Vendas",    icon: FileBarChart },
   { path: "/",                     label: "Leads",                  icon: LayoutDashboard },
   { path: "/cobrancas",            label: "Cobranças",              icon: Receipt },
