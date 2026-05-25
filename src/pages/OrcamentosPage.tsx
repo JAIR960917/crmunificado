@@ -63,7 +63,7 @@ export default function OrcamentosPage() {
         fez_orcamento: false,
         orcamento_valor: null,
         orcamento_produtos: null,
-        orcamento_produtos_itens: null,
+        orcamento_produtos_itens: [],
         orcamento_observacao: null,
       })
       .eq("id", deleting.id);
