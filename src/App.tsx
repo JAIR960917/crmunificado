@@ -22,7 +22,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { SystemSettingsProvider } from "@/contexts/SystemSettingsContext";
+import { SystemSettingsProvider, useSystemSettings } from "@/contexts/SystemSettingsContext";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 // ----- Páginas (cada import = uma rota) -----
@@ -52,6 +52,7 @@ import TransitionLogsPage from "./pages/TransitionLogsPage";
 import DashboardPage from "./pages/DashboardPage";
 import SalesReportPage from "./pages/SalesReportPage";
 import MeuDashboardPage from "./pages/MeuDashboardPage";
+import MaintenancePage from "./pages/MaintenancePage";
 import NotFound from "./pages/NotFound";
 
 /** Cliente React Query — cache compartilhado de chamadas ao backend. */
@@ -82,12 +83,21 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
  * com base nas permissões da função do usuário (tabela role_page_permissions).
  */
 function RoleGate({ children }: { children: React.ReactNode }) {
-  const { session, loading, canAccessPath, roleKey, permissionsLoaded } = useAuth();
+  const { session, loading, canAccessPath, roleKey, permissionsLoaded, user } = useAuth();
+  const { settings, loading: settingsLoading } = useSystemSettings();
   if (loading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>;
   if (!session) return <Navigate to="/login" replace />;
 
   // Espera o roleKey E as permissões carregarem antes de decidir (evita redirect prematuro).
   if (!roleKey || !permissionsLoaded) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>;
+
+  // Modo manutenção: bloqueia tudo, exceto os 2 admins escolhidos em /configuracoes.
+  if (!settingsLoading && settings.maintenance_mode === "true") {
+    const allowed = [settings.maintenance_admin_1, settings.maintenance_admin_2].filter(Boolean);
+    if (!user || !allowed.includes(user.id)) {
+      return <MaintenancePage />;
+    }
+  }
 
   const path = window.location.pathname;
   if (!canAccessPath(path)) {
