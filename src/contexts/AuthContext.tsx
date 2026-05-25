@@ -48,7 +48,7 @@ function clearPersistedAuthTokens() {
 }
 
 function syncPersistedAuthWithCurrentBackend() {
-  const runtimeConfig = window.__CRM_RUNTIME_CONFIG__;
+  const runtimeConfig = (window as Window & { __CRM_RUNTIME_CONFIG__?: { supabaseUrl?: string; supabasePublishableKey?: string } }).__CRM_RUNTIME_CONFIG__;
   const currentBackendUrl = runtimeConfig?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL || "";
   const currentPublishableKey =
     runtimeConfig?.supabasePublishableKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
