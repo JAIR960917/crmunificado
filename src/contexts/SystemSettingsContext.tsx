@@ -32,19 +32,23 @@ const BRANDING_SETTING_KEYS = [
   "maintenance_mode",
   "maintenance_admin_1",
   "maintenance_admin_2",
+  "maintenance_title",
+  "maintenance_message",
 ] as const;
 
 /** Forma das configurações persistidas. */
 type Settings = {
   system_name: string;
-  primary_color: string;     // HSL
-  background_color: string;  // HSL
-  text_color: string;        // HSL
-  button_color: string;      // HSL
+  primary_color: string;
+  background_color: string;
+  text_color: string;
+  button_color: string;
   logo_url: string;
-  maintenance_mode: string;    // "true" | "false"
-  maintenance_admin_1: string; // user_id permitido em manutenção
-  maintenance_admin_2: string; // user_id permitido em manutenção
+  maintenance_mode: string;
+  maintenance_admin_1: string;
+  maintenance_admin_2: string;
+  maintenance_title: string;
+  maintenance_message: string;
 };
 
 /** Defaults usados antes de buscar do banco e em caso de erro. */
@@ -58,6 +62,8 @@ const defaults: Settings = {
   maintenance_mode: "false",
   maintenance_admin_1: "",
   maintenance_admin_2: "",
+  maintenance_title: "Sistema em manutenção",
+  maintenance_message: "Estamos realizando uma manutenção no sistema. Volte em breve — agradecemos a sua paciência.",
 };
 
 type Ctx = {
