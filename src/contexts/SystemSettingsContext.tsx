@@ -29,6 +29,9 @@ const BRANDING_SETTING_KEYS = [
   "text_color",
   "button_color",
   "logo_url",
+  "maintenance_mode",
+  "maintenance_admin_1",
+  "maintenance_admin_2",
 ] as const;
 
 /** Forma das configurações persistidas. */
@@ -39,6 +42,9 @@ type Settings = {
   text_color: string;        // HSL
   button_color: string;      // HSL
   logo_url: string;
+  maintenance_mode: string;    // "true" | "false"
+  maintenance_admin_1: string; // user_id permitido em manutenção
+  maintenance_admin_2: string; // user_id permitido em manutenção
 };
 
 /** Defaults usados antes de buscar do banco e em caso de erro. */
@@ -49,6 +55,9 @@ const defaults: Settings = {
   text_color: "210 20% 92%",
   button_color: "220 72% 55%",
   logo_url: "",
+  maintenance_mode: "false",
+  maintenance_admin_1: "",
+  maintenance_admin_2: "",
 };
 
 type Ctx = {
