@@ -48,6 +48,8 @@ export default function SettingsPage() {
           "maintenance_mode",
           "maintenance_admin_1",
           "maintenance_admin_2",
+          "maintenance_title",
+          "maintenance_message",
         ]);
       const extra: Record<string, string> = {};
       (data || []).forEach((r: any) => { extra[r.setting_key] = r.setting_value; });
@@ -63,6 +65,8 @@ export default function SettingsPage() {
         maintenance_mode: extra.maintenance_mode || "false",
         maintenance_admin_1: extra.maintenance_admin_1 || "",
         maintenance_admin_2: extra.maintenance_admin_2 || "",
+        maintenance_title: extra.maintenance_title || "Sistema em manutenção",
+        maintenance_message: extra.maintenance_message || "Estamos realizando uma manutenção no sistema. Volte em breve — agradecemos a sua paciência.",
       });
     };
     loadExtraSettings();
