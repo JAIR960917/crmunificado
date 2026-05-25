@@ -328,10 +328,11 @@ function buildCobrancaVars(
     .map((p) => `• Valor: ${formatBRL(p?.valor)} | Vencimento: ${formatDateBR(p?.vencimento)}`)
     .join("\n");
 
-  // Boleto/parcela mais antigo entre as vencidas (maior dias_atraso ou menor vencimento)
-  const maisAntigo = vencidas.slice().sort((a, b) =>
-    String(a?.vencimento || "9999-12-31").localeCompare(String(b?.vencimento || "9999-12-31")),
-  )[0];
+  // Boleto/parcela mais antigo entre as vencidas (menor vencimento).
+  // Usa o mesmo fallback de baseListagem para cobrir integrações que gravam
+  // dias_atraso=0 mesmo em parcelas já vencidas.
+  const maisAntigo = vencidasParaLista[0];
+
 
   const companyId = card?.company_id || card?.ssotica_company_id || null;
   const company = companyId ? companies.get(companyId) : null;
