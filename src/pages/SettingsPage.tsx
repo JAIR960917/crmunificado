@@ -343,6 +343,23 @@ export default function SettingsPage() {
           <p className="text-[11px] text-muted-foreground">
             Quando ativado, todos os usuários verão a tela de manutenção. Apenas os 2 administradores abaixo continuarão acessando normalmente.
           </p>
+          <div className="space-y-1">
+            <Label className="text-xs">Título exibido</Label>
+            <Input
+              value={values.maintenance_title || ""}
+              onChange={(e) => setValues((prev) => ({ ...prev, maintenance_title: e.target.value }))}
+              placeholder="Sistema em manutenção"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Mensagem exibida</Label>
+            <Textarea
+              rows={3}
+              value={values.maintenance_message || ""}
+              onChange={(e) => setValues((prev) => ({ ...prev, maintenance_message: e.target.value }))}
+              placeholder="Estamos realizando uma manutenção no sistema..."
+            />
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {[1, 2].map((n) => {
               const key = `maintenance_admin_${n}`;
