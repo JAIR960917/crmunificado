@@ -820,6 +820,7 @@ serve(async (req) => {
               if (result.ok) {
                 const sentAt = new Date().toISOString();
                 await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: sentAt });
+                await logWhatsappActivity(supabase, moduleKey, card, `WhatsApp enviado — ${tc.name} (passo ${step.position})`, messageBody);
                 totalSent++;
                 triggerSentNow++;
                 // avança round-robin (cobrancas / instance_ids) somente após envio bem-sucedido
