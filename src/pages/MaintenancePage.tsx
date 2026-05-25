@@ -31,9 +31,9 @@ export default function MaintenancePage() {
           <Wrench className="h-16 w-16 text-primary" />
         </div>
       )}
-      <h1 className="text-3xl sm:text-4xl font-bold mb-3 text-foreground">Sistema em manutenção</h1>
-      <p className="text-muted-foreground max-w-md mb-8">
-        Estamos realizando uma manutenção no {settings.system_name}. Volte em breve — agradecemos a sua paciência.
+      <h1 className="text-3xl sm:text-4xl font-bold mb-3 text-foreground">{settings.maintenance_title || "Sistema em manutenção"}</h1>
+      <p className="text-muted-foreground max-w-md mb-8 whitespace-pre-line">
+        {settings.maintenance_message || `Estamos realizando uma manutenção no ${settings.system_name}. Volte em breve — agradecemos a sua paciência.`}
       </p>
       {session && (
         <Button variant="outline" onClick={signOut}>
