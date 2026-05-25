@@ -13,7 +13,7 @@ import { CalendarClock, AlertTriangle, Users, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-type Activity = { id: string; ref_id: string; scheduled_date: string; completed_at: string | null; title: string };
+type Activity = { id: string; ref_id: string; scheduled_date: string; title: string };
 type Item = { id: string; data: any; status: string };
 type StatusRow = { key: string; label: string };
 
@@ -30,14 +30,11 @@ export default function MeuDashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [leads, setLeads] = useState<Item[]>([]);
-  const [renovacoes, setRenovacoes] = useState<Item[]>([]);
-  const [leadActs, setLeadActs] = useState<Activity[]>([]);
-  const [renovActs, setRenovActs] = useState<Activity[]>([]);
-  const [leadFields, setLeadFields] = useState<LeadIdentityField[]>([]);
-  const [renovFields, setRenovFields] = useState<LeadIdentityField[]>([]);
-  const [leadStatuses, setLeadStatuses] = useState<Map<string, string>>(new Map());
-  const [renovStatuses, setRenovStatuses] = useState<Map<string, string>>(new Map());
+  const [leadsCount, setLeadsCount] = useState(0);
+  const [renovCount, setRenovCount] = useState(0);
+  const [hojeRows, setHojeRows] = useState<TaskRow[]>([]);
+  const [atrasadasRows, setAtrasadasRows] = useState<TaskRow[]>([]);
+  const [counts, setCounts] = useState({ hojeL: 0, hojeR: 0, atrL: 0, atrR: 0 });
 
   useEffect(() => {
     if (!user) return;
@@ -45,15 +42,21 @@ export default function MeuDashboardPage() {
     setLoading(true);
     (async () => {
       const uid = user.id;
-      const [leadsRes, renovRes, leadFieldsRes, renovFieldsRes, leadStatusRes, renovStatusRes] = await Promise.all([
+      const now = new Date();
+      const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      const endTodayIso = endToday.toISOString();
+
+      // 1) IDs leves dos leads/renovações do usuário (sem o data pesado).
+      const [leadIdsRes, renovIdsRes, leadFieldsRes, renovFieldsRes, leadStatusRes, renovStatusRes] = await Promise.all([
         supabase
           .from("crm_leads")
-          .select("id, data, status, assigned_to, created_by")
+          .select("id", { count: "exact" })
           .neq("status", "excluidos")
           .or(`assigned_to.eq.${uid},created_by.eq.${uid}`),
         supabase
           .from("crm_renovacoes")
-          .select("id, data, status, assigned_to, created_by")
+          .select("id", { count: "exact" })
           .neq("status", "excluidos")
           .or(`assigned_to.eq.${uid},created_by.eq.${uid}`),
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field"),
@@ -62,110 +65,103 @@ export default function MeuDashboardPage() {
         supabase.from("crm_renovacao_statuses").select("key, label"),
       ]);
 
-      const leadsData = (leadsRes.data || []) as Item[];
-      const renovData = (renovRes.data || []) as Item[];
-      const leadIds = leadsData.map((l) => l.id);
-      const renovIds = renovData.map((r) => r.id);
+      const leadIds = (leadIdsRes.data || []).map((r: any) => r.id as string);
+      const renovIds = (renovIdsRes.data || []).map((r: any) => r.id as string);
+      const leadFields = (leadFieldsRes.data || []) as LeadIdentityField[];
+      const renovFields = (renovFieldsRes.data || []) as LeadIdentityField[];
+      const leadStatuses = new Map(((leadStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
+      const renovStatuses = new Map(((renovStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
 
+      // 2) Apenas atividades pendentes até o fim de hoje (hoje + atrasadas).
       const [leadActsRes, renovActsRes] = await Promise.all([
         leadIds.length
           ? supabase
               .from("lead_activities")
-              .select("id, lead_id, title, scheduled_date, completed_at")
+              .select("id, lead_id, title, scheduled_date")
               .is("completed_at", null)
+              .lte("scheduled_date", endTodayIso)
               .in("lead_id", leadIds)
           : Promise.resolve({ data: [] as any[] }),
         renovIds.length
           ? supabase
               .from("renovacao_activities")
-              .select("id, renovacao_id, title, scheduled_date, completed_at")
+              .select("id, renovacao_id, title, scheduled_date")
               .is("completed_at", null)
+              .lte("scheduled_date", endTodayIso)
               .in("renovacao_id", renovIds)
           : Promise.resolve({ data: [] as any[] }),
       ]);
 
+      const leadActs: Activity[] = ((leadActsRes.data || []) as any[]).map((a) => ({
+        id: a.id, ref_id: a.lead_id, scheduled_date: a.scheduled_date, title: a.title,
+      }));
+      const renovActs: Activity[] = ((renovActsRes.data || []) as any[]).map((a) => ({
+        id: a.id, ref_id: a.renovacao_id, scheduled_date: a.scheduled_date, title: a.title,
+      }));
+
+      // 3) Buscar `data` apenas dos itens que têm atividade relevante.
+      const neededLeadIds = Array.from(new Set(leadActs.map((a) => a.ref_id)));
+      const neededRenovIds = Array.from(new Set(renovActs.map((a) => a.ref_id)));
+
+      const [leadsRes, renovRes] = await Promise.all([
+        neededLeadIds.length
+          ? supabase.from("crm_leads").select("id, data, status").in("id", neededLeadIds)
+          : Promise.resolve({ data: [] as any[] }),
+        neededRenovIds.length
+          ? supabase.from("crm_renovacoes").select("id, data, status").in("id", neededRenovIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
       if (!mounted) return;
-      setLeads(leadsData);
-      setRenovacoes(renovData);
-      setLeadFields((leadFieldsRes.data || []) as any);
-      setRenovFields((renovFieldsRes.data || []) as any);
-      setLeadStatuses(new Map(((leadStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label])));
-      setRenovStatuses(new Map(((renovStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label])));
-      setLeadActs(
-        ((leadActsRes.data || []) as any[]).map((a) => ({
-          id: a.id, ref_id: a.lead_id, scheduled_date: a.scheduled_date, completed_at: a.completed_at, title: a.title,
-        })),
-      );
-      setRenovActs(
-        ((renovActsRes.data || []) as any[]).map((a) => ({
-          id: a.id, ref_id: a.renovacao_id, scheduled_date: a.scheduled_date, completed_at: a.completed_at, title: a.title,
-        })),
-      );
+
+      const leadMap = new Map(((leadsRes.data || []) as Item[]).map((l) => [l.id, l]));
+      const renovMap = new Map(((renovRes.data || []) as Item[]).map((r) => [r.id, r]));
+
+      const buildRow = (kind: "lead" | "renovacao", act: Activity): TaskRow | null => {
+        const item = kind === "lead" ? leadMap.get(act.ref_id) : renovMap.get(act.ref_id);
+        if (!item) return null;
+        const fields = kind === "lead" ? leadFields : renovFields;
+        const statuses = kind === "lead" ? leadStatuses : renovStatuses;
+        const { nome } = resolveLeadIdentity(item.data || {}, fields);
+        return {
+          kind, id: item.id, nome: nome || "(sem nome)",
+          statusLabel: statuses.get(item.status) || item.status,
+          scheduled: act.scheduled_date, title: act.title,
+        };
+      };
+
+      const hoje: TaskRow[] = [];
+      const atr: TaskRow[] = [];
+      const hojeL = new Set<string>(), hojeR = new Set<string>();
+      const atrL = new Set<string>(), atrR = new Set<string>();
+      const ingest = (kind: "lead" | "renovacao", acts: Activity[]) => {
+        for (const a of acts) {
+          const d = new Date(a.scheduled_date);
+          const row = buildRow(kind, a);
+          if (!row) continue;
+          if (d >= startToday && d <= endToday) {
+            hoje.push(row);
+            (kind === "lead" ? hojeL : hojeR).add(row.id);
+          } else if (d < startToday) {
+            atr.push(row);
+            (kind === "lead" ? atrL : atrR).add(row.id);
+          }
+        }
+      };
+      ingest("lead", leadActs);
+      ingest("renovacao", renovActs);
+      hoje.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
+      atr.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
+
+      setLeadsCount(leadIdsRes.count ?? leadIds.length);
+      setRenovCount(renovIdsRes.count ?? renovIds.length);
+      setHojeRows(hoje);
+      setAtrasadasRows(atr);
+      setCounts({ hojeL: hojeL.size, hojeR: hojeR.size, atrL: atrL.size, atrR: atrR.size });
       setLoading(false);
     })();
     return () => { mounted = false; };
   }, [user?.id]);
-
-  const { hojeRows, atrasadasRows, hojeLeadsCount, hojeRenovCount, atrasadasLeadsCount, atrasadasRenovCount } = useMemo(() => {
-    const now = new Date();
-    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-
-    const leadMap = new Map(leads.map((l) => [l.id, l]));
-    const renovMap = new Map(renovacoes.map((r) => [r.id, r]));
-
-    const buildRow = (kind: "lead" | "renovacao", act: Activity): TaskRow | null => {
-      const item = kind === "lead" ? leadMap.get(act.ref_id) : renovMap.get(act.ref_id);
-      if (!item) return null;
-      const fields = kind === "lead" ? leadFields : renovFields;
-      const statuses = kind === "lead" ? leadStatuses : renovStatuses;
-      const { nome } = resolveLeadIdentity(item.data || {}, fields);
-      return {
-        kind,
-        id: item.id,
-        nome: nome || "(sem nome)",
-        statusLabel: statuses.get(item.status) || item.status,
-        scheduled: act.scheduled_date,
-        title: act.title,
-      };
-    };
-
-    const hojeLeadIds = new Set<string>();
-    const hojeRenovIds = new Set<string>();
-    const atrLeadIds = new Set<string>();
-    const atrRenovIds = new Set<string>();
-    const hoje: TaskRow[] = [];
-    const atrasadas: TaskRow[] = [];
-
-    const ingest = (kind: "lead" | "renovacao", acts: Activity[]) => {
-      for (const a of acts) {
-        const d = new Date(a.scheduled_date);
-        const row = buildRow(kind, a);
-        if (!row) continue;
-        if (d >= startToday && d <= endToday) {
-          hoje.push(row);
-          (kind === "lead" ? hojeLeadIds : hojeRenovIds).add(row.id);
-        } else if (d < startToday) {
-          atrasadas.push(row);
-          (kind === "lead" ? atrLeadIds : atrRenovIds).add(row.id);
-        }
-      }
-    };
-    ingest("lead", leadActs);
-    ingest("renovacao", renovActs);
-
-    hoje.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
-    atrasadas.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
-
-    return {
-      hojeRows: hoje,
-      atrasadasRows: atrasadas,
-      hojeLeadsCount: hojeLeadIds.size,
-      hojeRenovCount: hojeRenovIds.size,
-      atrasadasLeadsCount: atrLeadIds.size,
-      atrasadasRenovCount: atrRenovIds.size,
-    };
-  }, [leads, renovacoes, leadActs, renovActs, leadFields, renovFields, leadStatuses, renovStatuses]);
 
   const goTo = (row: TaskRow) => {
     navigate(row.kind === "lead" ? "/" : "/clientes-ativos");
@@ -189,11 +185,11 @@ export default function MeuDashboardPage() {
       return <div className="text-sm text-muted-foreground py-6 text-center">{emptyText}</div>;
     }
     return (
-      <ul className="divide-y">
+      <ul className="space-y-2">
         {rows.map((r, i) => (
           <li
             key={`${r.kind}-${r.id}-${i}`}
-            className="py-3 flex items-center justify-between gap-3 hover:bg-muted/50 px-2 rounded cursor-pointer"
+            className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card/50 px-3 py-3 hover:bg-muted/50 hover:border-primary/40 transition-colors cursor-pointer"
             onClick={() => goTo(r)}
           >
             <div className="min-w-0 flex-1">
@@ -228,26 +224,26 @@ export default function MeuDashboardPage() {
             icon={CalendarClock}
             label="Tarefas para hoje"
             value={loading ? "…" : hojeRows.length}
-            sub={`${hojeLeadsCount} leads · ${hojeRenovCount} renovações`}
+            sub={`${counts.hojeL} leads · ${counts.hojeR} renovações`}
             tone="text-blue-500"
           />
           <StatCard
             icon={AlertTriangle}
             label="Tarefas atrasadas"
             value={loading ? "…" : atrasadasRows.length}
-            sub={`${atrasadasLeadsCount} leads · ${atrasadasRenovCount} renovações`}
+            sub={`${counts.atrL} leads · ${counts.atrR} renovações`}
             tone="text-red-500"
           />
           <StatCard
             icon={Users}
             label="Meus leads"
-            value={loading ? "…" : leads.length}
+            value={loading ? "…" : leadsCount}
             tone="text-emerald-500"
           />
           <StatCard
             icon={RefreshCw}
             label="Minhas renovações"
-            value={loading ? "…" : renovacoes.length}
+            value={loading ? "…" : renovCount}
             tone="text-amber-500"
           />
         </div>
