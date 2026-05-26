@@ -765,7 +765,11 @@ serve(async (req) => {
           if (s.status === "sent") rrIndex++;
         }
 
+        // Limite por execução para garantir que todos os gatilhos rodem dentro do tempo do cron
+        const MAX_SENDS_PER_TRIGGER_PER_RUN = 2;
+
         for (const card of cards) {
+          if (triggerSentNow >= MAX_SENDS_PER_TRIGGER_PER_RUN) break;
           if (!isWithinDailyWindow(tc.start_time, tc.end_time)) {
             skippedOutOfWindow++;
             aborted = true;
