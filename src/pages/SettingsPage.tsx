@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Save, Upload, Trash2, Clock, Wrench } from "lucide-react";
+import { Save, Upload, Trash2, Clock, Wrench, RotateCcw } from "lucide-react";
 import RolePermissionsManager from "@/components/settings/RolePermissionsManager";
 
 type SettingField = {
