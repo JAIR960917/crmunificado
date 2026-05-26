@@ -603,16 +603,28 @@ serve(async (req) => {
               await logWhatsappActivity(supabase, moduleKey, card, `WhatsApp enviado — ${campaign.name}`, messageBody);
               totalSent++;
               campaignSentNow++;
+              await supabase.from(cfg.dataTable).update({
+                data: { ...(typeof card.data === "object" ? card.data : {}), envio_erro: null, envio_erro_em: null, envio_erro_campaign_id: null, envio_erro_campaign_name: null },
+              }).eq("id", card.id);
             } else {
-              await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "error", error_message: result.errorMessage || "Erro" });
+              const errMsg = result.errorMessage || "Erro";
+              await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "error", error_message: errMsg });
               totalErrors++;
               campaignErrorsNow++;
+              await supabase.from(cfg.dataTable).update({
+                data: { ...(typeof card.data === "object" ? card.data : {}), envio_erro: errMsg, envio_erro_em: new Date().toISOString(), envio_erro_campaign_id: campaign.id, envio_erro_campaign_name: campaign.name },
+              }).eq("id", card.id);
             }
           } catch (e) {
-            await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "error", error_message: e instanceof Error ? e.message : "Unknown error" });
+            const errMsg = e instanceof Error ? e.message : "Unknown error";
+            await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "error", error_message: errMsg });
             totalErrors++;
             campaignErrorsNow++;
+            await supabase.from(cfg.dataTable).update({
+              data: { ...(typeof card.data === "object" ? card.data : {}), envio_erro: errMsg, envio_erro_em: new Date().toISOString(), envio_erro_campaign_id: campaign.id, envio_erro_campaign_name: campaign.name },
+            }).eq("id", card.id);
           }
+
         }
 
         // Se processamos todos os cards pendentes (não abortou) e havia algo a fazer, registra conclusão
