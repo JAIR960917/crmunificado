@@ -556,7 +556,10 @@ serve(async (req) => {
         // Round-robin index para cobrancas (persistente entre execuções via sentIds.size)
         let rrIndex = sentIds.size;
 
+        const MAX_SENDS_PER_CAMPAIGN_PER_RUN = 2;
+
         for (const card of pendingCards) {
+          if (campaignSentNow >= MAX_SENDS_PER_CAMPAIGN_PER_RUN) break;
           // Re-check window mid-batch (in case we cross end_time)
           if (!isWithinDailyWindow(campaign.start_time, campaign.end_time)) {
             skippedOutOfWindow++;
