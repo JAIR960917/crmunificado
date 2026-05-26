@@ -33,8 +33,8 @@ type SituacaoKey =
   | "ajuizado_navde";
 const SITUACOES: { key: SituacaoKey; label: string; help: string }[] = [
   { key: "1_dia_antes_vencimento", label: "1 dia antes do vencimento", help: "Parcelas que vencem amanhã (entram nesta coluna)" },
-  { key: "1_dia_atraso", label: "1 dia de atraso", help: "Parcelas com exatamente 1 dia de atraso" },
-  { key: "ate_30_dias_atraso", label: "Até 30 dias de atraso", help: "Parcelas com 1 a 30 dias de atraso (sobrepõe '1 dia de atraso' se preenchido)" },
+  { key: "1_dia_atraso", label: "5 dias de atraso", help: "Parcelas com exatamente 5 dias de atraso" },
+  { key: "ate_30_dias_atraso", label: "Até 30 dias de atraso", help: "Parcelas com 1 a 30 dias de atraso (sobrepõe '5 dias de atraso' se preenchido)" },
   { key: "mais_30_dias_sem_negativacao", label: "Mais de 30 dias sem negativação", help: "Parcelas com mais de 30 dias de atraso e que ainda NÃO estão negativadas no Serasa" },
   { key: "negativado_serasa", label: "Negativado Serasa", help: "Cliente negativado no Serasa" },
   { key: "ajuizado_saniely", label: "Ajuizado(A) Saniely", help: "Cliente ajuizado pela advogada Saniely" },

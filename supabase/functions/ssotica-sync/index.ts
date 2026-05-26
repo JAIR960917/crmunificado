@@ -685,12 +685,13 @@ async function syncContasReceber(
   // mapeamentos configuráveis na tela de Fluxo de Cobrança.
   // Prioridade:
   //   idx 0           → 1_dia_antes_vencimento
-  //   idx 1, 2        → ate_30_dias_atraso (fallback: 1_dia_atraso para idx 1)
+  //   idx 1, 2        → ate_30_dias_atraso
   //   idx 3..14       → mais_30_dias_sem_negativacao (se mapeado, sobrepõe a coluna por dias)
+  // Observação: a coluna mapeada como "1_dia_atraso" agora representa
+  // "exatamente 5 dias de atraso" e é tratada diretamente em colunaKeyForDiasAtraso.
   function resolveColunaKeyByLogicalIndex(idx: number): string | null {
     if (idx === 0 && situacaoMapping["1_dia_antes_vencimento"]) return situacaoMapping["1_dia_antes_vencimento"];
     if ((idx === 1 || idx === 2) && situacaoMapping["ate_30_dias_atraso"]) return situacaoMapping["ate_30_dias_atraso"];
-    if (idx === 1 && situacaoMapping["1_dia_atraso"]) return situacaoMapping["1_dia_atraso"];
     if (idx >= 3 && situacaoMapping["mais_30_dias_sem_negativacao"]) return situacaoMapping["mais_30_dias_sem_negativacao"];
     const col = cobStatusList[idx];
     return col?.key ?? cobStatusList[cobStatusList.length - 1]?.key ?? null;
@@ -711,6 +712,9 @@ async function syncContasReceber(
     return lockedKeys.has(key) ? lockedEntryKey() : key;
   }
   function colunaKeyForDiasAtraso(dias: number): string {
+    // Atalho: parcelas com EXATAMENTE 5 dias de atraso vão direto para a coluna
+    // mapeada como "1_dia_atraso" (que agora representa "5 dias de atraso").
+    if (dias === 5 && situacaoMapping["1_dia_atraso"]) return situacaoMapping["1_dia_atraso"];
     const idx = diasParaIndiceLogico(dias);
     return resolveColunaKeyByLogicalIndex(idx) ?? "";
   }
