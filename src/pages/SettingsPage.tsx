@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Save, Upload, Trash2, Clock, Wrench } from "lucide-react";
+import { Save, Upload, Trash2, Clock, Wrench, RotateCcw } from "lucide-react";
 import RolePermissionsManager from "@/components/settings/RolePermissionsManager";
 
 type SettingField = {
@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const { settings, refresh } = useSystemSettings();
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [adminUsers, setAdminUsers] = useState<Array<{ user_id: string; full_name: string }>>([]);
 
@@ -344,6 +345,36 @@ export default function SettingsPage() {
           <p className="text-[11px] text-muted-foreground">
             Define a cada quantos minutos o sistema envia mensagens das campanhas ativas automaticamente.
           </p>
+
+          <div className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={retrying}
+              onClick={async () => {
+                if (!confirm("Reenviar gatilhos para todos os cards com erro de envio?")) return;
+                setRetrying(true);
+                try {
+                  const { data, error } = await supabase.rpc("retry_whatsapp_errors" as any);
+                  if (error) throw error;
+                  const r = (data || {}) as { leads?: number; cobrancas?: number; renovacoes?: number };
+                  const total = (r.leads || 0) + (r.cobrancas || 0) + (r.renovacoes || 0);
+                  toast.success(`${total} card(s) liberados para reenvio (leads: ${r.leads || 0}, cobranças: ${r.cobrancas || 0}, renovações: ${r.renovacoes || 0})`);
+                } catch (e: any) {
+                  toast.error(e?.message || "Erro ao reenviar gatilhos");
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              {retrying ? "Reenviando..." : "Reenviar gatilhos com erro"}
+            </Button>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Limpa o erro de envio e a marca de gatilho dos cards que falharam, permitindo que o cron envie novamente no próximo ciclo.
+            </p>
+          </div>
         </div>
 
         {/* Modo Manutenção */}

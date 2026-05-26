@@ -2165,6 +2165,7 @@ export type Database = {
       manage_ssotica_cron: { Args: never; Returns: undefined }
       manage_whatsapp_cron: { Args: never; Returns: undefined }
       reclassify_cobrancas_by_situacao: { Args: never; Returns: number }
+      retry_whatsapp_errors: { Args: never; Returns: Json }
       slugify_status_key: { Args: { _label: string }; Returns: string }
       soft_delete_lead: { Args: { _lead_id: string }; Returns: undefined }
       soft_delete_renovacao: {
