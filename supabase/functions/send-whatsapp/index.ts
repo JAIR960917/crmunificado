@@ -843,6 +843,10 @@ serve(async (req) => {
                       gatilho_status_key: statusKey,
                       gatilho_campaign_id: tc.id,
                       gatilho_campaign_name: tc.name,
+                      envio_erro: null,
+                      envio_erro_em: null,
+                      envio_erro_campaign_id: null,
+                      envio_erro_campaign_name: null,
                     },
                   })
                   .eq("id", card.id);
