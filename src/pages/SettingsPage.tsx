@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const { settings, refresh } = useSystemSettings();
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [adminUsers, setAdminUsers] = useState<Array<{ user_id: string; full_name: string }>>([]);
 
