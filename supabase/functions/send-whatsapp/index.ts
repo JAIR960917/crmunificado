@@ -772,8 +772,9 @@ serve(async (req) => {
           if (s.status === "sent") rrIndex++;
         }
 
-        // Limite por execução para garantir que todos os gatilhos rodem dentro do tempo do cron
-        const MAX_SENDS_PER_TRIGGER_PER_RUN = 2;
+        // Limite de 1 envio por gatilho por execução: garante round-robin justo
+        // entre todos os gatilhos ativos, em vez de um gatilho monopolizar o cron.
+        const MAX_SENDS_PER_TRIGGER_PER_RUN = 1;
 
         for (const card of cards) {
           if (triggerSentNow >= MAX_SENDS_PER_TRIGGER_PER_RUN) break;
