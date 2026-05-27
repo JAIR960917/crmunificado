@@ -1115,7 +1115,7 @@ serve(async (req) => {
       }
     }
 
-    await supabase.rpc("unlock_send_whatsapp").catch((e: any) => console.error("[send-whatsapp] erro ao liberar lock:", e));
+    try { await supabase.rpc("unlock_send_whatsapp"); } catch (e) { console.error("[send-whatsapp] erro ao liberar lock:", e); }
 
     return new Response(
       JSON.stringify({ message: "Processamento concluído", sent: totalSent, errors: totalErrors, skipped_no_company: skippedNoCompany, skipped_out_of_window: skippedOutOfWindow }),
