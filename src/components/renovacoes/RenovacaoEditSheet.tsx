@@ -142,7 +142,7 @@ export default function RenovacaoEditSheet(props: Props) {
       toast.error("Você iniciou uma tratativa. Clique em \"Salvar contato\" para concluir antes de fechar.");
       return;
     }
-    if (!next if (!next && requiresTratativa && !tratativaRegistrada)if (!next && requiresTratativa && !tratativaRegistrada) isBlocked) {
+    if (!next && isBlocked) {
       toast.error(hasPendingTasks ? "Conclua as tarefas pendentes antes de fechar." : "Registre uma tratativa antes de fechar.");
       return;
     }
@@ -497,7 +497,7 @@ export default function RenovacaoEditSheet(props: Props) {
               {/* Tentativa de contato — visível para todos os usuários (admin, gerente, vendedor) */}
               {tab === "atividade" && renovacaoId && user && (
                 <div className="px-5 py-3 border-b">
-                  {isBlocked {requiresTratativa && !tratativaRegistrada && ({requiresTratativa && !tratativaRegistrada && ( (
+                  {isBlocked && (
                     <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-start gap-2">
                       <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                       <span>{hasPendingTasks ? "Conclua as tarefas pendentes para liberar o fluxo." : "Registre uma tratativa para liberar o fluxo."}</span>
