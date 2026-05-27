@@ -12,7 +12,7 @@
 set -euo pipefail
 
 DOMAIN="${1:-selecao.joonker.com.br}"
-SITE_DIR="/var/www/${DOMAIN}"
+SITE_DIR="/opt/selecao"
 CADDYFILE="/etc/caddy/Caddyfile"
 
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; N='\033[0m'
@@ -26,6 +26,9 @@ err() { echo -e "${R}[err ]${N} $*" >&2; }
 # 1. Criar diretório do site
 # ---------------------------------------------------------------------------
 mkdir -p "${SITE_DIR}"
+chmod 755 "${SITE_DIR}"
+# Garante que o Caddy consiga ler o diretório
+chown -R root:root "${SITE_DIR}" 2>/dev/null || true
 ok "Diretório criado: ${SITE_DIR}"
 
 # ---------------------------------------------------------------------------
@@ -57,7 +60,7 @@ cat > "${SITE_DIR}/index.html" <<'EOF'
 <body>
   <div>
     <h1>🚀 Em breve</h1>
-    <p>O site está sendo configurado. Substitua os arquivos em<br><code>/var/www/selecao.joonker.com.br</code></p>
+    <p>O site está sendo configurado. Substitua os arquivos em<br><code>/opt/selecao</code></p>
   </div>
 </body>
 </html>
