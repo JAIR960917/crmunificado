@@ -55,6 +55,7 @@ type Props = {
   fields: FormField[];
   saving: boolean;
   onSave: (e: React.FormEvent) => void;
+  onCardUpdated?: () => void;
   canReassign: boolean;
   ssoticaClienteId?: number | null;
   ssoticaCompanyId?: string | null;
@@ -78,7 +79,7 @@ export default function RenovacaoEditSheet(props: Props) {
   const {
     open, onOpenChange, renovacaoId, formData, setFormData,
     formStatus, setFormStatus, formAssigned, setFormAssigned,
-    formValor, setFormValor, statuses, profiles, fields, saving, onSave, canReassign,
+    formValor, setFormValor, statuses, profiles, fields, saving, onSave, onCardUpdated, canReassign,
     ssoticaClienteId, ssoticaCompanyId,
   } = props;
   const { user, isAdmin } = useAuth();
@@ -185,7 +186,7 @@ export default function RenovacaoEditSheet(props: Props) {
       toast.success("Tarefa criada");
       setTaskOpen(false); setTaskTitle(""); setTaskDescription(""); setTaskDate(undefined); setTaskTime("09:00");
       fetchTimeline();
-      setTratativaRegistrada(true);
+      onCardUpdated?.();
     }
     setSavingTask(false);
   };
@@ -193,7 +194,7 @@ export default function RenovacaoEditSheet(props: Props) {
   const toggleTaskComplete = async (a: Activity) => {
     const newVal = a.completed_at ? null : new Date().toISOString();
     const { error } = await supabase.from("renovacao_activities" as any).update({ completed_at: newVal } as any).eq("id", a.id);
-    if (error) toast.error("Erro"); else { fetchTimeline(); if (newVal) setTratativaRegistrada(true); }
+    if (error) toast.error("Erro"); else { fetchTimeline(); onCardUpdated?.(); }
   };
 
   const deleteActivity = async (id: string) => {
@@ -228,7 +229,7 @@ export default function RenovacaoEditSheet(props: Props) {
       scheduled_date: dt.toISOString(),
     } as any).eq("id", editingTaskId);
     if (error) toast.error("Erro ao atualizar tarefa");
-    else { toast.success("Tarefa atualizada"); setEditingTaskId(null); fetchTimeline(); setTratativaRegistrada(true); }
+    else { toast.success("Tarefa atualizada"); setEditingTaskId(null); fetchTimeline(); onCardUpdated?.(); }
     setSavingEditTask(false);
   };
 
@@ -518,6 +519,7 @@ export default function RenovacaoEditSheet(props: Props) {
                       setTratativaRegistrada(true);
                       setContactDirty(false);
                       fetchTimeline();
+                      onCardUpdated?.();
                     }}
                     onDirtyChange={setContactDirty}
                   />
