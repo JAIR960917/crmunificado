@@ -275,6 +275,7 @@ export default function ActiveClientsPage() {
       setCompanies(comps || []);
       setAssignableUserIds(null);
     }
+    setMetaLoading(false);
   }, [isGerente, isAdmin, user?.id]);
 
   // Count unassigned (server-side)
