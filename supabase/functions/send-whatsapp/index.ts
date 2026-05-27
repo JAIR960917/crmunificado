@@ -325,6 +325,14 @@ async function resolveStatusKey(supabase: any, statusTable: string, statusId: st
   return data?.key || "";
 }
 
+async function refreshGlobalSendLock(supabase: any, ttlSeconds: number) {
+  try {
+    await supabase.rpc("extend_send_whatsapp_lock", { p_ttl_seconds: ttlSeconds });
+  } catch (e) {
+    console.error("[send-whatsapp] erro ao renovar lock global:", e);
+  }
+}
+
 // ============= Template variables (placeholders) =============
 function formatBRL(v: any): string {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(",", "."));
@@ -444,7 +452,7 @@ serve(async (req) => {
     // qualquer um gravar o lock por entrada na coluna.
     // TTL curto (90s) — se a função travar/cair sem chamar unlock, o próximo
     // ciclo do cron (1 min) só fica bloqueado por ~30s em vez de 5 minutos.
-    const { data: lockAcquired, error: lockErr } = await supabase.rpc("try_lock_send_whatsapp", { p_ttl_seconds: 90 });
+    const { data: lockAcquired, error: lockErr } = await supabase.rpc("try_lock_send_whatsapp", { p_ttl_seconds: 180 });
     if (lockErr) {
       console.error("[send-whatsapp] erro ao tentar adquirir lock:", lockErr);
     }
@@ -483,6 +491,7 @@ serve(async (req) => {
 
     // Configurações dinâmicas
     const SEND_DELAY_MS = await loadSendDelayMs(supabase);
+    const GLOBAL_LOCK_TTL_SECONDS = Math.max(180, Math.ceil((SEND_DELAY_MS * 3) / 1000));
 
     // GLOBAL RATE LIMIT: respeita o intervalo entre envios mesmo entre
     // execuções diferentes do cron. Sem isto, cada invocação reseta
