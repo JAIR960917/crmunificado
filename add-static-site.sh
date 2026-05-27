@@ -58,7 +58,7 @@ cat > "${SITE_DIR}/index.html" <<'EOF'
 <body>
   <div>
     <h1>🚀 Em breve</h1>
-    <p>O site está sendo configurado. Substitua os arquivos em<br><code>/var/www/selecao.joonker.com.br</code></p>
+    <p>O site está sendo configurado. Substitua os arquivos em<br><code>/opt/selecao</code></p>
   </div>
 </body>
 </html>
