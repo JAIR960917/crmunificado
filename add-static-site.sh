@@ -12,7 +12,7 @@
 set -euo pipefail
 
 DOMAIN="${1:-selecao.joonker.com.br}"
-SITE_DIR="/var/www/${DOMAIN}"
+SITE_DIR="/opt/selecao"
 CADDYFILE="/etc/caddy/Caddyfile"
 
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; N='\033[0m'
