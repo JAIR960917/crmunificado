@@ -114,7 +114,22 @@ serve(async (req) => {
       .select("id, status, data, company_id, ssotica_cliente_id, assigned_to, created_by")
       .in("status", Array.from(enabledKeys));
 
-    const stats = { processed: 0, gatilhos_enviados: 0, gatilhos_falhos: 0, avancados: 0, skipped: 0 };
+    // Pré-carrega IDs de cobranças com qualquer atividade pendente (não concluída).
+    // Cards com tarefa pendente/atrasada NÃO podem avançar de coluna.
+    const cobrancaIds = (cobrancas || []).map((c: any) => c.id);
+    const pendingCobrancaIds = new Set<string>();
+    if (cobrancaIds.length > 0) {
+      const { data: pendingActs } = await supabase
+        .from("cobranca_activities")
+        .select("cobranca_id")
+        .is("completed_at", null)
+        .in("cobranca_id", cobrancaIds);
+      for (const a of (pendingActs || []) as any[]) {
+        if (a?.cobranca_id) pendingCobrancaIds.add(a.cobranca_id);
+      }
+    }
+
+    const stats = { processed: 0, gatilhos_enviados: 0, gatilhos_falhos: 0, avancados: 0, skipped: 0, bloqueados_por_tarefa: 0 };
     const now = new Date();
 
     // Dedupe por lead (telefone/ssotica_cliente_id) por status, dentro deste tick
