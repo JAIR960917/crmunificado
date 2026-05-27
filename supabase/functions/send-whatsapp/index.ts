@@ -464,10 +464,42 @@ serve(async (req) => {
 
     // Configurações dinâmicas
     const SEND_DELAY_MS = await loadSendDelayMs(supabase);
+
+    // GLOBAL RATE LIMIT: respeita o intervalo entre envios mesmo entre
+    // execuções diferentes do cron. Sem isto, cada invocação reseta
+    // isFirstSend=true e envia imediatamente, gerando rajadas.
+    if (SEND_DELAY_MS > 0) {
+      const sinceIso = new Date(Date.now() - SEND_DELAY_MS).toISOString();
+      const [{ data: lastTrig }, { data: lastCamp }] = await Promise.all([
+        supabase.from("whatsapp_trigger_sends")
+          .select("sent_at").eq("status", "sent").gte("sent_at", sinceIso)
+          .order("sent_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("whatsapp_campaign_sends")
+          .select("sent_at").eq("status", "sent").gte("sent_at", sinceIso)
+          .order("sent_at", { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      const lastTs = Math.max(
+        lastTrig?.sent_at ? new Date(lastTrig.sent_at).getTime() : 0,
+        lastCamp?.sent_at ? new Date(lastCamp.sent_at).getTime() : 0,
+      );
+      if (lastTs > 0) {
+        const elapsed = Date.now() - lastTs;
+        if (elapsed < SEND_DELAY_MS) {
+          // Outro envio aconteceu recentemente — aborta esta execução para
+          // não furar o intervalo configurado (ex.: 60s/envio).
+          console.log(`[send-whatsapp] rate limit: último envio há ${Math.round(elapsed/1000)}s, intervalo ${Math.round(SEND_DELAY_MS/1000)}s. Pulando ciclo.`);
+          return new Response(JSON.stringify({ ok: true, skipped: "rate_limit", elapsed_ms: elapsed, delay_ms: SEND_DELAY_MS }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+    }
+
     const cobrancasSessions = await loadCobrancasSessions(supabase);
     const pickRoundRobinSession = (index: number): string | null => {
       if (cobrancasSessions.length === 0) return null;
       return cobrancasSessions[index % cobrancasSessions.length];
+
     };
 
     // Mapa session -> nome da instância (para logs de gatilho de cobrança)
