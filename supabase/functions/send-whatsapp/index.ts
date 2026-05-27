@@ -442,7 +442,9 @@ serve(async (req) => {
     // raiz de clientes recebendo o mesmo gatilho em duplicidade (uma vez
     // por instância) é envios concorrentes que carregam o card antes de
     // qualquer um gravar o lock por entrada na coluna.
-    const { data: lockAcquired, error: lockErr } = await supabase.rpc("try_lock_send_whatsapp", { p_ttl_seconds: 300 });
+    // TTL curto (90s) — se a função travar/cair sem chamar unlock, o próximo
+    // ciclo do cron (1 min) só fica bloqueado por ~30s em vez de 5 minutos.
+    const { data: lockAcquired, error: lockErr } = await supabase.rpc("try_lock_send_whatsapp", { p_ttl_seconds: 90 });
     if (lockErr) {
       console.error("[send-whatsapp] erro ao tentar adquirir lock:", lockErr);
     }
