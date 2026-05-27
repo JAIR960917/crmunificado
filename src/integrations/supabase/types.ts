@@ -1890,6 +1890,21 @@ export type Database = {
           },
         ]
       }
+      whatsapp_send_locks: {
+        Row: {
+          locked_until: string
+          name: string
+        }
+        Insert: {
+          locked_until?: string
+          name: string
+        }
+        Update: {
+          locked_until?: string
+          name?: string
+        }
+        Relationships: []
+      }
       whatsapp_trigger_campaigns: {
         Row: {
           company_id: string | null
@@ -2181,8 +2196,11 @@ export type Database = {
         }
         Returns: number
       }
-      try_lock_send_whatsapp: { Args: never; Returns: boolean }
-      unlock_send_whatsapp: { Args: never; Returns: boolean }
+      try_lock_send_whatsapp: {
+        Args: { p_ttl_seconds?: number }
+        Returns: boolean
+      }
+      unlock_send_whatsapp: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "vendedor" | "gerente" | "financeiro"
