@@ -1978,6 +1978,7 @@ export type Database = {
           phone: string
           sent_at: string | null
           status: string
+          status_entered_at: string | null
           step_id: string
         }
         Insert: {
@@ -1989,6 +1990,7 @@ export type Database = {
           phone: string
           sent_at?: string | null
           status?: string
+          status_entered_at?: string | null
           step_id: string
         }
         Update: {
@@ -2000,6 +2002,7 @@ export type Database = {
           phone?: string
           sent_at?: string | null
           status?: string
+          status_entered_at?: string | null
           step_id?: string
         }
         Relationships: [
@@ -2125,10 +2128,24 @@ export type Database = {
         Args: { _renovacao_id: string }
         Returns: boolean
       }
+      claim_whatsapp_trigger_send: {
+        Args: {
+          p_campaign_id: string
+          p_lead_id: string
+          p_phone: string
+          p_status_entered_at: string
+          p_step_id: string
+        }
+        Returns: boolean
+      }
       decrypt_secret: { Args: { _ciphertext: string }; Returns: string }
       delete_all_leads_cascade: { Args: never; Returns: Json }
       delete_duplicate_leads: { Args: { _lead_ids: string[] }; Returns: Json }
       encrypt_secret: { Args: { _plaintext: string }; Returns: string }
+      extend_send_whatsapp_lock: {
+        Args: { p_ttl_seconds?: number }
+        Returns: undefined
+      }
       find_lead_by_phone: {
         Args: { _phone: string }
         Returns: {
@@ -2179,6 +2196,26 @@ export type Database = {
       is_same_company: { Args: { _user_id: string }; Returns: boolean }
       manage_ssotica_cron: { Args: never; Returns: undefined }
       manage_whatsapp_cron: { Args: never; Returns: undefined }
+      mark_whatsapp_trigger_send_error: {
+        Args: {
+          p_campaign_id: string
+          p_error_message: string
+          p_lead_id: string
+          p_status_entered_at: string
+          p_step_id: string
+        }
+        Returns: undefined
+      }
+      mark_whatsapp_trigger_send_sent: {
+        Args: {
+          p_campaign_id: string
+          p_lead_id: string
+          p_sent_at: string
+          p_status_entered_at: string
+          p_step_id: string
+        }
+        Returns: undefined
+      }
       reclassify_cobrancas_by_situacao: { Args: never; Returns: number }
       retry_whatsapp_errors: { Args: never; Returns: Json }
       slugify_status_key: { Args: { _label: string }; Returns: string }

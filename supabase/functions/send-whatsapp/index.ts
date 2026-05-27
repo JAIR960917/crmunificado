@@ -325,6 +325,14 @@ async function resolveStatusKey(supabase: any, statusTable: string, statusId: st
   return data?.key || "";
 }
 
+async function refreshGlobalSendLock(supabase: any, ttlSeconds: number) {
+  try {
+    await supabase.rpc("extend_send_whatsapp_lock", { p_ttl_seconds: ttlSeconds });
+  } catch (e) {
+    console.error("[send-whatsapp] erro ao renovar lock global:", e);
+  }
+}
+
 // ============= Template variables (placeholders) =============
 function formatBRL(v: any): string {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(",", "."));
@@ -444,7 +452,7 @@ serve(async (req) => {
     // qualquer um gravar o lock por entrada na coluna.
     // TTL curto (90s) — se a função travar/cair sem chamar unlock, o próximo
     // ciclo do cron (1 min) só fica bloqueado por ~30s em vez de 5 minutos.
-    const { data: lockAcquired, error: lockErr } = await supabase.rpc("try_lock_send_whatsapp", { p_ttl_seconds: 90 });
+    const { data: lockAcquired, error: lockErr } = await supabase.rpc("try_lock_send_whatsapp", { p_ttl_seconds: 180 });
     if (lockErr) {
       console.error("[send-whatsapp] erro ao tentar adquirir lock:", lockErr);
     }
@@ -483,6 +491,7 @@ serve(async (req) => {
 
     // Configurações dinâmicas
     const SEND_DELAY_MS = await loadSendDelayMs(supabase);
+    const GLOBAL_LOCK_TTL_SECONDS = Math.max(180, Math.ceil((SEND_DELAY_MS * 3) / 1000));
 
     // GLOBAL RATE LIMIT: respeita o intervalo entre envios mesmo entre
     // execuções diferentes do cron. Sem isto, cada invocação reseta
@@ -649,8 +658,10 @@ serve(async (req) => {
           const cp = cleanPhone(phone);
 
           try {
+            await refreshGlobalSendLock(supabase, GLOBAL_LOCK_TTL_SECONDS);
             if (!isFirstSend) await sleep(SEND_DELAY_MS);
             isFirstSend = false;
+            await refreshGlobalSendLock(supabase, GLOBAL_LOCK_TTL_SECONDS);
             const result = await sendMessage(session!, APIFULL_API_KEY, cp, messageBody, campaign.image_url);
             if (result.ok) {
               await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
@@ -857,6 +868,7 @@ serve(async (req) => {
           // atual na coluna (cobre execuções simultâneas onde o lock ainda
           // não foi gravado).
           const enteredAt = resolveCardEnteredAt(card);
+          const enteredAtIso = enteredAt.toISOString();
           const enteredAtMs = enteredAt.getTime();
           const sendsMapForCard = sendsByCardWithTs.get(card.id) || new Map<string, number>();
           const sentStepIds = new Set<string>();
@@ -894,14 +906,38 @@ serve(async (req) => {
             const messageBody = applyTemplateVars(step.message, vars);
             const cp = cleanPhone(phone);
 
+            await refreshGlobalSendLock(supabase, GLOBAL_LOCK_TTL_SECONDS);
+            const { data: claimed, error: claimError } = await supabase.rpc("claim_whatsapp_trigger_send", {
+              p_campaign_id: tc.id,
+              p_step_id: step.id,
+              p_lead_id: card.id,
+              p_phone: cp,
+              p_status_entered_at: enteredAtIso,
+            });
+            if (claimError) {
+              console.error("[send-whatsapp] erro ao reservar envio de gatilho:", claimError);
+              continue;
+            }
+            if (!claimed) {
+              sentStepIds.add(step.id);
+              continue;
+            }
+
             try {
               if (!isFirstSend) await sleep(SEND_DELAY_MS);
               isFirstSend = false;
+              await refreshGlobalSendLock(supabase, GLOBAL_LOCK_TTL_SECONDS);
               const result = await sendMessage(session!, APIFULL_API_KEY, cp, messageBody, step.image_url);
               const instanceName = sessionToInstanceName.get(session!) || session!;
               if (result.ok) {
                 const sentAt = new Date().toISOString();
-                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: sentAt });
+                await supabase.rpc("mark_whatsapp_trigger_send_sent", {
+                  p_campaign_id: tc.id,
+                  p_step_id: step.id,
+                  p_lead_id: card.id,
+                  p_status_entered_at: enteredAtIso,
+                  p_sent_at: sentAt,
+                });
                 await logWhatsappActivity(supabase, moduleKey, card, `WhatsApp enviado — ${tc.name} (passo ${step.position})`, messageBody);
                 totalSent++;
                 triggerSentNow++;
@@ -940,7 +976,13 @@ serve(async (req) => {
                 }
               } else {
                 const errMsg = result.errorMessage || "Erro";
-                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "error", error_message: errMsg });
+                await supabase.rpc("mark_whatsapp_trigger_send_error", {
+                  p_campaign_id: tc.id,
+                  p_step_id: step.id,
+                  p_lead_id: card.id,
+                  p_status_entered_at: enteredAtIso,
+                  p_error_message: errMsg,
+                });
                 totalErrors++;
                 triggerErrorsNow++;
                 const nowIso = new Date().toISOString();
@@ -985,7 +1027,13 @@ serve(async (req) => {
 
             } catch (e) {
               const errMsg = e instanceof Error ? e.message : "Unknown error";
-              await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "error", error_message: errMsg });
+              await supabase.rpc("mark_whatsapp_trigger_send_error", {
+                p_campaign_id: tc.id,
+                p_step_id: step.id,
+                p_lead_id: card.id,
+                p_status_entered_at: enteredAtIso,
+                p_error_message: errMsg,
+              });
               totalErrors++;
               triggerErrorsNow++;
               const nowIso = new Date().toISOString();
