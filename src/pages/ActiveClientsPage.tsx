@@ -994,6 +994,7 @@ export default function ActiveClientsPage() {
         fields={fields}
         saving={saving}
         onSave={handleSave}
+        onCardUpdated={() => setRefreshKey((k) => k + 1)}
         canReassign={isAdmin || isGerente}
         ssoticaClienteId={editingItem?.ssotica_cliente_id ?? null}
         ssoticaCompanyId={editingItem?.ssotica_company_id ?? null}
