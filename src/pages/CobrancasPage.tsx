@@ -424,7 +424,26 @@ export default function CobrancasPage() {
       }
       return min;
     };
+    // Grupo com tratativa registrada na coluna atual vai para o fim da lista,
+    // ordenado pela tratativa mais antiga primeiro (FIFO no rodapé).
+    const tratativaTs = (g: CobrancaGroup): number => {
+      let max = 0;
+      for (const it of g.items) {
+        const d: any = (it as any).data || {};
+        if (d?.tratativa_em && d?.tratativa_status_key === it.status) {
+          const t = new Date(String(d.tratativa_em)).getTime();
+          if (!isNaN(t) && t > max) max = t;
+        }
+      }
+      return max;
+    };
     return [...groups].sort((a, b) => {
+      const ta = tratativaTs(a);
+      const tb = tratativaTs(b);
+      const aHas = ta > 0 ? 1 : 0;
+      const bHas = tb > 0 ? 1 : 0;
+      if (aHas !== bHas) return aHas - bHas; // sem tratativa primeiro
+      if (aHas && bHas) return ta - tb;       // ambos com tratativa: mais antiga primeiro
       const va = oldestVencimento(a);
       const vb = oldestVencimento(b);
       if (va !== vb) return va - vb; // mais antiga primeiro
@@ -433,6 +452,7 @@ export default function CobrancasPage() {
       return pb - pa;
     });
   }, [cobrancaTaskPriority]);
+
 
   const companyNameById = useMemo(() => {
     const m = new Map<string, string>();

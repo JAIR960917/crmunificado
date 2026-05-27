@@ -333,6 +333,35 @@ export default function CobrancaEditSheet(props: Props) {
     setPostingComment(false);
   };
 
+  // Marca tratativa no card (libera o avanço de coluna pelo fluxo automático).
+  // Usado quando o usuário conclui uma tarefa — equivalente a uma tentativa
+  // de contato bem-sucedida, do ponto de vista do fluxo.
+  const markTratativaFromTask = async (taskTitleSnap: string) => {
+    if (!cobrancaId || !user) return;
+    const nowIso = new Date().toISOString();
+    const newData: Record<string, any> = {
+      ...(formData || {}),
+      tratativa_em: nowIso,
+      tratativa_status_key: formStatus || (formData as any)?.tratativa_status_key || null,
+      tratativa_by: user.id,
+      tratativa_by_name: (user as any)?.user_metadata?.full_name || user.email || null,
+      tratativa_from_task: true,
+    };
+    const { error } = await supabase
+      .from("crm_cobrancas")
+      .update({ data: newData })
+      .eq("id", cobrancaId);
+    if (error) return;
+    setFormData(newData);
+    await (supabase as any).from("crm_cobranca_flow_events").insert({
+      cobranca_id: cobrancaId,
+      status_key: formStatus || null,
+      event_type: "tratativa",
+      created_by: user.id,
+      details: { from_task: true, task_title: taskTitleSnap },
+    });
+  };
+
   const handleCreateTask = async () => {
     if (!cobrancaId || !taskTitle.trim() || !taskDate || !user) {
       toast.error("Preencha título e data"); return;
@@ -349,17 +378,25 @@ export default function CobrancaEditSheet(props: Props) {
     else {
       toast.success("Tarefa criada");
       setTaskOpen(false); setTaskTitle(""); setTaskDescription(""); setTaskDate(undefined); setTaskTime("09:00");
+      // Adicionar/editar tarefa libera o fechamento do card.
+      setContactRegisteredInSession(true);
       fetchTimeline();
     }
     setSavingTask(false);
   };
 
   const toggleTaskComplete = async (a: Activity) => {
-    const newVal = a.completed_at ? null : new Date().toISOString();
+    const completing = !a.completed_at;
+    const newVal = completing ? new Date().toISOString() : null;
     const { error } = await supabase.from("cobranca_activities")
       .update({ completed_at: newVal }).eq("id", a.id);
-    if (error) toast.error("Erro");
-    else fetchTimeline();
+    if (error) { toast.error("Erro"); return; }
+    // Concluir uma tarefa libera o fechamento e dispara o fluxo (tratativa).
+    if (completing) {
+      setContactRegisteredInSession(true);
+      await markTratativaFromTask(a.title);
+    }
+    fetchTimeline();
   };
 
   const deleteActivity = async (id: string) => {
@@ -397,10 +434,13 @@ export default function CobrancaEditSheet(props: Props) {
     else {
       toast.success("Tarefa atualizada");
       setEditingTaskId(null);
+      // Editar tarefa também libera o fechamento do card.
+      setContactRegisteredInSession(true);
       fetchTimeline();
     }
     setSavingEditTask(false);
   };
+
 
   const getTaskStatus = (a: Activity): "completed" | "overdue" | "today" | "pending" => {
     if (a.completed_at) return "completed";
