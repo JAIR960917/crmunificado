@@ -25,6 +25,7 @@ export const APP_PAGES: AppPage[] = [
   { key: "cobrancas_fluxo",      label: "Fluxo de Cobrança",      path: "/cobrancas/fluxo" },
   { key: "dashboard",            label: "Dashboard",              path: "/dashboard" },
   { key: "meu_dashboard",        label: "Meu Dashboard",          path: "/meu-dashboard" },
+  { key: "meu_dashboard_cobranca", label: "Dashboard Cobrança",   path: "/meu-dashboard-cobranca" },
   { key: "relatorio_vendas",     label: "Relatório de Vendas",    path: "/relatorio-vendas" },
   { key: "usuarios",             label: "Usuários",               path: "/usuarios" },
   { key: "empresas",             label: "Empresas",               path: "/empresas" },
