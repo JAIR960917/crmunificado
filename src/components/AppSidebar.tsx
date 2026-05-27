@@ -44,6 +44,7 @@ const navItems: NavItem[] = [
   { path: "/",                     label: "Leads",                  icon: LayoutDashboard },
   { path: "/cobrancas",            label: "Cobranças",              icon: Receipt },
   { path: "/cobrancas/fluxo",      label: "Fluxo Cobrança",         icon: Workflow },
+  { path: "/meu-dashboard-cobranca", label: "Dashboard Cobrança",   icon: LayoutDashboard },
   { path: "/agendamentos",         label: "Agendamentos",           icon: CalendarCheck },
   { path: "/orcamentos",           label: "Orçamentos",             icon: Receipt },
 
