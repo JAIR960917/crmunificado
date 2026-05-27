@@ -91,8 +91,21 @@ export default function ClientProductsTab({ ssoticaClienteId, ssoticaCompanyId, 
     setLoading(true);
     setError(null);
     try {
+      // Garante token válido (refresh se necessário) antes de chamar a edge function
+      let { data: sessionData } = await supabase.auth.getSession();
+      let token = sessionData?.session?.access_token;
+      const expiresAt = sessionData?.session?.expires_at;
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (!token || (expiresAt && expiresAt - nowSec < 60)) {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        token = refreshed?.session?.access_token ?? token;
+      }
+      if (!token) {
+        throw new Error("Sessão expirada. Faça login novamente.");
+      }
       const { data, error: invErr } = await supabase.functions.invoke("ssotica-cliente-vendas", {
         body: { ssoticaClienteId, ssoticaCompanyId, monthsBack: months, cpf: cpf ?? null },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (invErr) throw invErr;
       if (data?.error) throw new Error(data.error);
