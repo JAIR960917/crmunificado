@@ -2181,6 +2181,8 @@ export type Database = {
         }
         Returns: number
       }
+      try_lock_send_whatsapp: { Args: never; Returns: boolean }
+      unlock_send_whatsapp: { Args: never; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "vendedor" | "gerente" | "financeiro"
