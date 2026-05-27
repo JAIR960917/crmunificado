@@ -822,12 +822,12 @@ serve(async (req) => {
           if (!phone) continue;
 
           // ----- LOCK por entrada na coluna -----
-          // Só envia UMA vez por entrada do card na coluna. O lock é limpo
-          // automaticamente pelo trigger DB `_reset_gatilho_on_status_change`
-          // quando o card muda de status. Se o card sair e voltar para a mesma
-          // coluna, o lock é limpo nas duas transições → reenvia normalmente.
+          // Só envia UMA vez por entrada do card na coluna, INDEPENDENTE de
+          // qual campanha disparou. Isso evita que dois gatilhos distintos
+          // (ex.: mesma régua duplicada em instâncias diferentes) enviem a
+          // mesma mensagem para o mesmo cliente. O lock é limpo pelo trigger
+          // DB `_reset_gatilho_on_status_change` quando o card muda de status.
           if (
-            data.gatilho_campaign_id === tc.id &&
             data.gatilho_status_key === statusKey &&
             data.gatilho_enviado_em
           ) {
