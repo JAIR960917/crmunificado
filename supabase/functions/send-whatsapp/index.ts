@@ -866,6 +866,7 @@ serve(async (req) => {
           // atual na coluna (cobre execuções simultâneas onde o lock ainda
           // não foi gravado).
           const enteredAt = resolveCardEnteredAt(card);
+          const enteredAtIso = enteredAt.toISOString();
           const enteredAtMs = enteredAt.getTime();
           const sendsMapForCard = sendsByCardWithTs.get(card.id) || new Map<string, number>();
           const sentStepIds = new Set<string>();
@@ -903,14 +904,38 @@ serve(async (req) => {
             const messageBody = applyTemplateVars(step.message, vars);
             const cp = cleanPhone(phone);
 
+            await refreshGlobalSendLock(supabase, GLOBAL_LOCK_TTL_SECONDS);
+            const { data: claimed, error: claimError } = await supabase.rpc("claim_whatsapp_trigger_send", {
+              p_campaign_id: tc.id,
+              p_step_id: step.id,
+              p_lead_id: card.id,
+              p_phone: cp,
+              p_status_entered_at: enteredAtIso,
+            });
+            if (claimError) {
+              console.error("[send-whatsapp] erro ao reservar envio de gatilho:", claimError);
+              continue;
+            }
+            if (!claimed) {
+              sentStepIds.add(step.id);
+              continue;
+            }
+
             try {
               if (!isFirstSend) await sleep(SEND_DELAY_MS);
               isFirstSend = false;
+              await refreshGlobalSendLock(supabase, GLOBAL_LOCK_TTL_SECONDS);
               const result = await sendMessage(session!, APIFULL_API_KEY, cp, messageBody, step.image_url);
               const instanceName = sessionToInstanceName.get(session!) || session!;
               if (result.ok) {
                 const sentAt = new Date().toISOString();
-                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: sentAt });
+                await supabase.rpc("mark_whatsapp_trigger_send_sent", {
+                  p_campaign_id: tc.id,
+                  p_step_id: step.id,
+                  p_lead_id: card.id,
+                  p_status_entered_at: enteredAtIso,
+                  p_sent_at: sentAt,
+                });
                 await logWhatsappActivity(supabase, moduleKey, card, `WhatsApp enviado — ${tc.name} (passo ${step.position})`, messageBody);
                 totalSent++;
                 triggerSentNow++;
@@ -949,7 +974,13 @@ serve(async (req) => {
                 }
               } else {
                 const errMsg = result.errorMessage || "Erro";
-                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "error", error_message: errMsg });
+                await supabase.rpc("mark_whatsapp_trigger_send_error", {
+                  p_campaign_id: tc.id,
+                  p_step_id: step.id,
+                  p_lead_id: card.id,
+                  p_status_entered_at: enteredAtIso,
+                  p_error_message: errMsg,
+                });
                 totalErrors++;
                 triggerErrorsNow++;
                 const nowIso = new Date().toISOString();
@@ -994,7 +1025,13 @@ serve(async (req) => {
 
             } catch (e) {
               const errMsg = e instanceof Error ? e.message : "Unknown error";
-              await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "error", error_message: errMsg });
+              await supabase.rpc("mark_whatsapp_trigger_send_error", {
+                p_campaign_id: tc.id,
+                p_step_id: step.id,
+                p_lead_id: card.id,
+                p_status_entered_at: enteredAtIso,
+                p_error_message: errMsg,
+              });
               totalErrors++;
               triggerErrorsNow++;
               const nowIso = new Date().toISOString();
