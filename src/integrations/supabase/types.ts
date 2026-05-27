@@ -1720,13 +1720,6 @@ export type Database = {
             referencedRelation: "whatsapp_campaigns"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "whatsapp_campaign_sends_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "crm_leads"
-            referencedColumns: ["id"]
-          },
         ]
       }
       whatsapp_campaigns: {
@@ -2011,13 +2004,6 @@ export type Database = {
             columns: ["campaign_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_trigger_campaigns"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "whatsapp_trigger_sends_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "crm_leads"
             referencedColumns: ["id"]
           },
           {
