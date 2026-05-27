@@ -409,27 +409,28 @@ export default function CobrancasPage() {
     return ids;
   }, [activities, noteIds]);
 
-  // Ordena grupos pela MAIOR prioridade entre os itens do grupo
+  // Ordena grupos pela parcela mais antiga (vencimento ASC) — mais antigas no topo.
+  // Empate cai para prioridade de tarefa para manter relevância.
   const sortGroupsByTaskPriority = useCallback((groups: CobrancaGroup[]) => {
-    const score = (g: CobrancaGroup) => {
-      const allTreated = g.items.every((it) => (it.data as any)?.renegociou);
-      const anyPrio = g.items.reduce((acc, it) => Math.max(acc, cobrancaTaskPriority.get(it.id) || 0), 0);
-      const anyRecent = g.items.some((it) => cobrancasWithRecentActivity.has(it.id) || (it.data as any)?.tratativa_em);
-      const maxTratativa = g.items.reduce((acc, it) => {
-        const t = (it.data as any)?.tratativa_em;
-        return t ? Math.max(acc, new Date(t).getTime()) : acc;
-      }, 0);
-      return { allTreated: allTreated ? 1 : 0, anyPrio, anyRecent: anyRecent ? 1 : 0, maxTratativa };
+    const oldestVencimento = (g: CobrancaGroup) => {
+      let min = Number.POSITIVE_INFINITY;
+      for (const it of g.items) {
+        const v = (it as any).vencimento || (it.data as any)?.vencimento;
+        if (!v) continue;
+        const t = new Date(String(v)).getTime();
+        if (!isNaN(t) && t < min) min = t;
+      }
+      return min;
     };
     return [...groups].sort((a, b) => {
-      const sa = score(a);
-      const sb = score(b);
-      if (sa.allTreated !== sb.allTreated) return sa.allTreated - sb.allTreated;
-      if (sa.anyPrio !== sb.anyPrio) return sb.anyPrio - sa.anyPrio;
-      if (sa.anyRecent !== sb.anyRecent) return sa.anyRecent - sb.anyRecent;
-      return sa.maxTratativa - sb.maxTratativa;
+      const va = oldestVencimento(a);
+      const vb = oldestVencimento(b);
+      if (va !== vb) return va - vb; // mais antiga primeiro
+      const pa = a.items.reduce((acc, it) => Math.max(acc, cobrancaTaskPriority.get(it.id) || 0), 0);
+      const pb = b.items.reduce((acc, it) => Math.max(acc, cobrancaTaskPriority.get(it.id) || 0), 0);
+      return pb - pa;
     });
-  }, [cobrancaTaskPriority, cobrancasWithRecentActivity]);
+  }, [cobrancaTaskPriority]);
 
   const companyNameById = useMemo(() => {
     const m = new Map<string, string>();
