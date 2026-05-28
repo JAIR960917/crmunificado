@@ -135,12 +135,12 @@ export default function MeuDashboardPage() {
           const d = new Date(a.scheduled_date);
           const row = buildRow(kind, a);
           if (!row) continue;
-          if (d >= startToday && d <= endToday) {
-            hoje.push(row);
-            (kind === "lead" ? hojeL : hojeR).add(row.id);
-          } else if (d < startToday) {
+          if (d < now) {
             atr.push(row);
             (kind === "lead" ? atrL : atrR).add(row.id);
+          } else if (d >= now && d <= endToday) {
+            hoje.push(row);
+            (kind === "lead" ? hojeL : hojeR).add(row.id);
           }
         }
       };
