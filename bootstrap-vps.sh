@@ -160,6 +160,7 @@ if [ ! -f "$ENV_FILE" ]; then
   }
   ANON_KEY="$(gen_jwt anon)"
   SERVICE_ROLE_KEY="$(gen_jwt service_role)"
+  CRON_SECRET="$(openssl rand -hex 32)"
 
   cat > "$ENV_FILE" <<EOF
 # Gerado por bootstrap-vps.sh em $(date -Iseconds)
@@ -197,6 +198,7 @@ FRONTEND_SUPABASE_PUBLISHABLE_KEY=${ANON_KEY}
 
 # Edge functions
 FUNCTIONS_VERIFY_JWT=true
+CRON_SECRET=${CRON_SECRET}
 EOF
   chmod 600 "$ENV_FILE"
   ok ".env gerado em $ENV_FILE (modo 600)"

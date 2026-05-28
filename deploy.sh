@@ -48,6 +48,8 @@ MODE="${1:-all}"
 persist_backend_runtime_settings_vps() {
   local app_supabase_url="${SUPABASE_PUBLIC_URL:-${SUPABASE_URL:-}}"
   local app_supabase_anon="${SUPABASE_ANON_KEY:-${ANON_KEY:-}}"
+  local app_service_role="${SERVICE_ROLE_KEY:-}"
+  local app_cron_secret="${CRON_SECRET:-}"
 
   [ -n "${app_supabase_url}" ] && [ -n "${app_supabase_anon}" ] || return 0
   docker ps --format '{{.Names}}' | grep -q "^${DB_CONTAINER}$" || return 1
@@ -56,6 +58,8 @@ persist_backend_runtime_settings_vps() {
     psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 \
       -v backend_url="${app_supabase_url}" \
       -v backend_key="${app_supabase_anon}" \
+      -v backend_service_key="${app_service_role}" \
+      -v backend_cron_secret="${app_cron_secret}" \
       >/dev/null <<'SQL'
 CREATE TABLE IF NOT EXISTS public.system_settings (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -73,6 +77,21 @@ INSERT INTO public.system_settings (setting_key, setting_value)
 VALUES ('backend_anon_key', :'backend_key')
 ON CONFLICT (setting_key)
 DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now();
+
+INSERT INTO public.system_settings (setting_key, setting_value)
+VALUES ('backend_service_role_key', NULLIF(:'backend_service_key', ''))
+ON CONFLICT (setting_key)
+DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now();
+
+INSERT INTO public.system_settings (setting_key, setting_value)
+VALUES ('backend_cron_secret', NULLIF(:'backend_cron_secret', ''))
+ON CONFLICT (setting_key)
+DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now();
+
+SELECT public.manage_whatsapp_cron()
+WHERE to_regprocedure('public.manage_whatsapp_cron()') IS NOT NULL
+  AND NULLIF(:'backend_service_key', '') IS NOT NULL
+  AND NULLIF(:'backend_cron_secret', '') IS NOT NULL;
 
 SELECT public.manage_ssotica_cron()
 WHERE to_regprocedure('public.manage_ssotica_cron()') IS NOT NULL;

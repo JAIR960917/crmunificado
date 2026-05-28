@@ -1,11 +1,9 @@
 // Edge function: ssotica-sync
 // Sincroniza Vendas (→ Renovações) e Contas a Receber (→ Cobranças) das lojas SSótica
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { assertCronServiceRoleOrStaff, internalCorsHeaders } from "../_shared/internalAuth.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const corsHeaders = internalCorsHeaders;
 
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
 const MAX_WINDOW_DAYS = 30; // limite da API SSótica por janela
@@ -41,6 +39,7 @@ type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
 type DispatchConfig = {
   url: string | null;
   auth: string | null;
+  cronSecret: string | null;
 };
 
 const MANUAL_BACKFILL_OWNER_KEY = "ssotica_manual_backfill_owner";
@@ -208,7 +207,8 @@ function getDispatchConfig(req: Request): DispatchConfig {
   const envInternalUrl = Deno.env.get("SUPABASE_INTERNAL_URL");
   const envPublicUrl = Deno.env.get("SUPABASE_PUBLIC_URL");
   const envUrl = Deno.env.get("SUPABASE_URL");
-  const envAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const envServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const envCronSecret = Deno.env.get("CRON_SECRET");
   const requestAuth = req.headers.get("authorization") ?? req.headers.get("Authorization");
 
   let requestUrl: string | null = null;
@@ -224,7 +224,8 @@ function getDispatchConfig(req: Request): DispatchConfig {
     url: baseUrl
       ? `${baseUrl.replace(/\/+$/, "")}/functions/v1/ssotica-sync`
       : requestUrl,
-    auth: envAnonKey ? `Bearer ${envAnonKey}` : requestAuth,
+    auth: envServiceRoleKey ? `Bearer ${envServiceRoleKey}` : requestAuth,
+    cronSecret: envCronSecret || null,
   };
 }
 
@@ -235,12 +236,16 @@ async function enqueueSsoticaSyncDispatch(
   context: string,
 ): Promise<"fetch" | "rpc"> {
   if (dispatchConfig.url && dispatchConfig.auth) {
+    const dispatchHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: dispatchConfig.auth,
+    };
+    if (dispatchConfig.cronSecret) {
+      dispatchHeaders["x-cron-secret"] = dispatchConfig.cronSecret;
+    }
     const dispatchPromise = fetch(dispatchConfig.url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: dispatchConfig.auth,
-      },
+      headers: dispatchHeaders,
       body: JSON.stringify(payload),
     }).then(async (response) => {
       if (!response.ok) {
@@ -2438,6 +2443,10 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  const authDenied = await assertCronServiceRoleOrStaff(req, supabase, corsHeaders);
+  if (authDenied) return authDenied;
+
   const dispatchConfig = getDispatchConfig(req);
 
   try {

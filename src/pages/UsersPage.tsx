@@ -37,6 +37,14 @@ export default function UsersPage() {
   const [createCompanyId, setCreateCompanyId] = useState<string>("__none__");
   const [createExtraCompanyIds, setCreateExtraCompanyIds] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+  const [createPassword, setCreatePassword] = useState("");
+
+  const generateSecurePassword = () => {
+    const chars = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*";
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => chars[b % chars.length]).join("");
+  };
 
   // Edit dialog
   const [openEdit, setOpenEdit] = useState(false);
@@ -110,8 +118,13 @@ export default function UsersPage() {
       toast.error("Este email já está cadastrado no sistema");
       return;
     }
+    const password = createPassword.trim();
+    if (password.length < 8) {
+      toast.error("A senha deve ter no mínimo 8 caracteres");
+      return;
+    }
     setCreating(true);
-    const body: Record<string, any> = { email, password: "joonker2026", full_name: name, role };
+    const body: Record<string, any> = { email, password, full_name: name, role };
     if (isAdmin && createCompanyId !== "__none__") {
       body.company_id = createCompanyId;
     }
@@ -123,9 +136,9 @@ export default function UsersPage() {
     if (error || data?.error) {
       toast.error(errMsg || "Erro ao criar usuário");
     } else {
-      toast.success("Usuário criado com senha padrão: joonker2026");
+      toast.success(`Usuário criado. Senha inicial: ${password}`, { duration: 12000 });
       setOpenCreate(false);
-      setName(""); setEmail(""); setRole("vendedor"); setCreateCompanyId("__none__"); setCreateExtraCompanyIds([]);
+      setName(""); setEmail(""); setRole("vendedor"); setCreatePassword(""); setCreateCompanyId("__none__"); setCreateExtraCompanyIds([]);
       fetchData();
     }
     setCreating(false);
@@ -282,7 +295,10 @@ export default function UsersPage() {
           </p>
         </div>
         {isAdmin && (
-        <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+        <Dialog open={openCreate} onOpenChange={(open) => {
+          setOpenCreate(open);
+          if (open && !createPassword) setCreatePassword(generateSecurePassword());
+        }}>
           <DialogTrigger asChild>
             <Button size="sm" className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" />Novo Usuário</Button>
           </DialogTrigger>
@@ -329,7 +345,25 @@ export default function UsersPage() {
                   excludeId={createCompanyId !== "__none__" ? createCompanyId : undefined}
                 />
               )}
-              <p className="text-xs text-muted-foreground">Senha padrão: <strong>joonker2026</strong></p>
+              <div className="space-y-2">
+                <Label>Senha inicial</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    value={createPassword}
+                    onChange={(e) => setCreatePassword(e.target.value)}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                  <Button type="button" variant="outline" onClick={() => setCreatePassword(generateSecurePassword())}>
+                    Gerar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Anote a senha e repasse ao usuário de forma segura. Mínimo 8 caracteres.
+                </p>
+              </div>
               <Button type="submit" className="w-full" disabled={creating}>
                 {creating ? "Criando..." : "Criar Usuário"}
               </Button>
