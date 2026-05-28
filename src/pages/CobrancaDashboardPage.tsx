@@ -96,8 +96,8 @@ export default function CobrancaDashboardPage() {
         const row = buildRow(a);
         if (!row) continue;
         const dt = new Date(a.scheduled_date);
-        if (dt >= startToday && dt <= endToday) hoje.push(row);
-        else if (dt < startToday) atr.push(row);
+        if (dt < now) atr.push(row);
+        else if (dt >= now && dt <= endToday) hoje.push(row);
       }
       hoje.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
       atr.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
