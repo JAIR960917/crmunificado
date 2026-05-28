@@ -4,24 +4,49 @@ export const internalCorsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-/** Cron interno ou service_role (chamadas pg_net / edge). */
+function decodeJwtRole(authHeader: string): string | null {
+  try {
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const payloadPart = token.split(".")[1];
+    if (!payloadPart) return null;
+    const padded = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const json = JSON.parse(atob(padded));
+    return typeof json?.role === "string" ? json.role : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Apenas cron interno (x-cron-secret) ou JWT com role=service_role.
+ * Rejeita anon/authenticated mesmo que a chave seja válida no Kong.
+ */
 export function assertCronOrServiceRole(
   req: Request,
   corsHeaders: Record<string, string> = internalCorsHeaders,
 ): Response | null {
   const cronSecret = Deno.env.get("CRON_SECRET");
   const providedSecret = req.headers.get("x-cron-secret");
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const isServiceRole = !!serviceRoleKey && authHeader === `Bearer ${serviceRoleKey}`;
+  if (cronSecret && providedSecret && providedSecret === cronSecret) {
+    return null;
+  }
 
-  if (!isServiceRole && (!cronSecret || providedSecret !== cronSecret)) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const jwtRole = decodeJwtRole(authHeader);
+  if (jwtRole === "service_role") {
+    return null;
+  }
+
+  return new Response(
+    JSON.stringify({
+      error: "Unauthorized",
+      detail: "Requer JWT service_role ou header x-cron-secret",
+    }),
+    {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  return null;
+    },
+  );
 }
 
 type SupabaseAdmin = {
