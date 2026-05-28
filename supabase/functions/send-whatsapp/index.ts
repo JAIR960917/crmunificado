@@ -630,7 +630,10 @@ serve(async (req) => {
           const data = typeof card.data === "object" ? (card.data as Record<string, any>) : {};
           // Lock por entrada na coluna (cobranças): evita reenvio enquanto o
           // card estiver na mesma coluna. Limpo pelo trigger DB ao mudar status.
-          const alreadyTriggeredForStatus = isCobrancas && data.gatilho_status_key === statusKey && data.gatilho_enviado_em;
+          const alreadyTriggeredForStatus = isCobrancas
+            && data.gatilho_status_key === statusKey
+            && data.gatilho_enviado_em
+            && !data.envio_erro;
           if (alreadyTriggeredForStatus) continue;
           const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
           if (!phone) continue;
@@ -859,7 +862,8 @@ serve(async (req) => {
           // DB `_reset_gatilho_on_status_change` quando o card muda de status.
           if (
             data.gatilho_status_key === statusKey &&
-            data.gatilho_enviado_em
+            data.gatilho_enviado_em &&
+            !data.envio_erro
           ) {
             continue;
           }
@@ -919,7 +923,31 @@ serve(async (req) => {
               continue;
             }
             if (!claimed) {
-              sentStepIds.add(step.id);
+              const { data: existingSend } = await supabase
+                .from("whatsapp_trigger_sends")
+                .select("status")
+                .eq("campaign_id", tc.id)
+                .eq("step_id", step.id)
+                .eq("lead_id", card.id)
+                .eq("status_entered_at", enteredAtIso)
+                .maybeSingle();
+              if (existingSend?.status === "sent") {
+                sentStepIds.add(step.id);
+              }
+              continue;
+            }
+
+            if (!session) {
+              const errMsg = "Nenhuma instância WhatsApp ativa/conectada para este envio";
+              await supabase.rpc("mark_whatsapp_trigger_send_error", {
+                p_campaign_id: tc.id,
+                p_step_id: step.id,
+                p_lead_id: card.id,
+                p_status_entered_at: enteredAtIso,
+                p_error_message: errMsg,
+              });
+              totalErrors++;
+              triggerErrorsNow++;
               continue;
             }
 
@@ -927,7 +955,7 @@ serve(async (req) => {
               if (!isFirstSend) await sleep(SEND_DELAY_MS);
               isFirstSend = false;
               await refreshGlobalSendLock(supabase, GLOBAL_LOCK_TTL_SECONDS);
-              const result = await sendMessage(session!, APIFULL_API_KEY, cp, messageBody, step.image_url);
+              const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, step.image_url);
               const instanceName = sessionToInstanceName.get(session!) || session!;
               if (result.ok) {
                 const sentAt = new Date().toISOString();
@@ -991,18 +1019,13 @@ serve(async (req) => {
                 if (useMultiRoundRobin || useGlobalCobrancasFallback) {
                   rrIndex++;
                 } else {
-                  // Modo instância única: trava o card para não reprocessar em loop infinito.
+                  // Falha transitória (restrição/desconexão): registra erro mas NÃO trava o card —
+                  // o cron tenta de novo no próximo ciclo via claim_whatsapp_trigger_send.
                   await supabase
                     .from(cfg.dataTable)
                     .update({
                       data: {
                         ...data,
-                        status_entered_at: data.status_entered_at ?? nowIso,
-                        status_entered_status_key: data.status_entered_status_key ?? statusKey,
-                        gatilho_enviado_em: nowIso,
-                        gatilho_status_key: statusKey,
-                        gatilho_campaign_id: tc.id,
-                        gatilho_campaign_name: tc.name,
                         envio_erro: errMsg,
                         envio_erro_em: nowIso,
                         envio_erro_campaign_id: tc.id,
@@ -1045,12 +1068,6 @@ serve(async (req) => {
                   .update({
                     data: {
                       ...data,
-                      status_entered_at: data.status_entered_at ?? nowIso,
-                      status_entered_status_key: data.status_entered_status_key ?? statusKey,
-                      gatilho_enviado_em: nowIso,
-                      gatilho_status_key: statusKey,
-                      gatilho_campaign_id: tc.id,
-                      gatilho_campaign_name: tc.name,
                       envio_erro: errMsg,
                       envio_erro_em: nowIso,
                       envio_erro_campaign_id: tc.id,

@@ -358,9 +358,13 @@ export default function SettingsPage() {
                 try {
                   const { data, error } = await supabase.rpc("retry_whatsapp_errors" as any);
                   if (error) throw error;
-                  const r = (data || {}) as { leads?: number; cobrancas?: number; renovacoes?: number };
+                  const r = (data || {}) as { leads?: number; cobrancas?: number; renovacoes?: number; trigger_sends_cleared?: number };
                   const total = (r.leads || 0) + (r.cobrancas || 0) + (r.renovacoes || 0);
-                  toast.success(`${total} card(s) liberados para reenvio (leads: ${r.leads || 0}, cobranças: ${r.cobrancas || 0}, renovações: ${r.renovacoes || 0})`);
+                  const cleared = r.trigger_sends_cleared || 0;
+                  toast.success(
+                    `${total} card(s) liberados para reenvio (leads: ${r.leads || 0}, cobranças: ${r.cobrancas || 0}, renovações: ${r.renovacoes || 0})` +
+                    (cleared > 0 ? ` · ${cleared} registro(s) de gatilho com erro removidos` : ""),
+                  );
                 } catch (e: any) {
                   toast.error(e?.message || "Erro ao reenviar gatilhos");
                 } finally {

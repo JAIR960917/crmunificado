@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit2, Send, Users, Hash, Clock, Zap, Smartphone } from "lucide-react";
+import { Plus, Trash2, Edit2, Send, Users, Clock, Zap, Smartphone, RotateCcw } from "lucide-react";
 import ImageUploadField from "@/components/whatsapp/ImageUploadField";
 
 type ModuleKey = "leads" | "cobrancas" | "renovacoes";
@@ -87,6 +87,7 @@ export default function TriggerCampaigns({ instances }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
+  const [retryingErrors, setRetryingErrors] = useState(false);
 
   const [name, setName] = useState("");
   const [moduleKey, setModuleKey] = useState<ModuleKey>("leads");
@@ -353,6 +354,28 @@ export default function TriggerCampaigns({ instances }: Props) {
     filterCompanyId === "all" ? true : c.company_id === filterCompanyId
   );
 
+  const totalTriggerErrors = Object.values(sendStats).reduce((sum, s) => sum + (s?.error || 0), 0);
+
+  const handleRetryTriggerErrors = async () => {
+    if (!confirm("Liberar todos os cards com erro de gatilho para novo envio no próximo ciclo?")) return;
+    setRetryingErrors(true);
+    try {
+      const { data, error } = await supabase.rpc("retry_whatsapp_errors" as any);
+      if (error) throw error;
+      const r = (data || {}) as { leads?: number; cobrancas?: number; renovacoes?: number; trigger_sends_cleared?: number };
+      const total = (r.leads || 0) + (r.cobrancas || 0) + (r.renovacoes || 0);
+      toast.success(
+        `${total} card(s) liberados` +
+        ((r.trigger_sends_cleared || 0) > 0 ? ` · ${r.trigger_sends_cleared} falha(s) de gatilho resetadas` : ""),
+      );
+      fetchData();
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao liberar reenvio");
+    } finally {
+      setRetryingErrors(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col">
       <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
@@ -368,19 +391,32 @@ export default function TriggerCampaigns({ instances }: Props) {
             </SelectContent>
           </Select>
         </div>
-        {canManage && (
-          <Button
-            onClick={() => {
-              resetForm();
-              if (filterCompanyId !== "all") setCompanyId(filterCompanyId);
-              setShowForm(!showForm);
-            }}
-            size="sm"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Nova Campanha por Gatilho
-          </Button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {canManage && totalTriggerErrors > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={retryingErrors}
+              onClick={handleRetryTriggerErrors}
+            >
+              <RotateCcw className={`h-4 w-4 mr-1 ${retryingErrors ? "animate-spin" : ""}`} />
+              {retryingErrors ? "Liberando..." : `Reenviar erros (${totalTriggerErrors})`}
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              onClick={() => {
+                resetForm();
+                if (filterCompanyId !== "all") setCompanyId(filterCompanyId);
+                setShowForm(!showForm);
+              }}
+              size="sm"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Nova Campanha por Gatilho
+            </Button>
+          )}
+        </div>
       </div>
 
       {showForm && (
