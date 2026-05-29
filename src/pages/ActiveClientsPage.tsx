@@ -142,7 +142,8 @@ export default function ActiveClientsPage() {
   const [autoAssignConfirm, setAutoAssignConfirm] = useState(false);
   const [unassignedCount, setUnassignedCount] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [metaLoading, setMetaLoading] = useState(true);
+  const [metaReady, setMetaReady] = useState(false);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
 
   // Schedule dialog
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -195,18 +196,42 @@ export default function ActiveClientsPage() {
     buildSearchOr,
     refreshKey,
     pollingIntervalMs: 30000,
+    select: "id,data,status,assigned_to,created_by,valor,data_ultima_compra,created_at,updated_at,ssotica_cliente_id,ssotica_company_id",
   });
 
-  // Load static data once (statuses, profiles, fields, etc.)
+  const loadActivityMeta = useCallback(async () => {
+    setActivitiesLoading(true);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+
+    const [actsRes, notesRes] = await Promise.allSettled([
+      supabase
+        .from("renovacao_activities")
+        .select("id,renovacao_id,title,scheduled_date,completed_at")
+        .or(`completed_at.is.null,completed_at.gte.${cutoff.toISOString()}`),
+      supabase.from("crm_renovacao_notes").select("renovacao_id"),
+    ]);
+
+    const unwrap = <T,>(result: PromiseSettledResult<{ data: T; error: unknown }>, fallback: T): T => {
+      if (result.status !== "fulfilled" || result.value.error) return fallback;
+      return (result.value.data ?? fallback) as T;
+    };
+
+    setActivities(unwrap(actsRes as PromiseSettledResult<{ data: RenovacaoActivity[]; error: unknown }>, []));
+    const notes = unwrap(notesRes as PromiseSettledResult<{ data: { renovacao_id: string }[]; error: unknown }>, []);
+    setNoteIds(new Set(notes.map((n) => n.renovacao_id)));
+    setActivitiesLoading(false);
+  }, []);
+
+  // Metadados essenciais primeiro; atividades/notas em segundo plano (não bloqueiam o kanban).
   const loadMeta = useCallback(async () => {
-    const [stsRes, profsRes, rolesRes, compsRes, ffRes, actsRes, notesRes] = await Promise.allSettled([
+    setMetaReady(false);
+    const [stsRes, profsRes, rolesRes, compsRes, ffRes] = await Promise.allSettled([
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("user_roles").select("user_id, role"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
-      supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
-      supabase.from("crm_renovacao_notes").select("renovacao_id"),
     ]);
 
     const unwrap = <T,>(result: PromiseSettledResult<{ data: T; error: any }>, label: string, fallback: T): T => {
@@ -226,15 +251,11 @@ export default function ActiveClientsPage() {
     const roles = unwrap(rolesRes, "papéis", [] as UserRole[]);
     const comps = unwrap(compsRes, "empresas", [] as Company[]);
     const ff = unwrap<any[]>(ffRes as PromiseSettledResult<{ data: any[]; error: any }>, "campos do formulário", []);
-    const acts = unwrap(actsRes, "atividades", [] as RenovacaoActivity[]);
-    const notes = unwrap<any[]>(notesRes as PromiseSettledResult<{ data: any[]; error: any }>, "notas", []);
 
     setStatuses(sts);
     setProfiles(profs);
     setUserRoles(roles);
     setFields(ff as unknown as FormField[]);
-    setActivities(acts);
-    setNoteIds(new Set((notes || []).map((n: any) => n.renovacao_id)));
 
     // For gerente: restrict allowed companies to their own (profile + manager_companies)
     if (isGerente && !isAdmin && user?.id) {
@@ -275,7 +296,7 @@ export default function ActiveClientsPage() {
       setCompanies(comps || []);
       setAssignableUserIds(null);
     }
-    setMetaLoading(false);
+    setMetaReady(true);
   }, [isGerente, isAdmin, user?.id]);
 
   // Count unassigned (server-side)
@@ -298,6 +319,10 @@ export default function ActiveClientsPage() {
   }, [filterCompanyId, allowedCompanyIds]);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
+  useEffect(() => {
+    if (!metaReady) return;
+    void loadActivityMeta();
+  }, [refreshKey, metaReady, loadActivityMeta]);
   useEffect(() => { refreshUnassignedCount(); }, [refreshUnassignedCount, refreshKey]);
 
   useEffect(() => {
@@ -574,6 +599,16 @@ export default function ActiveClientsPage() {
   const getProfileName = (uid: string | null) => uid ? (profiles.find(p => p.user_id === uid)?.full_name || "") : "";
 
   // Compute task priority per renovacao: 3=overdue, 2=today, 1=future pending, 0=none
+  const activitiesByRenovacao = useMemo(() => {
+    const map = new Map<string, RenovacaoActivity[]>();
+    activities.forEach((a) => {
+      const list = map.get(a.renovacao_id);
+      if (list) list.push(a);
+      else map.set(a.renovacao_id, [a]);
+    });
+    return map;
+  }, [activities]);
+
   const renovacaoTaskPriority = useMemo(() => {
     const map = new Map<string, number>();
     const now = new Date();
@@ -651,7 +686,7 @@ export default function ActiveClientsPage() {
 
     const cardFields = fields.filter(f => f.show_on_card && !f.is_name_field && !f.is_phone_field && !f.is_last_visit_field);
 
-    const itemActivities = activities.filter(a => a.renovacao_id === item.id);
+    const itemActivities = activitiesByRenovacao.get(item.id) || [];
     const pending = itemActivities.filter(a => !a.completed_at);
     const overdue = pending.filter(a => new Date(a.scheduled_date) < new Date());
     const today = pending.filter(a => {
@@ -860,13 +895,19 @@ export default function ActiveClientsPage() {
         </div>
       </div>
 
-      {metaLoading ? (
+      {!metaReady ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3 text-muted-foreground">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <span className="text-sm">Carregando renovações...</span>
         </div>
       ) : (
         <>
+      {activitiesLoading && (
+        <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Atualizando prioridades das tarefas…
+        </p>
+      )}
 
       {/* Mobile tabs */}
       <div className="lg:hidden mb-3">

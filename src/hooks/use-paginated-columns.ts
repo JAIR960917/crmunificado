@@ -86,15 +86,34 @@ export function usePaginatedColumns<T extends { id: string; status: string }>(
         },
       }));
       try {
-        const { data, error, count } = await queryFor(statusKey).range(offset, offset + PAGE_SIZE - 1);
-        if (error) throw error;
-        const newItems = (data || []) as unknown as T[];
+        let listQuery = supabase.from(table).select(select).eq("status", statusKey);
+        if (filter?.apply) listQuery = filter.apply(listQuery);
+        listQuery = listQuery.order(orderColumn, { ascending: orderAscending });
+
+        const requests: Promise<{ data: T[] | null; error: unknown; count?: number | null }>[] = [
+          listQuery.range(offset, offset + PAGE_SIZE - 1) as Promise<{ data: T[] | null; error: unknown }>,
+        ];
+
+        if (offset === 0) {
+          let countQuery = supabase.from(table).select("id", { count: "exact", head: true }).eq("status", statusKey);
+          if (filter?.apply) countQuery = filter.apply(countQuery);
+          requests.push(countQuery as Promise<{ data: null; error: unknown; count: number | null }>);
+        }
+
+        const results = await Promise.all(requests);
+        const listRes = results[0];
+        if (listRes.error) throw listRes.error;
+
+        const newItems = (listRes.data || []) as unknown as T[];
+        const headCount = offset === 0 && results[1] ? results[1].count : null;
+
         setColumns((prev) => {
           const existing = prev[statusKey]?.items || [];
           const merged = offset === 0
             ? newItems
             : [...existing.filter((it) => !newItems.some((n) => n.id === it.id)), ...newItems];
-          const total = typeof count === "number" ? count : merged.length;
+          const prevTotal = prev[statusKey]?.total ?? 0;
+          const total = typeof headCount === "number" ? headCount : prevTotal || merged.length;
           return {
             ...prev,
             [statusKey]: {
