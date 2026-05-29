@@ -216,7 +216,8 @@ export default function WhatsAppInboxDemoPage() {
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-950 dark:text-amber-100">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>
-            <strong>Demonstração visual</strong> — inbox WhatsApp API oficial (Meta). Mensagens e
+            <strong>Demonstração visual</strong> — inbox WhatsApp API oficial (Meta). Use esta tela na
+            gravação do vídeo para revisão do app Meta. Mensagens e
             status são fictícios; na versão real chegam via webhook.
           </span>
           <Badge variant="outline" className="ml-auto gap-1 border-emerald-600/50 text-emerald-700 dark:text-emerald-300">

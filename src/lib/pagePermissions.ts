@@ -47,6 +47,9 @@ export const ALWAYS_ALLOWED_PATHS = new Set<string>([
   "/notificacoes",
   "/instalar",
   "/login",
+  "/privacidade",
+  "/termos",
+  "/exclusao-dados",
 ]);
 
 export function pageKeyForPath(path: string): string | null {

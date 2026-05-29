@@ -2,7 +2,7 @@
  * ============================================================================
  * Edge Function: send-whatsapp
  * ============================================================================
- * Envia mensagens de WhatsApp via API Full (https://api.apifull.com.br).
+ * Envia mensagens de WhatsApp via API Full ou Meta Cloud API (conforme instância).
  *
  * RESPONSABILIDADES:
  *   - Receber pedido de envio (lead/cobranca/renovacao + texto/imagem)
@@ -24,11 +24,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { assertCronOrServiceRole, internalCorsHeaders } from "../_shared/internalAuth.ts";
+import {
+  resolveSendTargetBySession,
+  sendWhatsAppMessage,
+  translateWhatsAppError,
+} from "../_shared/whatsappSend.ts";
 
 const corsHeaders = internalCorsHeaders;
-
-/** URL base da API Full (provedor de WhatsApp). */
-const APIFULL_BASE = "https://api.apifull.com.br/whatsapp";
 
 const SUCCESS_TOKENS = ["success", "sucesso", "sent", "enviado", "accepted", "queued", "ok"];
 const ERROR_TOKENS = [
@@ -135,41 +137,45 @@ function isWhatsAppError463(message: string): boolean {
 }
 
 function translateApiFullError(message: string): string {
-  const raw = (message || "").trim();
-  if (!raw) return raw;
-  if (isWhatsAppError463(raw)) {
-    return (
-      "WhatsApp recusou o envio (erro 463): limite para iniciar conversa com este número. " +
-      "O cliente precisa ter conversado antes ou enviar uma mensagem primeiro; " +
-      "após restrição da conta, novas conversas podem ficar bloqueadas por alguns dias. " +
-      "Tente enviar manualmente pelo celular da instância e aguarde a resposta do cliente."
-    );
-  }
-  if (/\b400\b/.test(raw) && /unknown|server returned/i.test(raw)) {
-    return (
-      "API recusou o envio (erro 400). Verifique se a instância está conectada, " +
-      "se o telefone está correto e se a mensagem não viola regras do WhatsApp."
-    );
-  }
-  return raw;
+  return translateWhatsAppError(message);
 }
 
-async function sendMessage(session: string, apiKey: string, phone: string, text: string, imageUrl?: string | null) {
-  const endpoint = imageUrl ? "/send-image" : "/send-message";
-  const body: Record<string, any> = imageUrl
-    ? { session, number: phone, text, file: imageUrl }
-    : { session, number: phone, text, isGroup: false };
-
-  const response = await fetch(`${APIFULL_BASE}${endpoint}`, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+async function dispatchSend(
+  supabase: any,
+  session: string,
+  apiKey: string,
+  phone: string,
+  text: string,
+  imageUrl?: string | null,
+  metaOpts?: {
+    metaTemplateName?: string | null;
+    metaTemplateLanguage?: string | null;
+    metaTemplateBodyParams?: string[];
+  },
+) {
+  const target = await resolveSendTargetBySession(supabase, session);
+  if (!target) {
+    return { ok: false, errorMessage: "Instância WhatsApp não encontrada", raw: null, httpStatus: 404 };
+  }
+  const metaToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "";
+  const result = await sendWhatsAppMessage({
+    target,
+    phone,
+    text,
+    imageUrl,
+    apiFullKey: apiKey,
+    metaAccessToken: metaToken,
+    metaTemplateName: metaOpts?.metaTemplateName,
+    metaTemplateLanguage: metaOpts?.metaTemplateLanguage,
+    metaTemplateBodyParams: metaOpts?.metaTemplateBodyParams,
+    supabase,
   });
-  const responseText = await response.text();
-  let result: any = null;
-  try { result = responseText ? JSON.parse(responseText) : null; } catch { result = { raw: responseText }; }
-  const resolved = resolveSendResult(response.ok, result);
-  return { ...resolved, raw: result, httpStatus: response.status };
+  return {
+    ok: result.ok,
+    errorMessage: result.errorMessage ? translateApiFullError(result.errorMessage) : null,
+    raw: result.raw,
+    httpStatus: result.httpStatus,
+  };
 }
 
 // Delay between WhatsApp sends to avoid being banned (default 30s, configurable via system_settings)
@@ -715,7 +721,19 @@ serve(async (req) => {
             if (!isFirstSend) await sleep(SEND_DELAY_MS);
             isFirstSend = false;
             await refreshGlobalSendLock(supabase, GLOBAL_LOCK_TTL_SECONDS);
-            const result = await sendMessage(session!, APIFULL_API_KEY, cp, messageBody, campaign.image_url);
+            const result = await dispatchSend(
+              supabase,
+              session!,
+              APIFULL_API_KEY,
+              cp,
+              messageBody,
+              campaign.image_url,
+              {
+                metaTemplateName: campaign.meta_template_name,
+                metaTemplateLanguage: campaign.meta_template_language,
+                metaTemplateBodyParams: [name],
+              },
+            );
             if (result.ok) {
               await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
               await logWhatsappActivity(supabase, moduleKey, card, `WhatsApp enviado — ${campaign.name}`, messageBody);
@@ -1008,7 +1026,19 @@ serve(async (req) => {
               if (!isFirstSend) await sleep(SEND_DELAY_MS);
               isFirstSend = false;
               await refreshGlobalSendLock(supabase, GLOBAL_LOCK_TTL_SECONDS);
-              const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, step.image_url);
+              const result = await dispatchSend(
+                supabase,
+                session,
+                APIFULL_API_KEY,
+                cp,
+                messageBody,
+                step.image_url,
+                {
+                  metaTemplateName: step.meta_template_name,
+                  metaTemplateLanguage: step.meta_template_language,
+                  metaTemplateBodyParams: [name],
+                },
+              );
               const instanceName = sessionToInstanceName.get(session!) || session!;
               if (result.ok) {
                 const sentAt = new Date().toISOString();

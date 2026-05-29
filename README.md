@@ -51,6 +51,11 @@ Configure seu proxy para apontar:
 
 ## Changelog
 
+### Próximo: WhatsApp Cloud API (Meta)
+- Guia de submissão: [docs/META_APP_REVIEW.md](docs/META_APP_REVIEW.md)
+- Painel **WhatsApp → API Meta**, webhook, envio híbrido API Full / Meta
+- URLs públicas: `/privacidade`, `/termos`, `/exclusao-dados`
+
 ### v1.0.2
 - Implementado suporte a múltiplas instâncias WhatsApp
   - Nova tabela `whatsapp_instances` com controle por empresa

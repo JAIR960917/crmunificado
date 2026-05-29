@@ -21,18 +21,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { assertCronOrServiceRole, internalCorsHeaders } from "../_shared/internalAuth.ts";
+import {
+  resolveSendTargetBySession,
+  sendWhatsAppMessage,
+  cleanPhone as sharedCleanPhone,
+} from "../_shared/whatsappSend.ts";
 
 const corsHeaders = internalCorsHeaders;
 
-const APIFULL_BASE = "https://api.apifull.com.br/whatsapp";
-
-function cleanPhone(phone: string) {
-  let clean = (phone || "").replace(/\D/g, "");
-  if (!clean) return "";
-  if (clean.startsWith("0")) clean = clean.substring(1);
-  if (!clean.startsWith("55")) clean = "55" + clean;
-  return clean;
-}
+const cleanPhone = sharedCleanPhone;
 
 function applyPlaceholders(text: string, data: Record<string, any>): string {
   if (!text) return "";
@@ -83,21 +80,29 @@ function resolveSendResult(responseOk: boolean, result: any) {
   return { ok: false, error: fallback };
 }
 
-async function sendMessage(apiKey: string, session: string, phone: string, text: string, imageUrl?: string | null) {
-  const endpoint = imageUrl ? "/send-image" : "/send-message";
-  const body: Record<string, any> = imageUrl
-    ? { session, number: phone, text, file: imageUrl }
-    : { session, number: phone, text, isGroup: false };
-  const res = await fetch(`${APIFULL_BASE}${endpoint}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+async function sendMessage(
+  supabase: ReturnType<typeof createClient>,
+  apiKey: string,
+  session: string,
+  phone: string,
+  text: string,
+  imageUrl?: string | null,
+  metaTemplateName?: string | null,
+) {
+  const target = await resolveSendTargetBySession(supabase, session);
+  if (!target) return { ok: false, error: "Instância não encontrada", raw: null };
+  const metaToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "";
+  const result = await sendWhatsAppMessage({
+    target,
+    phone,
+    text,
+    imageUrl,
+    apiFullKey: apiKey,
+    metaAccessToken: metaToken,
+    metaTemplateName: metaTemplateName || target.metaDefaultTemplate,
+    supabase,
   });
-  const t = await res.text();
-  let json: any = null;
-  try { json = t ? JSON.parse(t) : null; } catch { json = { raw: t }; }
-  const resolved = resolveSendResult(res.ok, json);
-  return { ok: resolved.ok, error: resolved.error, raw: json };
+  return { ok: result.ok, error: result.errorMessage, raw: result.raw };
 }
 
 async function resolveSession(supabase: any, instanceId: string | null, companyId: string | null): Promise<string | null> {
@@ -228,7 +233,15 @@ serve(async (req) => {
               stats.gatilhos_falhos++;
             } else {
               const text = applyPlaceholders(step.message || "", data);
-              const result = await sendMessage(APIFULL_API_KEY, session, phone, text, step.image_url || null);
+              const result = await sendMessage(
+                supabase,
+                APIFULL_API_KEY,
+                session,
+                phone,
+                text,
+                step.image_url || null,
+                step.meta_template_name,
+              );
               if (result.ok) {
                 const sentAt = new Date().toISOString();
                 const newData = {

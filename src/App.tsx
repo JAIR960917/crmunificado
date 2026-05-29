@@ -40,6 +40,9 @@ import InstallPage from "./pages/InstallPage";
 import NotificationSettingsPage from "./pages/NotificationSettingsPage";
 import WhatsAppPage from "./pages/WhatsAppPage";
 import WhatsAppInboxDemoPage from "./pages/WhatsAppInboxDemoPage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
+import TermsPage from "./pages/TermsPage";
+import DataDeletionPage from "./pages/DataDeletionPage";
 import AppointmentsPage from "./pages/AppointmentsPage";
 import OrcamentosPage from "./pages/OrcamentosPage";
 
@@ -125,6 +128,9 @@ const AppRoutes = () => {
     <Routes>
       {/* Pública */}
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+      <Route path="/privacidade" element={<PrivacyPolicyPage />} />
+      <Route path="/termos" element={<TermsPage />} />
+      <Route path="/exclusao-dados" element={<DataDeletionPage />} />
 
       {/* Privadas — todas passam por RoleGate */}
       <Route path="/" element={<RoleGate><LeadsPage /></RoleGate>} />

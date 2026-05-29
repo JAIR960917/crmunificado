@@ -14,10 +14,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   MessageSquare, Plus, Trash2, Edit2, Send, Users, Calendar, Hash,
-  QrCode, RefreshCw, Wifi, WifiOff, Loader2, Smartphone, Settings2, Zap, Clock
+  QrCode, RefreshCw, Wifi, WifiOff, Loader2, Smartphone, Settings2, Zap, Clock, ShieldCheck
 } from "lucide-react";
 import TriggerCampaigns from "@/components/whatsapp/TriggerCampaigns";
 import ImageUploadField from "@/components/whatsapp/ImageUploadField";
+import WhatsAppMetaSettings from "@/components/whatsapp/WhatsAppMetaSettings";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -34,6 +35,8 @@ type Campaign = {
   name: string;
   message: string;
   image_url: string | null;
+  meta_template_name: string | null;
+  meta_template_language: string | null;
   module: ModuleKey;
   status_id: string;
   instance_id: string | null;
@@ -95,6 +98,8 @@ export default function WhatsAppPage() {
   const [endTime, setEndTime] = useState("18:00");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [metaTemplateName, setMetaTemplateName] = useState("");
+  const [metaTemplateLanguage, setMetaTemplateLanguage] = useState("pt_BR");
   const [saving, setSaving] = useState(false);
   const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
@@ -477,7 +482,9 @@ export default function WhatsAppPage() {
     setModuleKey("leads");
     setStatusId(""); setInstanceId(""); setCompanyId("");
     setStartTime("08:00"); setEndTime("18:00");
-    setStartDate(""); setEndDate(""); setEditingId(null); setShowForm(false);
+    setStartDate(""); setEndDate("");
+    setMetaTemplateName(""); setMetaTemplateLanguage("pt_BR");
+    setEditingId(null); setShowForm(false);
   };
 
   const handleEdit = (c: Campaign) => {
@@ -487,7 +494,10 @@ export default function WhatsAppPage() {
     setInstanceId(c.instance_id || ""); setCompanyId(c.company_id || "__GLOBAL__");
     setStartTime((c.start_time || "08:00").slice(0, 5));
     setEndTime((c.end_time || "18:00").slice(0, 5));
-    setStartDate(c.start_date); setEndDate(c.end_date); setEditingId(c.id); setShowForm(true);
+    setStartDate(c.start_date); setEndDate(c.end_date);
+    setMetaTemplateName(c.meta_template_name || "");
+    setMetaTemplateLanguage(c.meta_template_language || "pt_BR");
+    setEditingId(c.id); setShowForm(true);
   };
 
   const handleSubmit = async () => {
@@ -516,6 +526,8 @@ export default function WhatsAppPage() {
       created_by: user.id,
       instance_id: effectiveInstanceId,
       image_url: imageUrl,
+      meta_template_name: metaTemplateName.trim() || null,
+      meta_template_language: metaTemplateLanguage.trim() || "pt_BR",
     };
 
     let error: any = null;
@@ -608,6 +620,11 @@ export default function WhatsAppPage() {
           {isAdmin && <TabsTrigger value="instance"><Smartphone className="h-4 w-4 mr-1" /> Instâncias</TabsTrigger>}
           <TabsTrigger value="campaigns"><MessageSquare className="h-4 w-4 mr-1" /> Campanhas</TabsTrigger>
           <TabsTrigger value="triggers"><Zap className="h-4 w-4 mr-1" /> Gatilhos</TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="meta">
+              <ShieldCheck className="h-4 w-4 mr-1" /> API Meta
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Instance Management Tab */}
@@ -949,6 +966,32 @@ export default function WhatsAppPage() {
                 </p>
               </div>
               <ImageUploadField value={imageUrl} onChange={setImageUrl} label="Imagem da campanha (opcional)" />
+              <div className="grid sm:grid-cols-2 gap-3 rounded-md border border-dashed p-3">
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-xs flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3" /> Template Meta (API oficial)
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Obrigatório para envios fora da janela de 24h. Nome exato do template aprovado no WhatsApp Manager.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Nome do template</Label>
+                  <Input
+                    placeholder="ex: lembrete_cobranca"
+                    value={metaTemplateName}
+                    onChange={(e) => setMetaTemplateName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Idioma</Label>
+                  <Input
+                    placeholder="pt_BR"
+                    value={metaTemplateLanguage}
+                    onChange={(e) => setMetaTemplateLanguage(e.target.value)}
+                  />
+                </div>
+              </div>
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={resetForm}>Cancelar</Button>
                 <Button size="sm" onClick={handleSubmit} disabled={saving}>
@@ -1051,6 +1094,12 @@ export default function WhatsAppPage() {
         <TabsContent value="triggers" className="flex-1 flex flex-col">
           <TriggerCampaigns instances={instances} />
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="meta" className="flex-1">
+            <WhatsAppMetaSettings />
+          </TabsContent>
+        )}
       </Tabs>
     </AppLayout>
   );

@@ -62,8 +62,15 @@ async function isValidHybridJWT(jwt: string): Promise<boolean> {
   return false;
 }
 
+/** Funções chamadas pela Meta (webhook) ou sem JWT de usuário. */
+const JWT_EXEMPT_SERVICES = new Set(['whatsapp-webhook']);
+
 Deno.serve(async (req: Request) => {
-  if (req.method !== 'OPTIONS' && VERIFY_JWT) {
+  const url = new URL(req.url);
+  const serviceName = url.pathname.split('/')[1] || '';
+  const skipJwt = JWT_EXEMPT_SERVICES.has(serviceName);
+
+  if (req.method !== 'OPTIONS' && VERIFY_JWT && !skipJwt) {
     try {
       const token = getAuthToken(req);
       const ok = await isValidHybridJWT(token);
@@ -82,10 +89,8 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const url = new URL(req.url);
   const { pathname } = url;
   const pathParts = pathname.split('/');
-  const serviceName = pathParts[1];
 
   if (!serviceName) {
     return new Response(JSON.stringify({ msg: 'missing function name in request' }), {

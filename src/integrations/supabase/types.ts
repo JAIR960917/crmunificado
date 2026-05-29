@@ -1734,6 +1734,8 @@ export type Database = {
           instance_id: string | null
           is_active: boolean
           message: string
+          meta_template_language: string | null
+          meta_template_name: string | null
           module: string
           name: string
           start_date: string
@@ -1849,29 +1851,47 @@ export type Database = {
         Row: {
           company_id: string | null
           created_at: string
+          display_phone: string | null
           id: string
           is_active: boolean
+          meta_default_template: string | null
+          meta_template_language: string
           name: string
+          phone_number_id: string | null
+          provider: string
           session: string
           updated_at: string
+          waba_id: string | null
         }
         Insert: {
           company_id?: string | null
           created_at?: string
+          display_phone?: string | null
           id?: string
           is_active?: boolean
+          meta_default_template?: string | null
+          meta_template_language?: string
           name: string
+          phone_number_id?: string | null
+          provider?: string
           session: string
           updated_at?: string
+          waba_id?: string | null
         }
         Update: {
           company_id?: string | null
           created_at?: string
+          display_phone?: string | null
           id?: string
           is_active?: boolean
+          meta_default_template?: string | null
+          meta_template_language?: string
           name?: string
+          phone_number_id?: string | null
+          provider?: string
           session?: string
           updated_at?: string
+          waba_id?: string | null
         }
         Relationships: [
           {
