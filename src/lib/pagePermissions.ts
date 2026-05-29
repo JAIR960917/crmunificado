@@ -33,6 +33,7 @@ export const APP_PAGES: AppPage[] = [
   { key: "formulario",           label: "Formulário Lead",        path: "/formulario" },
   { key: "formulario_renovacao", label: "Formulário Renovação",   path: "/formulario-renovacao" },
   { key: "whatsapp",             label: "WhatsApp",               path: "/whatsapp" },
+  { key: "whatsapp_inbox_demo",  label: "Inbox WhatsApp (demo)",  path: "/whatsapp-inbox-demo" },
   { key: "importar",             label: "Importar Leads",         path: "/importar" },
   { key: "integracoes_ssotica",  label: "Integrações SSótica",    path: "/integracoes-ssotica" },
   { key: "status_ssotica",       label: "Status SSótica",         path: "/status-ssotica" },
