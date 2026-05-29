@@ -21,6 +21,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { resolveStoragePublicUrl } from "@/lib/storage-url";
 
 const BRANDING_SETTING_KEYS = [
   "system_name",
@@ -161,6 +162,8 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
         (merged as any)[row.setting_key] = row.setting_value;
       }
     });
+
+    merged.logo_url = resolveStoragePublicUrl(merged.logo_url);
 
     setSettings(merged);
     setLoading(false);

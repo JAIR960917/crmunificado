@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
+import { resolveStoragePublicUrl } from "@/lib/storage-url";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -248,7 +249,7 @@ export default function SettingsPage() {
             {values.logo_url ? (
               <div className="relative">
                 <img
-                  src={values.logo_url}
+                  src={resolveStoragePublicUrl(values.logo_url)}
                   alt="Logo"
                   className="h-16 w-16 rounded-lg object-contain border bg-card"
                 />
