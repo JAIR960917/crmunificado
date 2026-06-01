@@ -14,7 +14,7 @@
  *     (financeiro só vê o que estiver explicitamente liberado)
  * ============================================================================
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -23,9 +23,11 @@ import {
   Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare,
   CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart,
   History, BarChart3, FileBarChart, RefreshCw, Workflow, Activity,
+  ChevronDown, SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import { pageKeyForPath } from "@/lib/pagePermissions";
 
@@ -37,7 +39,7 @@ type NavItem = {
 };
 
 /** Itens do menu principal — ORDEM IMPORTA (é a ordem visual). */
-const navItems: NavItem[] = [
+const mainNavItemsBeforeConfig: NavItem[] = [
   { path: "/dashboard",            label: "Dashboard",              icon: BarChart3 },
   { path: "/meu-dashboard",        label: "Meu Dashboard",          icon: LayoutDashboard },
   { path: "/relatorio-vendas",     label: "Relatório de Vendas",    icon: FileBarChart },
@@ -47,8 +49,18 @@ const navItems: NavItem[] = [
   { path: "/meu-dashboard-cobranca", label: "Dashboard Cobrança",   icon: LayoutDashboard },
   { path: "/agendamentos",         label: "Agendamentos",           icon: CalendarCheck },
   { path: "/orcamentos",           label: "Orçamentos",             icon: Receipt },
-
   { path: "/clientes-ativos",      label: "Renovação",              icon: UserCheck },
+];
+
+const mainNavItemsAfterConfig: NavItem[] = [
+  { path: "/whatsapp",             label: "WhatsApp",               icon: MessageSquare },
+  { path: "/whatsapp-inbox-demo",  label: "Inbox WhatsApp (demo)",  icon: MessageSquare },
+  { path: "/status-ssotica",       label: "Status SSótica",         icon: Activity },
+  { path: "/logs-movimentacao",    label: "Logs Movimentação",      icon: History },
+];
+
+/** Submenu Configuração (cadastros, formulários, integrações). */
+const configNavItems: NavItem[] = [
   { path: "/usuarios",             label: "Usuários",               icon: Users },
   { path: "/empresas",             label: "Empresas",               icon: Building2 },
   { path: "/colunas",              label: "Colunas CRM",            icon: Columns3 },
@@ -56,13 +68,15 @@ const navItems: NavItem[] = [
   { path: "/formulario-renovacao", label: "Formulário Renovação",   icon: CalendarHeart },
   { path: "/configuracoes",        label: "Configurações",          icon: Settings },
   { path: "/notificacoes",         label: "Notificações",           icon: Bell },
-  { path: "/whatsapp",             label: "WhatsApp",               icon: MessageSquare },
-  { path: "/whatsapp-inbox-demo",  label: "Inbox WhatsApp (demo)",  icon: MessageSquare },
   { path: "/importar",             label: "Importar Leads",         icon: Upload },
   { path: "/integracoes-ssotica",  label: "Integrações SSótica",    icon: Plug },
-  { path: "/status-ssotica",       label: "Status SSótica",         icon: Activity },
-  { path: "/logs-movimentacao",    label: "Logs Movimentação",      icon: History },
 ];
+
+const CONFIG_PATHS = new Set(configNavItems.map((i) => i.path));
+
+function isConfigPath(path: string) {
+  return CONFIG_PATHS.has(path);
+}
 
 interface Props {
   /** Callback chamado após navegação — usado pelo mobile para fechar o drawer. */
@@ -75,6 +89,7 @@ export default function AppSidebar({ onNavigate }: Props) {
 
   const [signingOut, setSigningOut] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -86,6 +101,13 @@ export default function AppSidebar({ onNavigate }: Props) {
     if (!pageKeyForPath(item.path)) return true;
     return canAccessPath(item.path);
   };
+
+  const visibleConfigItems = configNavItems.filter(canSee);
+  const configSectionActive = visibleConfigItems.some((i) => location.pathname === i.path);
+
+  useEffect(() => {
+    if (isConfigPath(location.pathname)) setConfigOpen(true);
+  }, [location.pathname]);
 
   /** Navega para a rota e (no mobile) fecha o drawer. */
   const handleNav = (path: string) => {
@@ -156,7 +178,7 @@ export default function AppSidebar({ onNavigate }: Props) {
 
       {/* ===== Menu principal (rolável) ===== */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2 min-h-0">
-        {navItems.filter(canSee).map((item) => (
+        {mainNavItemsBeforeConfig.filter(canSee).map((item) => (
           <button
             key={item.path}
             onClick={() => handleNav(item.path)}
@@ -167,7 +189,62 @@ export default function AppSidebar({ onNavigate }: Props) {
                 : "hover:bg-sidebar-accent/50"
             )}
           >
-            <item.icon className="h-4 w-4" />
+            <item.icon className="h-4 w-4 shrink-0" />
+            {item.label}
+          </button>
+        ))}
+
+        {visibleConfigItems.length > 0 && (
+          <Collapsible open={configOpen} onOpenChange={setConfigOpen} className="pt-1">
+            <CollapsibleTrigger
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                configSectionActive && !configOpen
+                  ? "bg-sidebar-accent/70 text-sidebar-accent-foreground"
+                  : "hover:bg-sidebar-accent/50"
+              )}
+            >
+              <SlidersHorizontal className="h-4 w-4 shrink-0" />
+              <span className="flex-1 text-left">Configuração</span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 opacity-70 transition-transform duration-200",
+                  configOpen && "rotate-180"
+                )}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-0.5 pt-0.5 pl-2">
+              {visibleConfigItems.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => handleNav(item.path)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg py-2 pl-5 pr-3 text-sm font-medium transition-colors",
+                    location.pathname === item.path
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+                  )}
+                >
+                  <item.icon className="h-4 w-4 shrink-0 opacity-90" />
+                  {item.label}
+                </button>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
+        {mainNavItemsAfterConfig.filter(canSee).map((item) => (
+          <button
+            key={item.path}
+            onClick={() => handleNav(item.path)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+              location.pathname === item.path
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "hover:bg-sidebar-accent/50"
+            )}
+          >
+            <item.icon className="h-4 w-4 shrink-0" />
             {item.label}
           </button>
         ))}

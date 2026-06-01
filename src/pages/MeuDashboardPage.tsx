@@ -215,7 +215,7 @@ export default function MeuDashboardPage() {
           <p className="text-sm text-muted-foreground">Suas tarefas e atribuições.</p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <StatCard
             icon={CalendarClock}
             label="Tarefas para hoje"

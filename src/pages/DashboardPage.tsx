@@ -551,7 +551,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Totais */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4">
           {(() => {
             const selectedCompanyName =
               companyFilter === ALL
@@ -600,7 +600,7 @@ export default function DashboardPage() {
         {/* Relatório diário */}
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-3">
               <div>
                 <CardTitle>Relatório de atendimentos</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -735,7 +735,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {/* Resumo */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 mb-4">
+            <div className="grid grid-cols-1 gap-3 mb-4">
               <SummaryStat label="Leads Adicionados" value={reportTotals.adicionados} icon={Users} tone="default" />
               <SummaryStat label="Leads Tratados" value={reportTotals.tratados} icon={Phone} tone="default" />
               <SummaryStat label="Leads Não Atenderam" value={reportTotals.naoAtenderam} icon={PhoneOff} tone="danger" />
@@ -825,7 +825,7 @@ export default function DashboardPage() {
         {/* Relatório de Cobranças */}
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-3">
               <div>
                 <CardTitle>Relatório de Cobranças</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -895,7 +895,7 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 mb-4">
+            <div className="grid grid-cols-1 gap-3 mb-4">
               <SummaryStat label="Contatos" value={cobrancaTotals.contatos} icon={Phone} tone="default" />
               <SummaryStat label="Atenderam" value={cobrancaTotals.atendeu} icon={Phone} tone="success" />
               <SummaryStat label="Não atenderam" value={cobrancaTotals.naoAtendeu} icon={PhoneOff} tone="danger" />

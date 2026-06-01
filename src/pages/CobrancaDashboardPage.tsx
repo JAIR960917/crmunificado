@@ -158,7 +158,7 @@ export default function CobrancaDashboardPage() {
           <p className="text-sm text-muted-foreground">Suas tarefas de cobrança agendadas e atrasadas.</p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <StatCard
             icon={CalendarClock}
             label="Tarefas para hoje"
