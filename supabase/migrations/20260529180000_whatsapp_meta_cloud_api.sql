@@ -139,10 +139,10 @@ CREATE TRIGGER update_whatsapp_conversations_updated_at
   BEFORE UPDATE ON public.whatsapp_conversations
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- Permissão da página de demo do inbox (já pode existir)
-INSERT INTO public.role_page_permissions (role, page_key, allowed)
+-- Permissão da página de demo do inbox (já pode existir; ver também 20260529150000)
+INSERT INTO public.role_page_permissions (role_key, page_key, allowed)
 VALUES ('admin', 'whatsapp_inbox_demo', true)
-ON CONFLICT (role, page_key) DO UPDATE SET allowed = EXCLUDED.allowed;
+ON CONFLICT (role_key, page_key) DO UPDATE SET allowed = EXCLUDED.allowed;
 
 CREATE OR REPLACE FUNCTION public.increment_whatsapp_unread(p_conversation_id uuid)
 RETURNS void
