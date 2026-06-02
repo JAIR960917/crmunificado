@@ -27,6 +27,42 @@ type CobrancaRow = {
   company_id: string | null;
 };
 
+type ScoredCobrancaRow = CobrancaRow & { match_score: number };
+
+function namesLooselyMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = (a || "").trim().toLowerCase();
+  const nb = (b || "").trim().toLowerCase();
+  if (!na || !nb) return false;
+  if (na === nb || na.includes(nb) || nb.includes(na)) return true;
+  const fa = na.split(/\s+/)[0];
+  const fb = nb.split(/\s+/)[0];
+  return fa.length >= 3 && fa === fb;
+function extractGatilhoNameHint(body: string | null | undefined): string | null {
+  if (!body) return null;
+  const match = body.match(/Ol[aá],\s*(.+?)!/i);
+  return match?.[1]?.trim() || null;
+}
+
+function pickCobrancaMatch(rows: ScoredCobrancaRow[]): {
+  best: ScoredCobrancaRow | null;
+  ambiguous: ScoredCobrancaRow[];
+} {
+  if (rows.length === 0) return { best: null, ambiguous: [] };
+  if (rows.length === 1) return { best: rows[0], ambiguous: [] };
+
+  const [first, second] = rows;
+  if (first.match_score >= 1000) return { best: first, ambiguous: [] };
+  if (first.match_score >= 250 && first.match_score - (second?.match_score ?? 0) >= 50) {
+    return { best: first, ambiguous: [] };
+  }
+
+  const top = first.match_score;
+  const tied = rows.filter((r) => r.match_score >= top - 20 && r.match_score >= 100);
+  if (tied.length <= 1) return { best: first, ambiguous: [] };
+
+  return { best: null, ambiguous: tied.slice(0, 5) };
+}
+
 type LastNote = {
   content: string;
   created_at: string;
@@ -49,6 +85,7 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [lastNote, setLastNote] = useState<LastNote | null>(null);
   const [currentUserName, setCurrentUserName] = useState("");
+  const [ambiguousOptions, setAmbiguousOptions] = useState<ScoredCobrancaRow[] | null>(null);
 
   const nationalDigits = nationalPhoneDigits(
     conversation.phone_display || conversation.wa_id || "",
@@ -129,6 +166,7 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
     setLoading(true);
     setCobranca(null);
     setLastNote(null);
+    setAmbiguousOptions(null);
     try {
       if (user?.id) {
         const { data: me } = await supabase
@@ -139,6 +177,25 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
         setCurrentUserName(me?.full_name || "");
       }
 
+      let nameHint: string | null = null;
+      if (conversation.id) {
+        const { data: outbound } = await supabase
+          .from("whatsapp_messages")
+          .select("body, sent_by_name")
+          .eq("conversation_id", conversation.id)
+          .eq("direction", "out")
+          .order("created_at", { ascending: false })
+          .limit(12);
+        for (const msg of outbound || []) {
+          const fromGatilho = (msg.sent_by_name || "").toLowerCase().includes("gatilho");
+          const hint = extractGatilhoNameHint(msg.body);
+          if (hint && (fromGatilho || hint.length > 3)) {
+            nameHint = hint;
+            break;
+          }
+        }
+      }
+
       if (conversation.card_id) {
         const { data: byId } = await supabase
           .from("crm_cobrancas")
@@ -146,8 +203,15 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
           .eq("id", conversation.card_id)
           .maybeSingle();
         if (byId) {
-          await applyCobranca(byId as CobrancaRow, conversation.module !== "cobrancas");
-          return;
+          const linkedName = String((byId.data as Record<string, unknown>)?.nome || "");
+          const hintOk = nameHint ? namesLooselyMatch(linkedName, nameHint) : true;
+          const contactOk = conversation.contact_name
+            ? namesLooselyMatch(linkedName, conversation.contact_name)
+            : true;
+          if (hintOk && (contactOk || !nameHint)) {
+            await applyCobranca(byId as CobrancaRow, conversation.module !== "cobrancas");
+            return;
+          }
         }
       }
 
@@ -161,16 +225,32 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
         return;
       }
 
+      let ranked: ScoredCobrancaRow[] = [];
       for (const phone of searchPhones) {
-        const { data: rpcRows, error: rpcError } = await supabase.rpc("find_cobranca_by_phone", {
+        const { data: rpcRows, error: rpcError } = await supabase.rpc("find_cobrancas_by_phone", {
           p_phone: phone,
+          p_contact_name: conversation.contact_name,
+          p_prefer_card_id: conversation.card_id,
+          p_name_hint: nameHint,
         });
         if (rpcError) {
-          console.warn("find_cobranca_by_phone:", rpcError.message, "phone=", phone);
+          console.warn("find_cobrancas_by_phone:", rpcError.message, "phone=", phone);
           continue;
         }
         if (rpcRows?.length) {
-          await applyCobranca(rpcRows[0] as CobrancaRow, true);
+          ranked = rpcRows as ScoredCobrancaRow[];
+          break;
+        }
+      }
+
+      if (ranked.length > 0) {
+        const { best, ambiguous } = pickCobrancaMatch(ranked);
+        if (best) {
+          await applyCobranca(best, true);
+          return;
+        }
+        if (ambiguous.length > 0) {
+          setAmbiguousOptions(ambiguous);
           return;
         }
       }
@@ -194,19 +274,26 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
 
       if (queryError) throw queryError;
 
-      const found = (candidates || []).find((c) =>
+      const matched = (candidates || []).filter((c) =>
         phonesMatchNational(extractPhoneFromCobrancaData(c.data as Record<string, unknown>), nationalDigits),
-      ) as CobrancaRow | undefined;
+      ) as CobrancaRow[];
 
-      if (found) {
-        await applyCobranca(found, true);
+      if (matched.length === 1) {
+        await applyCobranca(matched[0], true);
+        return;
+      }
+
+      if (matched.length > 1) {
+        setAmbiguousOptions(
+          matched.map((row) => ({ ...row, match_score: 0 })),
+        );
       }
     } catch {
       toast.error("Não foi possível carregar os dados da cobrança.");
     } finally {
       setLoading(false);
     }
-  }, [user?.id, conversation.card_id, conversation.module, conversation.wa_id, conversation.phone_display, nationalDigits, applyCobranca]);
+  }, [user?.id, conversation.card_id, conversation.module, conversation.id, conversation.contact_name, conversation.wa_id, conversation.phone_display, nationalDigits, applyCobranca]);
 
   useEffect(() => {
     resolveCobranca();
@@ -226,6 +313,43 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
       <div className="flex items-center gap-2 border-t pt-4 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Carregando cobrança…
+      </div>
+    );
+  }
+
+  if (!cobranca && ambiguousOptions && ambiguousOptions.length > 0) {
+    return (
+      <div className="space-y-3 border-t pt-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cobrança no CRM</p>
+        <p className="text-sm text-muted-foreground">
+          Vários clientes usam o telefone {displayPhone}. Selecione o card correto:
+        </p>
+        <div className="space-y-2">
+          {ambiguousOptions.map((row) => {
+            const d = row.data || {};
+            const nome = String(d.nome || "Cliente");
+            const valor =
+              row.valor > 0
+                ? row.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                : null;
+            return (
+              <Button
+                key={row.id}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-auto w-full flex-col items-start gap-1 py-2 text-left"
+                onClick={() => {
+                  setAmbiguousOptions(null);
+                  void applyCobranca(row, true);
+                }}
+              >
+                <span className="font-semibold">{nome}</span>
+                {valor ? <span className="text-xs text-muted-foreground">{valor}</span> : null}
+              </Button>
+            );
+          })}
+        </div>
       </div>
     );
   }
