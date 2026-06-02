@@ -1,5 +1,13 @@
 /** Parsing e persistência de mensagens com mídia (WhatsApp Cloud API). */
 
+/** Texto enviado ao cliente: cabeçalho em negrito (Markdown WhatsApp) + conteúdo. */
+export function formatOutboundWhatsAppBody(senderName: string, content?: string | null): string {
+  const name = (senderName || "").trim() || "Atendente";
+  const part = (content || "").trim();
+  const header = `*Atendente ${name}*`;
+  return part ? `${header}\n\n${part}` : header;
+}
+
 export type ParsedWaMessage = {
   messageType: "text" | "media";
   text: string;

@@ -6,7 +6,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getUserFromRequest, getUserRoles } from "../_shared/staffAuth.ts";
 import { cleanPhone, resolveSendTargetByInstanceId, sendWhatsAppMessage, translateWhatsAppError } from "../_shared/whatsappSend.ts";
-import { insertWhatsAppMessageRow, normalizeMetaUploadMime } from "../_shared/whatsappInboxMedia.ts";
+import {
+  formatOutboundWhatsAppBody,
+  insertWhatsAppMessageRow,
+  normalizeMetaUploadMime,
+} from "../_shared/whatsappInboxMedia.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -227,6 +231,8 @@ serve(async (req) => {
       });
     }
 
+    const sender = await resolveSenderLabel(admin, user.id);
+
     let text = "";
     let metaTemplateName: string | null = null;
     let metaTemplateLanguage: string | null = null;
@@ -258,6 +264,33 @@ serve(async (req) => {
       const id = String((json as { id?: string })?.id || "");
       if (!id) return { ok: false, error: "Meta não retornou media id", raw: json };
       return { ok: true, id };
+    }
+
+    async function sendTextMessage(params: {
+      phoneNumberId: string;
+      accessToken: string;
+      to: string;
+      text: string;
+    }): Promise<{ ok: true; messageId: string | null; raw: unknown } | { ok: false; error: string; raw?: unknown }> {
+      const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${params.phoneNumberId}/messages`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${params.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: params.to,
+          type: "text",
+          text: { preview_url: false, body: params.text },
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = (json as { error?: { message?: string } })?.error?.message || `Meta send HTTP ${res.status}`;
+        return { ok: false, error: translateWhatsAppError(err), raw: json };
+      }
+      const messageId = (json as { messages?: { id?: string }[] })?.messages?.[0]?.id || null;
+      return { ok: true, messageId, raw: json };
     }
 
     async function sendMediaMessage(params: {
@@ -394,13 +427,34 @@ serve(async (req) => {
           });
         }
 
+        const cap = typeof caption === "string" ? caption.trim() || null : null;
+
+        if (mediaType === "audio") {
+          const headerSent = await sendTextMessage({
+            phoneNumberId: target.phoneNumberId,
+            accessToken,
+            to,
+            text: formatOutboundWhatsAppBody(sender.sent_by_name, ""),
+          });
+          if (!headerSent.ok) {
+            return new Response(JSON.stringify({ error: headerSent.error, raw: headerSent.raw }), {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+
+        const captionForMeta = mediaType === "audio"
+          ? undefined
+          : formatOutboundWhatsAppBody(sender.sent_by_name, cap);
+
         const sent = await sendMediaMessage({
           phoneNumberId: target.phoneNumberId,
           accessToken,
           to,
           mediaType,
           mediaId: uploaded.id,
-          caption: typeof caption === "string" ? caption.trim() || undefined : undefined,
+          caption: captionForMeta,
           filename: fileName,
         });
         if (!sent.ok) {
@@ -419,8 +473,6 @@ serve(async (req) => {
           ? "🎬 Vídeo"
           : "📄 Documento";
 
-        const cap = typeof caption === "string" ? caption.trim() || null : null;
-        const sender = await resolveSenderLabel(admin, user.id);
         const saved = await insertWhatsAppMessageRow(admin, {
           conversation_id: conv.id,
           direction: "out",
@@ -471,10 +523,14 @@ serve(async (req) => {
       text = `[Template] ${metaTemplateName}`;
     }
 
+    const textForWhatsApp = action === "send-text"
+      ? formatOutboundWhatsAppBody(sender.sent_by_name, text)
+      : "";
+
     const result = await sendWhatsAppMessage({
       target,
       phone: to,
-      text: action === "send-text" ? text : "",
+      text: textForWhatsApp,
       metaAccessToken: accessToken,
       metaTemplateName,
       metaTemplateLanguage,
@@ -490,7 +546,6 @@ serve(async (req) => {
     }
 
     const now = new Date().toISOString();
-    const sender = await resolveSenderLabel(admin, user.id);
     await admin.from("whatsapp_messages").insert({
       conversation_id: conv.id,
       direction: "out",
