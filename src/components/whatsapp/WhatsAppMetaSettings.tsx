@@ -13,6 +13,7 @@ import {
   Loader2,
   ShieldCheck,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import WhatsAppInstanceAssignments from "@/components/whatsapp/WhatsAppInstanceAssignments";
 
@@ -94,6 +95,7 @@ export default function WhatsAppMetaSettings() {
   const [displayPhone, setDisplayPhone] = useState("");
   const [defaultTemplate, setDefaultTemplate] = useState("");
   const [creatingInst, setCreatingInst] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const invokeMeta = async (body: Record<string, unknown>) => {
     const { data, error } = await supabase.functions.invoke("meta-whatsapp", { body });
@@ -225,6 +227,27 @@ export default function WhatsAppMetaSettings() {
       toast.error(e instanceof Error ? e.message : "Erro ao cadastrar número");
     } finally {
       setCreatingInst(false);
+    }
+  };
+
+  const handleDeleteInstance = async (inst: { id: string; name: string }) => {
+    if (
+      !confirm(
+        `Excluir o número "${inst.name}"?\n\nConversas do Inbox permanecem, mas sem vínculo com esta linha. Campanhas e gatilhos que usavam este número precisarão de outra instância.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingId(inst.id);
+    try {
+      const { error } = await supabase.from("whatsapp_instances").delete().eq("id", inst.id);
+      if (error) throw error;
+      toast.success("Número excluído");
+      await loadStatus();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir número");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -515,12 +538,25 @@ export default function WhatsAppMetaSettings() {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDeleteInstance({ id: i.id, name: i.name })}
+                    disabled={deletingId === i.id || instanceEdits[i.id]?.saving}
+                  >
+                    {deletingId === i.id ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-1" />
+                    )}
+                    Excluir
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleUpdateInstance(i.id)}
-                    disabled={instanceEdits[i.id]?.saving}
+                    disabled={deletingId === i.id || instanceEdits[i.id]?.saving}
                   >
                     {instanceEdits[i.id]?.saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
                     Salvar
