@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   AlertTriangle,
 } from "lucide-react";
+import WhatsAppInstanceAssignments from "@/components/whatsapp/WhatsAppInstanceAssignments";
 
 type MetaStatus = {
   provider: string;
@@ -431,6 +432,14 @@ export default function WhatsAppMetaSettings() {
           )}
         </ul>
       </div>
+
+      <WhatsAppInstanceAssignments
+        instances={(status?.meta_instances || []).map((i) => ({
+          id: i.id,
+          name: i.name,
+          display_phone: i.display_phone,
+        }))}
+      />
 
       <div className="rounded-lg border bg-card p-4 space-y-3">
         <h3 className="font-semibold text-sm">Cadastrar número oficial (Cloud API)</h3>

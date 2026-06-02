@@ -85,6 +85,22 @@ serve(async (req) => {
       });
     }
 
+    const isPrivileged = roles.some((r) => r === "admin" || r === "gerente");
+    if (!isPrivileged) {
+      const { data: allowed } = await admin
+        .from("whatsapp_instance_assignments")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("instance_id", conv.instance_id)
+        .maybeSingle();
+      if (!allowed?.id) {
+        return new Response(JSON.stringify({ error: "Você não tem acesso a este número WhatsApp" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const target = await resolveSendTargetByInstanceId(admin as any, String(conv.instance_id));
     if (!target) {
       return new Response(JSON.stringify({ error: "Instância WhatsApp não encontrada" }), {

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -97,8 +98,17 @@ function StatusIcon({ status }: { status?: string | null }) {
   return null;
 }
 
+function sortConversations(rows: ConversationRow[]): ConversationRow[] {
+  return [...rows].sort((a, b) => {
+    const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+    const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+    return tb - ta;
+  });
+}
+
 export default function WhatsAppInbox() {
-  const { user } = useAuth();
+  const { user, isAdmin, isGerente } = useAuth();
+  const selectedIdRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -137,19 +147,39 @@ export default function WhatsAppInbox() {
     });
   }, [conversations, filter, search, user?.id]);
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     const { data, error } = await supabase
       .from("whatsapp_conversations")
       .select("id, instance_id, wa_id, contact_name, phone_display, module, card_id, window_expires_at, last_message_at, last_preview, unread_count, assigned_to")
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(200);
     if (error) throw error;
-    const rows = (data || []) as ConversationRow[];
+    const rows = sortConversations((data || []) as ConversationRow[]);
     setConversations(rows);
-    if (!selectedId && rows.length > 0) setSelectedId(rows[0].id);
-  };
+    setSelectedId((prev) => prev ?? (rows.length > 0 ? rows[0].id : null));
+  }, []);
 
-  const loadMessages = async (conversationId: string) => {
+  const markAsRead = useCallback(async (conversationId: string) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conversationId ? { ...c, unread_count: 0 } : c)),
+    );
+    const { error } = await supabase.rpc("mark_whatsapp_conversation_read", {
+      p_conversation_id: conversationId,
+    });
+    if (error) console.warn("mark_whatsapp_conversation_read:", error.message);
+  }, []);
+
+  const applyConversationPatch = useCallback((row: ConversationRow) => {
+    setConversations((prev) => {
+      const idx = prev.findIndex((c) => c.id === row.id);
+      const next = idx >= 0
+        ? prev.map((c, i) => (i === idx ? { ...c, ...row } : c))
+        : [row, ...prev];
+      return sortConversations(next);
+    });
+  }, []);
+
+  const loadMessages = useCallback(async (conversationId: string) => {
     const { data, error } = await supabase
       .from("whatsapp_messages")
       .select("id, conversation_id, direction, body, status, is_template, meta_template_name, created_at")
@@ -158,7 +188,7 @@ export default function WhatsAppInbox() {
       .limit(500);
     if (error) throw error;
     setMessages((data || []) as MessageRow[]);
-  };
+  }, []);
 
   const loadTemplates = async () => {
     setTemplatesLoading(true);
@@ -192,30 +222,72 @@ export default function WhatsAppInbox() {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadConversations]);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;
     void loadMessages(selectedId);
-  }, [selectedId]);
+    void markAsRead(selectedId);
+  }, [selectedId, loadMessages, markAsRead]);
 
   useEffect(() => {
     const channel = supabase
       .channel("whatsapp-inbox-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_conversations" }, () => {
-        void loadConversations();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_messages" }, (payload) => {
-        const convId = (payload.new as { conversation_id?: string } | null)?.conversation_id;
-        if (convId && convId === selectedId) void loadMessages(convId);
-        else void loadConversations();
-      })
-      .subscribe();
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "whatsapp_conversations" },
+        (payload: RealtimePostgresChangesPayload<ConversationRow>) => {
+          if (payload.eventType === "DELETE" && payload.old) {
+            const old = payload.old as ConversationRow;
+            setConversations((prev) => prev.filter((c) => c.id !== old.id));
+            if (selectedIdRef.current === old.id) setSelectedId(null);
+            return;
+          }
+          if (payload.new) {
+            const row = payload.new as ConversationRow;
+            const openId = selectedIdRef.current;
+            if (openId === row.id && (row.unread_count || 0) > 0) {
+              void markAsRead(row.id);
+              applyConversationPatch({ ...row, unread_count: 0 });
+            } else {
+              applyConversationPatch(row);
+            }
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "whatsapp_messages" },
+        (payload) => {
+          const row = payload.new as MessageRow | null;
+          if (!row) return;
+          const openId = selectedIdRef.current;
+          if (openId === row.conversation_id) {
+            setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+            void markAsRead(row.conversation_id);
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "whatsapp_messages" },
+        (payload) => {
+          const row = payload.new as MessageRow | null;
+          if (!row || row.conversation_id !== selectedIdRef.current) return;
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, ...row } : m)));
+        },
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") void loadConversations();
+      });
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [selectedId]);
+  }, [applyConversationPatch, loadConversations, markAsRead]);
 
   const handleSendText = async () => {
     if (!conversation?.id) return;
@@ -274,6 +346,11 @@ export default function WhatsAppInbox() {
               <MessageSquare className="h-5 w-5 text-primary" />
               <h1 className="text-lg font-semibold">Conversas</h1>
             </div>
+            {!isAdmin && !isGerente ? (
+              <p className="text-[10px] text-muted-foreground">
+                Exibindo apenas números atribuídos a você (WhatsApp → API Meta).
+              </p>
+            ) : null}
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
