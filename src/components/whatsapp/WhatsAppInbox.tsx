@@ -109,6 +109,8 @@ function sortConversations(rows: ConversationRow[]): ConversationRow[] {
 export default function WhatsAppInbox() {
   const { user, isAdmin, isGerente } = useAuth();
   const selectedIdRef = useRef<string | null>(null);
+  const messagesAreaRef = useRef<HTMLDivElement | null>(null);
+  const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -127,6 +129,26 @@ export default function WhatsAppInbox() {
     () => conversations.find((c) => c.id === selectedId) ?? null,
     [conversations, selectedId],
   );
+
+  const getMessagesViewport = useCallback((): HTMLDivElement | null => {
+    const root = messagesAreaRef.current;
+    if (!root) return null;
+    return root.querySelector("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
+  }, []);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const viewport = getMessagesViewport();
+    if (!viewport) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior });
+  }, [getMessagesViewport]);
+
+  const recomputePinnedToBottom = useCallback(() => {
+    const viewport = getMessagesViewport();
+    if (!viewport) return;
+    const thresholdPx = 140;
+    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    setPinnedToBottom(distanceFromBottom <= thresholdPx);
+  }, [getMessagesViewport]);
 
   const mod = MODULE_STYLES[toModuleKey(conversation?.module || null)];
   const windowOpen = useMemo(() => {
@@ -232,7 +254,26 @@ export default function WhatsAppInbox() {
     if (!selectedId) return;
     void loadMessages(selectedId);
     void markAsRead(selectedId);
+    // Ao abrir uma conversa, fixa no fim (UX igual WhatsApp).
+    setPinnedToBottom(true);
+    queueMicrotask(() => scrollToBottom("auto"));
   }, [selectedId, loadMessages, markAsRead]);
+
+  useEffect(() => {
+    const viewport = getMessagesViewport();
+    if (!viewport) return;
+    const handler = () => recomputePinnedToBottom();
+    viewport.addEventListener("scroll", handler, { passive: true });
+    // Inicializa estado com a posição atual
+    handler();
+    return () => viewport.removeEventListener("scroll", handler);
+  }, [getMessagesViewport, recomputePinnedToBottom, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    if (!pinnedToBottom) return;
+    scrollToBottom("smooth");
+  }, [messages.length, pinnedToBottom, scrollToBottom, selectedId]);
 
   useEffect(() => {
     const channel = supabase
@@ -269,6 +310,9 @@ export default function WhatsAppInbox() {
           if (openId === row.conversation_id) {
             setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
             void markAsRead(row.conversation_id);
+            // Se o usuário estiver no fim, acompanha a mensagem nova.
+            // Se ele tiver subido para ler histórico, não puxa.
+            if (pinnedToBottom) queueMicrotask(() => scrollToBottom("smooth"));
           }
         },
       )
@@ -302,6 +346,8 @@ export default function WhatsAppInbox() {
       setDraft("");
       await loadMessages(conversation.id);
       await loadConversations();
+      setPinnedToBottom(true);
+      queueMicrotask(() => scrollToBottom("smooth"));
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao enviar mensagem");
     } finally {
@@ -329,6 +375,8 @@ export default function WhatsAppInbox() {
       if ((data as any)?.error) throw new Error((data as any).error);
       await loadMessages(conversation.id);
       await loadConversations();
+      setPinnedToBottom(true);
+      queueMicrotask(() => scrollToBottom("smooth"));
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao enviar template");
     } finally {
@@ -487,7 +535,7 @@ export default function WhatsAppInbox() {
               <div className="flex min-h-0 flex-1">
                 {/* Mensagens */}
                 <div className="flex min-w-0 flex-1 flex-col bg-[#e5ddd5]/30 dark:bg-muted/20">
-                  <ScrollArea className="flex-1 p-4">
+                  <ScrollArea ref={messagesAreaRef} className="flex-1 p-4">
                     <div className="mx-auto max-w-2xl space-y-3">
                       {messages.map((msg) => {
                         const out = msg.direction === "out";
