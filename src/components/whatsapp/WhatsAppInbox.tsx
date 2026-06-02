@@ -14,8 +14,6 @@ import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import WhatsAppMediaMessage from "@/components/whatsapp/WhatsAppMediaMessage";
-import WhatsAppCreateLeadPanel from "@/components/whatsapp/WhatsAppCreateLeadPanel";
-import WhatsAppCobrancaPanel from "@/components/whatsapp/WhatsAppCobrancaPanel";
 import {
   AlertCircle,
   Check,
@@ -166,7 +164,7 @@ function sortConversations(rows: ConversationRow[]): ConversationRow[] {
 }
 
 export default function WhatsAppInbox() {
-  const { user, isAdmin, isGerente, isFinanceiro } = useAuth();
+  const { user, isAdmin, isGerente } = useAuth();
   const selectedIdRef = useRef<string | null>(null);
   const conversationsRef = useRef<ConversationRow[]>([]);
   const recentNotifyRef = useRef<Map<string, number>>(new Map());
@@ -296,22 +294,6 @@ export default function WhatsAppInbox() {
     setConversations(rows);
     setSelectedId((prev) => prev ?? (rows.length > 0 ? rows[0].id : null));
   }, []);
-
-  const handleLeadLinked = useCallback(
-    (
-      conversationId: string,
-      patch: { card_id: string; contact_name: string | null; module: string },
-    ) => {
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === conversationId
-            ? { ...c, card_id: patch.card_id, contact_name: patch.contact_name, module: patch.module }
-            : c,
-        ),
-      );
-    },
-    [],
-  );
 
   const markAsRead = useCallback(async (conversationId: string) => {
     setConversations((prev) =>
@@ -725,8 +707,8 @@ export default function WhatsAppInbox() {
   }, []);
 
   return (
-    <div className="flex h-[calc(100dvh-16rem)] min-h-[620px] flex-col gap-3">
-      <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border bg-card shadow-sm">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 overflow-hidden border bg-card lg:rounded-xl lg:shadow-sm">
         {/* Lista de conversas */}
         <aside className="flex w-full max-w-[320px] flex-col border-r bg-muted/30 lg:max-w-[360px]">
           <div className="space-y-3 border-b p-3">
@@ -908,7 +890,7 @@ export default function WhatsAppInbox() {
                 {/* Mensagens */}
                 <div className="flex min-w-0 flex-1 flex-col bg-[#e5ddd5]/30 dark:bg-muted/20">
                   <ScrollArea ref={messagesAreaRef} className="flex-1 p-4">
-                    <div className="mx-auto max-w-2xl space-y-3">
+                    <div className="mx-auto w-full max-w-4xl space-y-3">
                       {messages.map((msg) => {
                         const out = msg.direction === "out";
                         const at = new Date(msg.created_at);
@@ -959,7 +941,7 @@ export default function WhatsAppInbox() {
                   {/* Composer */}
                   <footer className="border-t bg-card p-3">
                     {windowOpen ? (
-                      <div className="mx-auto max-w-2xl space-y-2">
+                      <div className="mx-auto w-full max-w-4xl space-y-2">
                         <p className="text-xs text-muted-foreground">
                           O cliente respondeu recentemente — você pode enviar texto livre (regra da Meta).
                         </p>
@@ -1109,7 +1091,7 @@ export default function WhatsAppInbox() {
                         ) : null}
                       </div>
                     ) : (
-                      <div className="mx-auto max-w-2xl space-y-3">
+                      <div className="mx-auto w-full max-w-4xl space-y-3">
                         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100">
                           Passaram mais de 24h desde a última mensagem do cliente. Para falar de novo,
                           escolha um <strong>template aprovado</strong> na Meta.
@@ -1174,66 +1156,11 @@ export default function WhatsAppInbox() {
                     )}
                   </footer>
                 </div>
-
-                {/* Painel lateral CRM */}
-                <aside className="hidden min-w-[340px] w-[min(100%,380px)] shrink-0 flex-col border-l bg-muted/20 lg:flex">
-                  <ScrollArea className="flex-1">
-                    <div className="min-w-0 p-4 space-y-4">
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          Vinculado no CRM
-                        </p>
-                        <dl className="mt-3 space-y-3 text-sm">
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Módulo</dt>
-                            <dd className="mt-0.5">
-                              <span className={cn("rounded px-2 py-0.5 text-xs font-medium", mod.className)}>
-                                {mod.label}
-                              </span>
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Nossa linha (recebe/envia)</dt>
-                            <dd className="mt-0.5 text-xs font-medium text-sky-800 dark:text-sky-300 break-words">
-                              {conversationInstanceLabel || "—"}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Telefone do cliente</dt>
-                            <dd className="mt-0.5 font-medium text-amber-700 dark:text-amber-300 break-words">
-                              {formatPhoneDisplay(conversation.phone_display || conversation.wa_id)}
-                            </dd>
-                          </div>
-                        </dl>
-                      </div>
-                      {isFinanceiro && !isAdmin ? (
-                        <WhatsAppCobrancaPanel
-                          conversation={conversation}
-                          formatPhone={formatPhoneDisplay}
-                          onLinked={handleLeadLinked}
-                        />
-                      ) : (
-                        <WhatsAppCreateLeadPanel
-                          conversation={conversation}
-                          formatPhone={formatPhoneDisplay}
-                          onLinked={handleLeadLinked}
-                        />
-                      )}
-                    </div>
-                  </ScrollArea>
-                </aside>
               </div>
             </>
           )}
         </div>
       </div>
-
-      {!conversation?.instance_id ? (
-        <div className="text-xs text-muted-foreground flex items-center gap-2">
-          <AlertCircle className="h-4 w-4" />
-          Para responder no inbox, a conversa precisa ter `instance_id` preenchido (o webhook faz isso automaticamente quando encontra a instância Meta correta).
-        </div>
-      ) : null}
     </div>
   );
 }
