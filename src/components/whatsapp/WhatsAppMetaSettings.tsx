@@ -77,6 +77,8 @@ export default function WhatsAppMetaSettings() {
   const [webhookDiag, setWebhookDiag] = useState<{
     app_subscribed_to_waba?: boolean;
     hints?: string[];
+    waba_phone_numbers?: { id: string; display_phone_number?: string; status?: string }[];
+    crm_instances?: { name: string; phone_number_id: string | null }[];
     phone_numbers?: { instance_name?: string; status?: string; display_phone_number?: string; error?: string }[];
   } | null>(null);
   const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -368,6 +370,16 @@ export default function WhatsAppMetaSettings() {
                 {p.instance_name}: {p.display_phone_number || "—"} — status{" "}
                 <span className="font-mono">{p.status || p.error || "?"}</span>
                 {p.status && p.status !== "CONNECTED" ? " (precisa estar CONNECTED)" : ""}
+              </p>
+            ))}
+            {(webhookDiag.waba_phone_numbers || []).map((wp) => (
+              <p key={wp.id} className="font-mono text-[10px]">
+                Meta: {wp.display_phone_number} → Phone Number ID <strong>{wp.id}</strong> ({wp.status || "?"})
+              </p>
+            ))}
+            {(webhookDiag.crm_instances || []).map((i) => (
+              <p key={i.name} className="font-mono text-[10px] text-muted-foreground">
+                CRM: {i.name} → phone_number_id {i.phone_number_id || "(vazio)"}
               </p>
             ))}
             {(webhookDiag.hints || []).map((h) => (

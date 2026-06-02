@@ -280,6 +280,17 @@ serve(async (req) => {
       );
       const subscribed = await subRes.json();
 
+      const wabaPhonesRes = await fetch(
+        `https://graph.facebook.com/${GRAPH_API_VERSION}/${waba}/phone_numbers?fields=id,display_phone_number,verified_name,status`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const wabaPhonesJson = await wabaPhonesRes.json();
+      const wabaPhones = ((wabaPhonesJson as { data?: unknown[] }).data || []) as {
+        id: string;
+        display_phone_number?: string;
+        status?: string;
+      }[];
+
       const { data: metaInstances } = await supabase
         .from("whatsapp_instances")
         .select("id, name, phone_number_id, display_phone, waba_id")
@@ -307,18 +318,38 @@ serve(async (req) => {
       const appSubscribed = subRes.ok && Array.isArray((subscribed as { data?: unknown[] }).data)
         && ((subscribed as { data: unknown[] }).data.length > 0);
 
+      const hints: string[] = [];
+      if (!appSubscribed) {
+        hints.push(
+          "A WABA não está inscrita no app. Use «Inscrever WABA no webhook».",
+          "O botão «Teste» da Meta usa phone_number_id fictício (123456123) — não prova que mensagens do celular chegam.",
+        );
+      }
+
+      const crmIds = new Set((metaInstances || []).map((i) => i.phone_number_id?.trim()).filter(Boolean));
+      for (const wp of wabaPhones) {
+        if (!crmIds.has(wp.id)) {
+          hints.push(
+            `Número na Meta ${wp.display_phone_number || "?"} tem Phone Number ID ${wp.id} — não está no CRM. Cadastre em API Meta.`,
+          );
+        }
+      }
+      for (const inst of metaInstances || []) {
+        const pid = inst.phone_number_id?.trim();
+        if (pid && !wabaPhones.some((wp) => wp.id === pid)) {
+          hints.push(`CRM tem phone_number_id ${pid} (${inst.name}) que não existe na WABA — corrija o cadastro.`);
+        }
+      }
+
       return new Response(JSON.stringify({
         waba_id: waba,
         app_subscribed_to_waba: appSubscribed,
         subscribed_apps: subscribed,
+        waba_phone_numbers: wabaPhones,
+        crm_instances: metaInstances || [],
         phone_numbers: phoneChecks,
         webhook_url: webhookUrl,
-        hints: appSubscribed
-          ? []
-          : [
-            "A WABA não está inscrita no app. Use o botão «Inscrever WABA no webhook» ou POST /{WABA_ID}/subscribed_apps na Graph API.",
-            "O botão «Teste» do painel Meta só valida a URL; mensagens reais do celular exigem esta inscrição.",
-          ],
+        hints,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 

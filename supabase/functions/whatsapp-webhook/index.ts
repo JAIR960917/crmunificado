@@ -12,6 +12,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-hub-signature-256",
 };
 
+/** ID fictício usado só no botão «Teste» do painel Meta — não é o número real. */
+const META_TEST_PHONE_NUMBER_IDS = new Set(["123456123", "123456789", "0"]);
+
 async function verifySignature(payload: string, signatureHeader: string | null, appSecret: string): Promise<boolean> {
   if (!appSecret || !signatureHeader) return false;
   const expected = signatureHeader.replace(/^sha256=/, "");
@@ -40,26 +43,85 @@ function extractText(msg: Record<string, unknown>): string {
   return `[${type || "mensagem"}]`;
 }
 
-/** Resolve instância Meta pelo phone_number_id do payload. */
+type WaMetadata = { phone_number_id?: string; display_phone_number?: string };
+
+/** Resolve instância Meta pelo phone_number_id (e fallbacks). */
 async function resolveMetaInstance(
   supabase: ReturnType<typeof createClient>,
   phoneNumberId: string,
+  metadata?: WaMetadata,
+): Promise<{ instanceId: string | null; resolvedVia: string }> {
+  const pid = phoneNumberId.trim();
+  const isMetaTestId = !pid || META_TEST_PHONE_NUMBER_IDS.has(pid);
+
+  if (pid && !isMetaTestId) {
+    const { data: byPid } = await supabase
+      .from("whatsapp_instances")
+      .select("id")
+      .eq("provider", "meta")
+      .eq("phone_number_id", pid)
+      .maybeSingle();
+    if (byPid?.id) return { instanceId: byPid.id, resolvedVia: "phone_number_id" };
+
+    const { data: bySession } = await supabase
+      .from("whatsapp_instances")
+      .select("id")
+      .eq("provider", "meta")
+      .eq("session", pid)
+      .maybeSingle();
+    if (bySession?.id) return { instanceId: bySession.id, resolvedVia: "session" };
+  }
+
+  const displayRaw = metadata?.display_phone_number || "";
+  if (displayRaw) {
+    const normalized = cleanPhone(displayRaw);
+    const { data: metaRows } = await supabase
+      .from("whatsapp_instances")
+      .select("id, display_phone")
+      .eq("provider", "meta")
+      .eq("is_active", true);
+    for (const row of metaRows || []) {
+      if (row.display_phone && cleanPhone(String(row.display_phone)) === normalized) {
+        return { instanceId: row.id, resolvedVia: "display_phone" };
+      }
+    }
+  }
+
+  const { data: activeMeta } = await supabase
+    .from("whatsapp_instances")
+    .select("id")
+    .eq("provider", "meta")
+    .eq("is_active", true);
+
+  if (activeMeta?.length === 1) {
+    return { instanceId: activeMeta[0].id, resolvedVia: isMetaTestId ? "single_meta_instance_test_payload" : "single_meta_instance" };
+  }
+
+  return { instanceId: null, resolvedVia: "none" };
+}
+
+async function findConversationId(
+  supabase: ReturnType<typeof createClient>,
+  waId: string,
+  instanceId: string | null,
 ): Promise<string | null> {
-  if (!phoneNumberId) return null;
-  const { data: byPid } = await supabase
-    .from("whatsapp_instances")
-    .select("id")
-    .eq("provider", "meta")
-    .eq("phone_number_id", phoneNumberId)
-    .maybeSingle();
-  if (byPid?.id) return byPid.id;
-  const { data: bySession } = await supabase
-    .from("whatsapp_instances")
-    .select("id")
-    .eq("provider", "meta")
-    .eq("session", phoneNumberId)
-    .maybeSingle();
-  return bySession?.id || null;
+  if (instanceId) {
+    const { data } = await supabase
+      .from("whatsapp_conversations")
+      .select("id")
+      .eq("instance_id", instanceId)
+      .eq("wa_id", waId)
+      .maybeSingle();
+    if (data?.id) return data.id;
+  }
+
+  const { data: rows } = await supabase
+    .from("whatsapp_conversations")
+    .select("id, instance_id")
+    .eq("wa_id", waId)
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(1);
+  return rows?.[0]?.id || null;
 }
 
 /** wa_id do cliente (contato) a partir do payload Meta. */
@@ -101,58 +163,41 @@ async function upsertConversationMessage(
     initialStatus: string;
     incrementUnread: boolean;
   },
-): Promise<void> {
+): Promise<boolean> {
   const { instanceId, waId, contactName, direction, text, waMessageId, initialStatus, incrementUnread } = opts;
   if (!waId) {
     console.warn("[whatsapp-webhook] wa_id vazio — mensagem ignorada");
-    return;
+    return false;
   }
 
   const now = new Date();
   const windowExpires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const preview = text.slice(0, 200);
 
-  let conversationId: string | null = null;
-
-  if (instanceId) {
-    const { data: byInst } = await supabase
-      .from("whatsapp_conversations")
-      .select("id")
-      .eq("instance_id", instanceId)
-      .eq("wa_id", waId)
-      .maybeSingle();
-    if (byInst?.id) conversationId = byInst.id;
-  }
-
-  if (!conversationId) {
-    let q = supabase.from("whatsapp_conversations").select("id").eq("wa_id", waId);
-    if (instanceId) q = q.eq("instance_id", instanceId);
-    else q = q.is("instance_id", null);
-    const { data: legacy } = await q.maybeSingle();
-    if (legacy?.id) {
-      conversationId = legacy.id;
-      if (instanceId) {
-        await supabase.from("whatsapp_conversations").update({ instance_id: instanceId }).eq("id", conversationId);
-      }
-    }
-  }
+  let conversationId = await findConversationId(supabase, waId, instanceId);
 
   if (conversationId) {
     const patch: Record<string, unknown> = {
-      window_expires_at: direction === "in" ? windowExpires.toISOString() : undefined,
       last_message_at: now.toISOString(),
       last_preview: preview,
       phone_display: waId,
       updated_at: now.toISOString(),
     };
+    if (direction === "in") patch.window_expires_at = windowExpires.toISOString();
     if (contactName) patch.contact_name = contactName;
     if (instanceId) patch.instance_id = instanceId;
-    await supabase.from("whatsapp_conversations").update(patch).eq("id", conversationId);
+
+    const { error: updErr } = await supabase.from("whatsapp_conversations").update(patch).eq("id", conversationId);
+    if (updErr) {
+      console.error("[whatsapp-webhook] erro ao atualizar conversa:", updErr.message);
+      return false;
+    }
     if (incrementUnread) {
-      await supabase.rpc("increment_whatsapp_unread", { p_conversation_id: conversationId });
+      const { error: rpcErr } = await supabase.rpc("increment_whatsapp_unread", { p_conversation_id: conversationId });
+      if (rpcErr) console.warn("[whatsapp-webhook] increment_whatsapp_unread:", rpcErr.message);
     }
   } else {
-    const { data: inserted } = await supabase.from("whatsapp_conversations").insert({
+    const { data: inserted, error: insertErr } = await supabase.from("whatsapp_conversations").insert({
       instance_id: instanceId,
       wa_id: waId,
       contact_name: contactName,
@@ -162,10 +207,23 @@ async function upsertConversationMessage(
       last_preview: preview,
       unread_count: incrementUnread ? 1 : 0,
     }).select("id").single();
-    conversationId = inserted?.id || null;
+
+    if (insertErr) {
+      if (insertErr.code === "23505") {
+        conversationId = await findConversationId(supabase, waId, instanceId);
+      } else {
+        console.error("[whatsapp-webhook] erro ao criar conversa:", insertErr.message, insertErr.details);
+        return false;
+      }
+    } else {
+      conversationId = inserted?.id || null;
+    }
   }
 
-  if (!conversationId) return;
+  if (!conversationId) {
+    console.error("[whatsapp-webhook] conversation_id indefinido após upsert");
+    return false;
+  }
 
   if (waMessageId) {
     const { data: dup } = await supabase
@@ -175,11 +233,11 @@ async function upsertConversationMessage(
       .maybeSingle();
     if (dup?.id) {
       console.log("[whatsapp-webhook] mensagem duplicada ignorada", waMessageId);
-      return;
+      return true;
     }
   }
 
-  await supabase.from("whatsapp_messages").insert({
+  const { error: msgErr } = await supabase.from("whatsapp_messages").insert({
     conversation_id: conversationId,
     direction,
     body: text || null,
@@ -188,6 +246,14 @@ async function upsertConversationMessage(
     is_template: opts.isTemplate ?? false,
     meta_template_name: opts.metaTemplateName ?? null,
   });
+
+  if (msgErr) {
+    console.error("[whatsapp-webhook] erro ao inserir mensagem:", msgErr.message);
+    return false;
+  }
+
+  console.log(`[whatsapp-webhook] gravado conv=${conversationId} wa_id=${waId} dir=${direction}`);
+  return true;
 }
 
 serve(async (req) => {
@@ -248,9 +314,12 @@ serve(async (req) => {
   }
 
   const entries = (body.entry as unknown[]) || [];
+  let saved = 0;
+
   console.log(
     `[whatsapp-webhook] POST object=${String(body.object || "")} entries=${entries.length}`,
   );
+
   for (const entry of entries) {
     const e = entry as Record<string, unknown>;
     const changes = (e.changes as unknown[]) || [];
@@ -260,28 +329,35 @@ serve(async (req) => {
       const value = ch.value as Record<string, unknown> | undefined;
       if (!value) continue;
 
-      const phoneNumberId = String((value.metadata as { phone_number_id?: string })?.phone_number_id || "");
-      const instanceId = await resolveMetaInstance(supabase, phoneNumberId);
+      const metadata = (value.metadata as WaMetadata) || {};
+      const phoneNumberId = String(metadata.phone_number_id || "").trim();
+      const { instanceId, resolvedVia } = await resolveMetaInstance(supabase, phoneNumberId, metadata);
 
-      if (!instanceId && phoneNumberId) {
+      if (META_TEST_PHONE_NUMBER_IDS.has(phoneNumberId)) {
         console.warn(
-          "[whatsapp-webhook] instância Meta não encontrada para phone_number_id=",
-          phoneNumberId,
+          "[whatsapp-webhook] phone_number_id de TESTE da Meta (" + phoneNumberId + ") — não é mensagem real do celular. Envie do WhatsApp pessoal e procure phone_number_id=1173598282496506 nos logs.",
+        );
+      } else if (!instanceId) {
+        console.warn(
+          "[whatsapp-webhook] instância não encontrada para phone_number_id=" + phoneNumberId +
+            " — cadastre em WhatsApp → API Meta com ID exato do painel Meta.",
+        );
+      } else {
+        console.log(
+          `[whatsapp-webhook] instância ${instanceId} via ${resolvedVia} phone_number_id=${phoneNumberId}`,
         );
       }
 
       const contacts = ((value.contacts as unknown[]) || []) as { profile?: { name?: string }; wa_id?: string }[];
-
-      // Campo "messages" = cliente → empresa | "smb_message_echoes" = empresa → cliente (app WhatsApp)
       const isEcho = field === "smb_message_echoes" || field === "message_echoes";
       const direction: "in" | "out" = isEcho ? "out" : "in";
 
       const messages = (value.messages as unknown[]) || [];
-      if (messages.length > 0) {
-        console.log(
-          `[whatsapp-webhook] field=${field} direction=${direction} count=${messages.length} phone_number_id=${phoneNumberId}`,
-        );
-      }
+      const statuses = (value.statuses as unknown[]) || [];
+
+      console.log(
+        `[whatsapp-webhook] field=${field} messages=${messages.length} statuses=${statuses.length} display=${metadata.display_phone_number || "—"}`,
+      );
 
       for (const m of messages) {
         const msg = m as Record<string, unknown>;
@@ -291,10 +367,10 @@ serve(async (req) => {
         const contactName = contactNameFromPayload(contacts, waId);
 
         console.log(
-          `[whatsapp-webhook] msg ${direction} from=${String(msg.from || "")} to=${String(msg.to || "")} wa_id=${waId} preview=${text.slice(0, 40)}`,
+          `[whatsapp-webhook] msg ${direction} from=${String(msg.from || "")} wa_id=${waId} preview=${text.slice(0, 60)}`,
         );
 
-        await upsertConversationMessage(supabase, {
+        const ok = await upsertConversationMessage(supabase, {
           instanceId,
           waId,
           contactName,
@@ -304,9 +380,9 @@ serve(async (req) => {
           initialStatus: direction === "in" ? "received" : "sent",
           incrementUnread: direction === "in",
         });
+        if (ok) saved += 1;
       }
 
-      const statuses = (value.statuses as unknown[]) || [];
       for (const s of statuses) {
         const st = s as { id?: string; status?: string };
         if (st.id && st.status) {
@@ -318,7 +394,9 @@ serve(async (req) => {
     }
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
+  console.log(`[whatsapp-webhook] fim POST saved=${saved}`);
+
+  return new Response(JSON.stringify({ ok: true, saved }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
