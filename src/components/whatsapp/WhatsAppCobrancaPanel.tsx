@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import CobrancaContactAttemptForm from "@/components/cobrancas/CobrancaContactAttemptForm";
-import { nationalPhoneDigits, phonesMatchNational, extractPhoneFromCobrancaData } from "@/lib/phoneFormat";
+import { extractPhoneFromCobrancaData, nationalPhoneDigits, phoneSearchVariants, phonesMatchNational } from "@/lib/phoneFormat";
 
 type ConversationRef = {
   id: string;
@@ -151,22 +151,22 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
         }
       }
 
-      const phoneCandidates = [
+      const searchPhones = phoneSearchVariants(
         nationalDigits,
-        conversation.wa_id || "",
-        conversation.phone_display || "",
-      ].filter((p, i, arr) => p && arr.indexOf(p) === i);
+        conversation.wa_id,
+        conversation.phone_display,
+      );
 
-      if (phoneCandidates.every((p) => nationalPhoneDigits(p).length < 8)) {
+      if (searchPhones.length === 0) {
         return;
       }
 
-      for (const phone of phoneCandidates) {
+      for (const phone of searchPhones) {
         const { data: rpcRows, error: rpcError } = await supabase.rpc("find_cobranca_by_phone", {
           p_phone: phone,
         });
         if (rpcError) {
-          console.warn("find_cobranca_by_phone:", rpcError.message);
+          console.warn("find_cobranca_by_phone:", rpcError.message, "phone=", phone);
           continue;
         }
         if (rpcRows?.length) {
@@ -175,7 +175,7 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
         }
       }
 
-      const last8 = nationalDigits.slice(-8);
+      const last8 = nationalPhoneDigits(nationalDigits).slice(-8);
       const orParts = [
         `data->>telefone.ilike.%${last8}%`,
         `data->>celular.ilike.%${last8}%`,

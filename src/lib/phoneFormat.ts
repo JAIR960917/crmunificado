@@ -46,19 +46,52 @@ export function unformatPhone(value: string): string {
  */
 export function nationalPhoneDigits(value: string): string {
   let d = unformatPhone(value);
-  if (d.startsWith("55") && d.length >= 12) d = d.slice(2);
+  while (d.startsWith("55") && d.length >= 12) d = d.slice(2);
   while (d.startsWith("0") && d.length > 11) d = d.slice(1);
   return d;
 }
 
+/** DDD + celular com 9 dígitos (insere o 9 após o DDD quando faltar). */
+export function nationalMobileDigits(value: string): string {
+  let d = nationalPhoneDigits(value);
+  if (d.length === 10 && d.charAt(2) !== "9") {
+    d = `${d.slice(0, 2)}9${d.slice(2)}`;
+  }
+  return d;
+}
+
+/** Variantes para busca no CRM (sempre sem +55 / código 55). */
+export function phoneSearchVariants(...values: Array<string | null | undefined>): string[] {
+  const out = new Set<string>();
+  for (const raw of values) {
+    if (!raw?.trim()) continue;
+    for (const d of [nationalPhoneDigits(raw), nationalMobileDigits(raw)]) {
+      if (d.length < 8) continue;
+      out.add(d);
+      if (d.length >= 10) out.add(d.slice(-10));
+      out.add(d.slice(-8));
+    }
+  }
+  return [...out];
+}
+
 /** Compara telefones pelo número nacional (ignora +55, máscaras e espaços). */
 export function phonesMatchNational(a: string, b: string): boolean {
-  const da = nationalPhoneDigits(a);
-  const db = nationalPhoneDigits(b);
+  const variants = [
+    nationalPhoneDigits(a),
+    nationalMobileDigits(a),
+    nationalPhoneDigits(b),
+    nationalMobileDigits(b),
+  ];
+  const da = nationalMobileDigits(a);
+  const db = nationalMobileDigits(b);
   if (!da || !db) return false;
   if (da === db) return true;
-  if (da.length >= 8 && db.length >= 8) {
-    return da.endsWith(db.slice(-8)) || db.endsWith(da.slice(-8));
+  if (da.length >= 8 && db.length >= 8 && da.slice(-8) === db.slice(-8)) return true;
+  for (const x of variants) {
+    for (const y of variants) {
+      if (x.length >= 8 && y.length >= 8 && x.slice(-8) === y.slice(-8)) return true;
+    }
   }
   return false;
 }
