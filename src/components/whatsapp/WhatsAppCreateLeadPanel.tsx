@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { ExternalLink, Loader2, UserPlus } from "lucide-react";
 import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
+import { nationalPhoneDigits } from "@/lib/phoneFormat";
 
 type ConversationRef = {
   id: string;
@@ -17,6 +18,7 @@ type ConversationRef = {
   contact_name: string | null;
   phone_display: string | null;
   card_id: string | null;
+  module: string | null;
 };
 
 type Company = { id: string; name: string };
@@ -27,10 +29,12 @@ type FormField = {
   is_phone_field?: boolean;
 };
 
-type LinkedLead = {
+type LinkedRecord = {
+  module: "leads" | "renovacoes";
   id: string;
   nome: string;
   empresaNome: string | null;
+  statusLabel?: string | null;
 };
 
 type Props = {
@@ -39,8 +43,11 @@ type Props = {
   onLinked: (conversationId: string, patch: { card_id: string; contact_name: string | null; module: string }) => void;
 };
 
-function phoneDigits(conversation: ConversationRef) {
-  return (conversation.phone_display || conversation.wa_id || "").replace(/\D/g, "");
+function recordNameFromData(data: Record<string, unknown>, fields: FormField[]): string {
+  return (
+    resolveLeadIdentity(data as Record<string, any>, fields).nome ||
+    String(data.nome || data.nome_lead || "Cliente")
+  );
 }
 
 export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onLinked }: Props) {
@@ -50,8 +57,8 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
   const [companies, setCompanies] = useState<Company[]>([]);
   const [fields, setFields] = useState<FormField[]>([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
-  const [linkedLead, setLinkedLead] = useState<LinkedLead | null>(null);
-  const [loadingLead, setLoadingLead] = useState(false);
+  const [linkedRecord, setLinkedRecord] = useState<LinkedRecord | null>(null);
+  const [loadingRecord, setLoadingRecord] = useState(true);
 
   const [companyId, setCompanyId] = useState("");
   const [leadName, setLeadName] = useState("");
@@ -59,7 +66,178 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
   const [saving, setSaving] = useState(false);
 
   const displayPhone = formatPhone(conversation.phone_display || conversation.wa_id);
-  const digits = phoneDigits(conversation);
+  const nationalDigits = nationalPhoneDigits(conversation.phone_display || conversation.wa_id || "");
+
+  const linkConversation = useCallback(
+    async (record: LinkedRecord, linkDb: boolean) => {
+      setLinkedRecord(record);
+      if (!linkDb || !conversation.id) return;
+      const needsLink =
+        conversation.card_id !== record.id || conversation.module !== record.module;
+      if (!needsLink) return;
+      const { error } = await supabase
+        .from("whatsapp_conversations")
+        .update({
+          card_id: record.id,
+          module: record.module,
+          contact_name: record.nome,
+        })
+        .eq("id", conversation.id);
+      if (!error) {
+        onLinked(conversation.id, {
+          card_id: record.id,
+          contact_name: record.nome,
+          module: record.module,
+        });
+      }
+    },
+    [conversation.card_id, conversation.id, conversation.module, onLinked],
+  );
+
+  const loadRenovacaoById = useCallback(async (id: string) => {
+    const { data, error } = await supabase
+      .from("crm_renovacoes")
+      .select("id, data, status")
+      .eq("id", id)
+      .maybeSingle();
+    if (error || !data) return null;
+    const d = (data.data || {}) as Record<string, unknown>;
+    const nome = recordNameFromData(d, fields);
+    let statusLabel: string | null = null;
+    const { data: st } = await supabase
+      .from("crm_renovacao_statuses")
+      .select("label")
+      .eq("key", data.status)
+      .maybeSingle();
+    statusLabel = st?.label || data.status;
+    return {
+      module: "renovacoes" as const,
+      id: data.id,
+      nome,
+      empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
+      statusLabel,
+    };
+  }, [fields]);
+
+  const loadLeadById = useCallback(async (leadId: string) => {
+    const { data, error } = await supabase.from("crm_leads").select("id, data").eq("id", leadId).maybeSingle();
+    if (error || !data) {
+      return {
+        module: "leads" as const,
+        id: leadId,
+        nome: "Lead vinculado",
+        empresaNome: null,
+        statusLabel: null,
+      };
+    }
+    const d = (data.data || {}) as Record<string, unknown>;
+    return {
+      module: "leads" as const,
+      id: leadId,
+      nome: recordNameFromData(d, fields),
+      empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
+      statusLabel: null,
+    };
+  }, [fields]);
+
+  const resolveByPhone = useCallback(async () => {
+    if (nationalDigits.length < 8) return null;
+
+    const [{ data: renoRows, error: renoErr }, { data: leadRows, error: leadErr }] = await Promise.all([
+      supabase.rpc("find_renovacao_by_phone", { p_phone: nationalDigits }),
+      supabase.rpc("find_lead_by_phone", { _phone: nationalDigits }),
+    ]);
+
+    const reno = !renoErr && renoRows?.[0] ? renoRows[0] : null;
+    const lead = !leadErr && leadRows?.[0]?.lead_id ? leadRows[0] : null;
+
+    if (conversation.module === "leads" && lead?.lead_id) {
+      return loadLeadById(lead.lead_id);
+    }
+    if (conversation.module === "renovacoes" && reno) {
+      const d = (reno.data || {}) as Record<string, unknown>;
+      const nome = recordNameFromData(d, fields);
+      let statusLabel: string | null = reno.status || null;
+      const { data: st } = await supabase
+        .from("crm_renovacao_statuses")
+        .select("label")
+        .eq("key", reno.status)
+        .maybeSingle();
+      if (st?.label) statusLabel = st.label;
+      return {
+        module: "renovacoes" as const,
+        id: reno.id as string,
+        nome,
+        empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
+        statusLabel,
+      };
+    }
+
+    if (reno) {
+      const d = (reno.data || {}) as Record<string, unknown>;
+      const nome = recordNameFromData(d, fields);
+      let statusLabel: string | null = reno.status || null;
+      const { data: st } = await supabase
+        .from("crm_renovacao_statuses")
+        .select("label")
+        .eq("key", reno.status)
+        .maybeSingle();
+      if (st?.label) statusLabel = st.label;
+      return {
+        module: "renovacoes" as const,
+        id: reno.id as string,
+        nome,
+        empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
+        statusLabel,
+      };
+    }
+
+    if (lead?.lead_id) {
+      return loadLeadById(lead.lead_id);
+    }
+
+    return null;
+  }, [conversation.module, fields, loadLeadById, nationalDigits]);
+
+  const resolveLinkedRecord = useCallback(async () => {
+    setLoadingRecord(true);
+    setLinkedRecord(null);
+    try {
+      if (conversation.card_id) {
+        if (conversation.module === "renovacoes") {
+          const reno = await loadRenovacaoById(conversation.card_id);
+          if (reno) {
+            await linkConversation(reno, false);
+            return;
+          }
+        }
+        const lead = await loadLeadById(conversation.card_id);
+        if (lead.nome !== "Lead vinculado" || conversation.module === "leads") {
+          await linkConversation(lead, false);
+          return;
+        }
+        const reno = await loadRenovacaoById(conversation.card_id);
+        if (reno) {
+          await linkConversation(reno, true);
+          return;
+        }
+      }
+
+      const found = await resolveByPhone();
+      if (found) {
+        await linkConversation(found, true);
+      }
+    } finally {
+      setLoadingRecord(false);
+    }
+  }, [
+    conversation.card_id,
+    conversation.module,
+    linkConversation,
+    loadLeadById,
+    loadRenovacaoById,
+    resolveByPhone,
+  ]);
 
   const loadMeta = useCallback(async () => {
     if (!user?.id) return;
@@ -100,25 +278,6 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
     }
   }, [user?.id, isAdmin]);
 
-  const loadLinkedLead = useCallback(async (leadId: string) => {
-    setLoadingLead(true);
-    try {
-      const { data, error } = await supabase.from("crm_leads").select("id, data").eq("id", leadId).maybeSingle();
-      if (error || !data) {
-        setLinkedLead({ id: leadId, nome: "Lead vinculado", empresaNome: null });
-        return;
-      }
-      const d = (data.data || {}) as Record<string, unknown>;
-      const nome =
-        resolveLeadIdentity(d, fields).nome ||
-        String(d.nome_lead || d.nome || "Lead");
-      const empresaNome = typeof d.empresa_nome === "string" ? d.empresa_nome : null;
-      setLinkedLead({ id: leadId, nome, empresaNome });
-    } finally {
-      setLoadingLead(false);
-    }
-  }, [fields]);
-
   useEffect(() => {
     loadMeta();
   }, [loadMeta]);
@@ -126,12 +285,9 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
   useEffect(() => {
     setLeadName(conversation.contact_name?.trim() || "");
     setObservacao("");
-    if (!conversation.card_id) {
-      setLinkedLead(null);
-      return;
-    }
-    loadLinkedLead(conversation.card_id);
-  }, [conversation.id, conversation.card_id, conversation.contact_name, loadLinkedLead]);
+    if (fields.length === 0 && loadingMeta) return;
+    void resolveLinkedRecord();
+  }, [conversation.id, conversation.card_id, conversation.module, conversation.contact_name, fields.length, loadingMeta, resolveLinkedRecord]);
 
   const selectedCompanyName = useMemo(
     () => companies.find((c) => c.id === companyId)?.name || "",
@@ -152,7 +308,7 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
       toast.error("Informe o nome do lead.");
       return;
     }
-    if (digits.length < 8) {
+    if (nationalDigits.length < 8) {
       toast.error("Telefone da conversa inválido.");
       return;
     }
@@ -166,7 +322,7 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
 
     setSaving(true);
     try {
-      const { data: dup } = await supabase.rpc("find_lead_by_phone", { _phone: digits });
+      const { data: dup } = await supabase.rpc("find_lead_by_phone", { _phone: nationalDigits });
       const row = Array.isArray(dup) ? dup[0] : null;
       if (row?.lead_id) {
         const owner = row.owner_name || "outro vendedor";
@@ -181,7 +337,7 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
 
       const baseData: Record<string, unknown> = {
         [`field_${nameField.id}`]: name,
-        [`field_${phoneField.id}`]: digits,
+        [`field_${phoneField.id}`]: nationalDigits,
         empresa_id: companyId,
         empresa_nome: selectedCompanyName,
         origem_whatsapp: true,
@@ -234,7 +390,13 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
         toast.success("Lead cadastrado e vinculado à conversa.");
       }
 
-      setLinkedLead({ id: leadId, nome: name, empresaNome: selectedCompanyName || null });
+      setLinkedRecord({
+        module: "leads",
+        id: leadId,
+        nome: name,
+        empresaNome: selectedCompanyName || null,
+        statusLabel: null,
+      });
     } catch {
       toast.error("Erro inesperado ao cadastrar lead.");
     } finally {
@@ -242,33 +404,41 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
     }
   };
 
-  if (conversation.card_id) {
+  if (loadingRecord) {
+    return (
+      <div className="flex items-center gap-2 border-t pt-4 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Buscando no CRM…
+      </div>
+    );
+  }
+
+  if (linkedRecord) {
+    const isRenovacao = linkedRecord.module === "renovacoes";
     return (
       <div className="space-y-3 border-t pt-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Lead no CRM</p>
-        {loadingLead ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Carregando…
-          </div>
-        ) : (
-          <>
-            <p className="font-semibold leading-snug">{linkedLead?.nome || "Lead vinculado"}</p>
-            {linkedLead?.empresaNome ? (
-              <p className="text-xs text-muted-foreground">Empresa: {linkedLead.empresaNome}</p>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full gap-2"
-              onClick={() => navigate(`/?edit=${conversation.card_id}`)}
-            >
-              <ExternalLink className="h-4 w-4" />
-              Abrir na tela de leads
-            </Button>
-          </>
-        )}
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {isRenovacao ? "Renovação no CRM" : "Lead no CRM"}
+        </p>
+        <p className="font-semibold leading-snug break-words">{linkedRecord.nome}</p>
+        {linkedRecord.empresaNome ? (
+          <p className="text-xs text-muted-foreground break-words">Empresa: {linkedRecord.empresaNome}</p>
+        ) : null}
+        {linkedRecord.statusLabel ? (
+          <p className="text-xs text-muted-foreground break-words">Coluna: {linkedRecord.statusLabel}</p>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full gap-2"
+          onClick={() =>
+            navigate(isRenovacao ? "/clientes-ativos" : `/?edit=${linkedRecord.id}`)
+          }
+        >
+          <ExternalLink className="h-4 w-4" />
+          {isRenovacao ? "Abrir tela de renovação" : "Abrir na tela de leads"}
+        </Button>
       </div>
     );
   }

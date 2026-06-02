@@ -24,6 +24,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SystemSettingsProvider, useSystemSettings } from "@/contexts/SystemSettingsContext";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { useWhatsAppInboxNotifications } from "@/hooks/use-whatsapp-inbox-notifications";
 
 // ----- Páginas (cada import = uma rota) -----
 import Login from "./pages/Login";
@@ -69,6 +70,11 @@ const queryClient = new QueryClient();
  */
 function PushNotificationsBootstrap() {
   usePushNotifications();
+  return null;
+}
+
+function WhatsAppInboxNotificationsBootstrap() {
+  useWhatsAppInboxNotifications();
   return null;
 }
 
@@ -183,6 +189,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <PushNotificationsBootstrap />
+          <WhatsAppInboxNotificationsBootstrap />
           <SystemSettingsProvider>
             <AppRoutes />
           </SystemSettingsProvider>
