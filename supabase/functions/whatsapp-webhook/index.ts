@@ -77,14 +77,16 @@ async function resolveMetaInstance(
     }
   }
 
-  const { data: activeMeta } = await supabase
-    .from("whatsapp_instances")
-    .select("id")
-    .eq("provider", "meta")
-    .eq("is_active", true);
-
-  if (activeMeta?.length === 1) {
-    return { instanceId: activeMeta[0].id, resolvedVia: isMetaTestId ? "single_meta_instance_test_payload" : "single_meta_instance" };
+  // Só no payload de teste da Meta (ID fictício) — nunca atribuir mensagem real a outra linha.
+  if (isMetaTestId) {
+    const { data: activeMeta } = await supabase
+      .from("whatsapp_instances")
+      .select("id")
+      .eq("provider", "meta")
+      .eq("is_active", true);
+    if (activeMeta?.length === 1) {
+      return { instanceId: activeMeta[0].id, resolvedVia: "single_meta_instance_test_payload" };
+    }
   }
 
   return { instanceId: null, resolvedVia: "none" };
@@ -102,16 +104,19 @@ async function findConversationId(
       .eq("instance_id", instanceId)
       .eq("wa_id", waId)
       .maybeSingle();
-    if (data?.id) return data.id;
+    return data?.id || null;
   }
 
-  const { data: rows } = await supabase
+  // Linha não cadastrada no CRM: não reutilizar conversa de outro número (mesmo cliente).
+  const { data } = await supabase
     .from("whatsapp_conversations")
-    .select("id, instance_id")
+    .select("id")
     .eq("wa_id", waId)
+    .is("instance_id", null)
     .order("last_message_at", { ascending: false, nullsFirst: false })
-    .limit(1);
-  return rows?.[0]?.id || null;
+    .limit(1)
+    .maybeSingle();
+  return data?.id || null;
 }
 
 /** wa_id do cliente (contato) a partir do payload Meta. */
@@ -343,7 +348,8 @@ serve(async (req) => {
       } else if (!instanceId) {
         console.warn(
           "[whatsapp-webhook] instância não encontrada para phone_number_id=" + phoneNumberId +
-            " — cadastre em WhatsApp → API Meta com ID exato do painel Meta.",
+            " display=" + (metadata.display_phone_number || "—") +
+            " — mensagem não será vinculada a outra linha. Cadastre o número em WhatsApp → API Meta ou ignore se a linha foi removida de propósito.",
         );
       } else {
         console.log(
@@ -368,6 +374,18 @@ serve(async (req) => {
         const waMessageId = String(msg.id || "");
         const parsed = parseWhatsAppMessage(msg);
         const contactName = contactNameFromPayload(contacts, waId);
+
+        const unknownLine =
+          !instanceId &&
+          phoneNumberId &&
+          !META_TEST_PHONE_NUMBER_IDS.has(phoneNumberId);
+
+        if (unknownLine) {
+          console.warn(
+            `[whatsapp-webhook] ignorada msg ${direction} wa_id=${waId} phone_number_id=${phoneNumberId} — linha não cadastrada no CRM`,
+          );
+          continue;
+        }
 
         console.log(
           `[whatsapp-webhook] msg ${direction} type=${String(msg.type || "")} wa_id=${waId} preview=${parsed.preview.slice(0, 60)}`,
