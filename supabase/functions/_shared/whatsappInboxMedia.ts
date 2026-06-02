@@ -108,7 +108,7 @@ export function normalizeMetaUploadMime(
   mediaType: "image" | "audio" | "video" | "document",
   mimeType: string,
   filename: string,
-): { mime: string; filename: string; error?: string } {
+): { mime: string; filename: string; error?: string; reject?: boolean } {
   const mime = (mimeType || "").toLowerCase().trim();
   const name = filename || "upload";
 
@@ -123,10 +123,11 @@ export function normalizeMetaUploadMime(
     if (mime.includes("amr")) return { mime: "audio/amr", filename: name.endsWith(".amr") ? name : `${name}.amr` };
     if (mime.includes("webm")) {
       return {
-        mime: "audio/ogg",
-        filename: name.replace(/\.webm$/i, ".ogg"),
+        mime: "audio/webm",
+        filename: name.endsWith(".webm") ? name : `${name}.webm`,
+        reject: true,
         error:
-          "Áudio gravado em WebM: a Meta pode rejeitar. Se falhar, use Chrome/Firefox (grava OGG) ou envie .mp3/.ogg.",
+          "Áudio em WebM não é aceito pela Meta como mensagem de áudio. Use Chrome/Firefox (grava OGG/Opus) ou envie um arquivo .ogg/.mp3.",
       };
     }
     return {

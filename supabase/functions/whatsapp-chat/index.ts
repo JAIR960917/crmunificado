@@ -146,7 +146,10 @@ serve(async (req) => {
         });
       }
 
-      const fileRes = await fetch(mediaUrl);
+      // Download do media URL exige o mesmo token Bearer.
+      const fileRes = await fetch(mediaUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (!fileRes.ok) {
         return new Response(JSON.stringify({ error: `Falha ao baixar mídia (${fileRes.status})` }), {
           status: 400,
@@ -356,6 +359,12 @@ serve(async (req) => {
         }
 
         const normalized = normalizeMetaUploadMime(mediaType, mimeType, fileName);
+        if (normalized.reject) {
+          return new Response(JSON.stringify({ error: normalized.error || "Formato de áudio não suportado" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
         const uploaded = await uploadMediaToMeta({
           phoneNumberId: target.phoneNumberId,
