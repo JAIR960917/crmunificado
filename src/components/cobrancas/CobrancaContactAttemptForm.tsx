@@ -18,10 +18,12 @@ type Props = {
   cobrancaStatus?: string | null;
   onSaved?: (updatedData?: Record<string, any>) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  /** Layout empilhado para painéis estreitos (ex.: inbox WhatsApp). */
+  compact?: boolean;
 };
 
 export default function CobrancaContactAttemptForm({
-  cobrancaId, userId, userName, cobrancaData, cobrancaStatus, onSaved, onDirtyChange,
+  cobrancaId, userId, userName, cobrancaData, cobrancaStatus, onSaved, onDirtyChange, compact = false,
 }: Props) {
   const [atendeu, setAtendeu] = useState<Atendeu>(null);
   const [observacao, setObservacao] = useState("");
@@ -196,12 +198,12 @@ export default function CobrancaContactAttemptForm({
 
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">O cliente atendeu?</Label>
-        <div className="flex gap-2">
+        <div className={compact ? "flex flex-col gap-2" : "flex gap-2"}>
           <Button
             type="button"
             size="sm"
             variant={atendeu === "sim" ? "default" : "outline"}
-            className="flex-1"
+            className={compact ? "w-full justify-start" : "flex-1"}
             onClick={() => setAtendeu("sim")}
           >
             <Phone className="h-3.5 w-3.5 mr-1" /> Sim, atendeu
@@ -210,7 +212,7 @@ export default function CobrancaContactAttemptForm({
             type="button"
             size="sm"
             variant={atendeu === "nao" ? "destructive" : "outline"}
-            className="flex-1"
+            className={compact ? "w-full justify-start" : "flex-1"}
             onClick={() => { setAtendeu("nao"); setRenegociou(null); }}
           >
             <PhoneOff className="h-3.5 w-3.5 mr-1" /> Não atendeu
@@ -238,12 +240,12 @@ export default function CobrancaContactAttemptForm({
             <Label className="text-xs text-muted-foreground">
               O cliente renegociou? <span className="text-destructive">*</span>
             </Label>
-            <div className="flex gap-2">
+            <div className={compact ? "flex flex-col gap-2" : "flex gap-2"}>
               <Button
                 type="button"
                 size="sm"
                 variant={renegociou === "sim" ? "default" : "outline"}
-                className={`flex-1 ${renegociou === "sim" ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
+                className={`${compact ? "w-full justify-start" : "flex-1"} ${renegociou === "sim" ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
                 onClick={() => setRenegociou("sim")}
               >
                 <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Sim, Renegociei
@@ -252,7 +254,7 @@ export default function CobrancaContactAttemptForm({
                 type="button"
                 size="sm"
                 variant={renegociou === "nao" ? "destructive" : "outline"}
-                className="flex-1"
+                className={compact ? "w-full justify-start" : "flex-1"}
                 onClick={() => setRenegociou("nao")}
               >
                 <ThumbsDown className="h-3.5 w-3.5 mr-1" /> Não, Renegociou

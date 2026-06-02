@@ -169,6 +169,7 @@ export default function WhatsAppInbox() {
   const { user, isAdmin, isGerente, isFinanceiro } = useAuth();
   const selectedIdRef = useRef<string | null>(null);
   const conversationsRef = useRef<ConversationRow[]>([]);
+  const recentNotifyRef = useRef<Map<string, number>>(new Map());
   const messagesAreaRef = useRef<HTMLDivElement | null>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -398,22 +399,38 @@ export default function WhatsAppInbox() {
 
   const notifyIncomingMessage = useCallback(
     (conversationId: string, preview: string) => {
+      const now = Date.now();
+      const dedupeKey = conversationId;
+      const lastAt = recentNotifyRef.current.get(dedupeKey) || 0;
+      if (now - lastAt < 2500) return;
+      recentNotifyRef.current.set(dedupeKey, now);
+
       const openId = selectedIdRef.current;
       const tabFocused = document.visibilityState === "visible";
-      if (tabFocused && openId === conversationId) return;
-
       const conv = conversationsRef.current.find((c) => c.id === conversationId);
       const contactLabel =
         conv?.contact_name?.trim() ||
         formatPhoneDisplay(conv?.phone_display || conv?.wa_id || "") ||
         "Cliente";
+      const body = preview || "Mensagem recebida";
 
-      showWhatsAppInboxNotification(
-        `Nova mensagem — ${contactLabel}`,
-        preview || "Mensagem recebida",
-        conversationId,
-        () => setSelectedId(conversationId),
-      );
+      toast.message(`Nova mensagem — ${contactLabel}`, {
+        description: body,
+        duration: 8000,
+        action: {
+          label: "Abrir",
+          onClick: () => setSelectedId(conversationId),
+        },
+      });
+
+      if (getNotificationPermission() === "granted" && (!tabFocused || openId !== conversationId)) {
+        showWhatsAppInboxNotification(
+          `Nova mensagem — ${contactLabel}`,
+          body,
+          conversationId,
+          () => setSelectedId(conversationId),
+        );
+      }
     },
     [],
   );
@@ -470,6 +487,13 @@ export default function WhatsAppInbox() {
           if (payload.new) {
             const row = payload.new as ConversationRow;
             const openId = selectedIdRef.current;
+            const prev = conversationsRef.current.find((c) => c.id === row.id);
+            if (
+              (row.unread_count || 0) > (prev?.unread_count || 0) &&
+              openId !== row.id
+            ) {
+              notifyIncomingMessage(row.id, row.last_preview || "Nova mensagem");
+            }
             if (openId === row.id && (row.unread_count || 0) > 0) {
               void markAsRead(row.id);
               applyConversationPatch({ ...row, unread_count: 0 });
@@ -486,7 +510,7 @@ export default function WhatsAppInbox() {
           const row = payload.new as MessageRow | null;
           if (!row) return;
           const openId = selectedIdRef.current;
-          if (row.direction === "in" && openId !== row.conversation_id) {
+          if (row.direction === "in") {
             const preview =
               row.body?.trim() ||
               row.caption?.trim() ||
@@ -1151,10 +1175,10 @@ export default function WhatsAppInbox() {
                   </footer>
                 </div>
 
-                {/* Painel lateral (placeholder real) */}
-                <aside className="hidden w-[300px] flex-col border-l bg-muted/20 xl:flex">
+                {/* Painel lateral CRM */}
+                <aside className="hidden min-w-[340px] w-[min(100%,380px)] shrink-0 flex-col border-l bg-muted/20 lg:flex">
                   <ScrollArea className="flex-1">
-                    <div className="p-4 space-y-4">
+                    <div className="min-w-0 p-4 space-y-4">
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Vinculado no CRM
@@ -1170,13 +1194,13 @@ export default function WhatsAppInbox() {
                           </div>
                           <div>
                             <dt className="text-xs text-muted-foreground">Nossa linha (recebe/envia)</dt>
-                            <dd className="mt-0.5 text-xs font-medium text-sky-800 dark:text-sky-300">
+                            <dd className="mt-0.5 text-xs font-medium text-sky-800 dark:text-sky-300 break-words">
                               {conversationInstanceLabel || "—"}
                             </dd>
                           </div>
                           <div>
                             <dt className="text-xs text-muted-foreground">Telefone do cliente</dt>
-                            <dd className="mt-0.5 font-medium text-amber-700 dark:text-amber-300">
+                            <dd className="mt-0.5 font-medium text-amber-700 dark:text-amber-300 break-words">
                               {formatPhoneDisplay(conversation.phone_display || conversation.wa_id)}
                             </dd>
                           </div>

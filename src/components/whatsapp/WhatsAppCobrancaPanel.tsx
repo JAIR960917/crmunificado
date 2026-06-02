@@ -227,8 +227,8 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
       <div className="space-y-2 border-t pt-4">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cobrança no CRM</p>
         <p className="text-sm text-muted-foreground">
-          Nenhum card de cobrança encontrado para {displayPhone}. Os contatos enviados pelos gatilhos devem
-          aparecer aqui automaticamente quando o telefone coincidir com o cadastro.
+          Nenhum card de cobrança encontrado para {displayPhone}. Buscamos pelo telefone do
+          WhatsApp — funciona com ou sem gatilho enviado (dúvidas, renegociação, etc.).
         </p>
       </div>
     );
@@ -245,34 +245,34 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
     <div className="space-y-4 border-t pt-4">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cobrança no CRM</p>
-        <p className="mt-2 font-semibold leading-snug">{nome}</p>
-        <dl className="mt-2 space-y-1.5 text-sm">
-          <div className="flex justify-between gap-2">
+        <p className="mt-2 font-semibold leading-snug break-words">{nome}</p>
+        <dl className="mt-2 space-y-2.5 text-sm">
+          <div>
             <dt className="text-xs text-muted-foreground">Telefone</dt>
-            <dd className="font-medium text-amber-700 dark:text-amber-300">{displayPhone}</dd>
+            <dd className="mt-0.5 font-medium text-amber-700 dark:text-amber-300 break-words">{displayPhone}</dd>
           </div>
           {statusLabel ? (
-            <div className="flex justify-between gap-2">
+            <div>
               <dt className="text-xs text-muted-foreground">Coluna</dt>
-              <dd className="text-right text-xs font-medium">{statusLabel}</dd>
+              <dd className="mt-0.5 text-xs font-medium break-words">{statusLabel}</dd>
             </div>
           ) : null}
           {valorFmt ? (
-            <div className="flex justify-between gap-2">
+            <div>
               <dt className="text-xs text-muted-foreground">Valor</dt>
-              <dd className="font-medium">{valorFmt}</dd>
+              <dd className="mt-0.5 font-medium break-words">{valorFmt}</dd>
             </div>
           ) : null}
           {companyName ? (
-            <div className="flex justify-between gap-2">
+            <div>
               <dt className="text-xs text-muted-foreground">Empresa</dt>
-              <dd className="text-right text-xs">{companyName}</dd>
+              <dd className="mt-0.5 text-xs break-words">{companyName}</dd>
             </div>
           ) : null}
           {d.descricao ? (
             <div>
               <dt className="text-xs text-muted-foreground">Descrição</dt>
-              <dd className="mt-0.5 text-xs leading-snug">{String(d.descricao)}</dd>
+              <dd className="mt-0.5 text-xs leading-snug break-words">{String(d.descricao)}</dd>
             </div>
           ) : null}
         </dl>
@@ -311,6 +311,7 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
           cobrancaData={cobranca.data}
           cobrancaStatus={cobranca.status}
           onSaved={handleTratativaSaved}
+          compact
         />
       ) : null}
     </div>

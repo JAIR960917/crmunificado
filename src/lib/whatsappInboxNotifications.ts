@@ -27,7 +27,6 @@ export function showWhatsAppInboxNotification(
     const notification = new Notification(title, {
       body: body.slice(0, 180),
       tag: `whatsapp-inbox-${conversationId}`,
-      renotify: true,
     });
 
     notification.onclick = () => {
