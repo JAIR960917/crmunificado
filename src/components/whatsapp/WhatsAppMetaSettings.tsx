@@ -72,6 +72,13 @@ export default function WhatsAppMetaSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [webhookChecking, setWebhookChecking] = useState(false);
+  const [webhookSubscribing, setWebhookSubscribing] = useState(false);
+  const [webhookDiag, setWebhookDiag] = useState<{
+    app_subscribed_to_waba?: boolean;
+    hints?: string[];
+    phone_numbers?: { instance_name?: string; status?: string; display_phone_number?: string; error?: string }[];
+  } | null>(null);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [status, setStatus] = useState<MetaStatus | null>(null);
   const [provider, setProvider] = useState<"apifull" | "meta">("apifull");
@@ -157,6 +164,37 @@ export default function WhatsAppMetaSettings() {
       toast.error(e instanceof Error ? e.message : "Erro ao listar templates");
     } finally {
       setTemplatesLoading(false);
+    }
+  };
+
+  const handleCheckWebhook = async () => {
+    setWebhookChecking(true);
+    try {
+      const data = await invokeMeta({ action: "check-webhook-setup" });
+      setWebhookDiag(data);
+      if (data.app_subscribed_to_waba) {
+        toast.success("WABA inscrita no app — webhooks de mensagens reais devem funcionar");
+      } else {
+        toast.warning("WABA NÃO inscrita no app — mensagens do celular não chegam no CRM");
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao verificar webhook");
+    } finally {
+      setWebhookChecking(false);
+    }
+  };
+
+  const handleSubscribeWaba = async () => {
+    setWebhookSubscribing(true);
+    try {
+      await invokeMeta({ action: "subscribe-waba" });
+      toast.success("WABA inscrita. Envie «Teste» do celular pessoal e confira o Inbox.");
+      const data = await invokeMeta({ action: "check-webhook-setup" });
+      setWebhookDiag(data);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao inscrever WABA");
+    } finally {
+      setWebhookSubscribing(false);
     }
   };
 
@@ -305,10 +343,40 @@ export default function WhatsAppMetaSettings() {
           <Button variant="outline" size="sm" onClick={handleTest} disabled={testing}>
             {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Testar conexão WABA"}
           </Button>
+          <Button variant="outline" size="sm" onClick={handleCheckWebhook} disabled={webhookChecking}>
+            {webhookChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Diagnosticar webhook"}
+          </Button>
+          <Button variant="default" size="sm" onClick={handleSubscribeWaba} disabled={webhookSubscribing}>
+            {webhookSubscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Inscrever WABA no webhook"}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleListTemplates} disabled={templatesLoading}>
             {templatesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Listar templates aprovados"}
           </Button>
         </div>
+        {webhookDiag && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs space-y-2">
+            <p className="font-medium flex items-center gap-1">
+              {webhookDiag.app_subscribed_to_waba ? (
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              ) : (
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+              )}
+              WABA inscrita no app: {webhookDiag.app_subscribed_to_waba ? "sim" : "não"}
+            </p>
+            {(webhookDiag.phone_numbers || []).map((p) => (
+              <p key={p.instance_name} className="text-muted-foreground">
+                {p.instance_name}: {p.display_phone_number || "—"} — status{" "}
+                <span className="font-mono">{p.status || p.error || "?"}</span>
+                {p.status && p.status !== "CONNECTED" ? " (precisa estar CONNECTED)" : ""}
+              </p>
+            ))}
+            {(webhookDiag.hints || []).map((h) => (
+              <p key={h} className="text-amber-800 dark:text-amber-200">
+                {h}
+              </p>
+            ))}
+          </div>
+        )}
       </div>
 
       {status?.webhook_url && (
@@ -321,7 +389,12 @@ export default function WhatsAppMetaSettings() {
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Assinale: messages. Verify token = mesmo valor de WHATSAPP_VERIFY_TOKEN no .env.
+            Assinale: <strong>messages</strong> (entrada do cliente). Verify token = WHATSAPP_VERIFY_TOKEN no .env.
+            O botão «Teste» da Meta só valida a URL — use «Diagnosticar webhook» e «Inscrever WABA» para mensagens reais.
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            App em <strong>modo desenvolvimento</strong>: adicione seus números pessoais em WhatsApp → API Setup →
+            «Adicionar número de telefone» (destinatários de teste).
           </p>
         </div>
       )}

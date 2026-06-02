@@ -258,6 +258,114 @@ serve(async (req) => {
       });
     }
 
+    /** Verifica se a WABA está inscrita no app (causa #1 de mensagens reais não chegarem no webhook). */
+    if (action === "check-webhook-setup") {
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: "WHATSAPP_ACCESS_TOKEN não configurado" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const waba = (body as { waba_id?: string }).waba_id?.trim() || wabaId;
+      if (!waba) {
+        return new Response(JSON.stringify({ error: "WHATSAPP_WABA_ID não configurado" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const subRes = await fetch(
+        `https://graph.facebook.com/${GRAPH_API_VERSION}/${waba}/subscribed_apps`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const subscribed = await subRes.json();
+
+      const { data: metaInstances } = await supabase
+        .from("whatsapp_instances")
+        .select("id, name, phone_number_id, display_phone, waba_id")
+        .eq("provider", "meta");
+
+      const phoneChecks: Record<string, unknown>[] = [];
+      for (const inst of metaInstances || []) {
+        const pid = inst.phone_number_id?.trim();
+        if (!pid) continue;
+        const pRes = await fetch(
+          `https://graph.facebook.com/${GRAPH_API_VERSION}/${pid}?fields=display_phone_number,verified_name,status,code_verification_status,quality_rating,platform_type`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+        const pJson = await pRes.json();
+        phoneChecks.push({
+          instance_id: inst.id,
+          instance_name: inst.name,
+          phone_number_id: pid,
+          ok: pRes.ok,
+          error: pRes.ok ? null : (pJson as { error?: { message?: string } })?.error?.message,
+          ...(pRes.ok ? pJson : {}),
+        });
+      }
+
+      const appSubscribed = subRes.ok && Array.isArray((subscribed as { data?: unknown[] }).data)
+        && ((subscribed as { data: unknown[] }).data.length > 0);
+
+      return new Response(JSON.stringify({
+        waba_id: waba,
+        app_subscribed_to_waba: appSubscribed,
+        subscribed_apps: subscribed,
+        phone_numbers: phoneChecks,
+        webhook_url: webhookUrl,
+        hints: appSubscribed
+          ? []
+          : [
+            "A WABA não está inscrita no app. Use o botão «Inscrever WABA no webhook» ou POST /{WABA_ID}/subscribed_apps na Graph API.",
+            "O botão «Teste» do painel Meta só valida a URL; mensagens reais do celular exigem esta inscrição.",
+          ],
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    /** Inscreve o app na WABA para receber webhooks de mensagens reais. */
+    if (action === "subscribe-waba") {
+      if (!accessToken) {
+        return new Response(JSON.stringify({ error: "WHATSAPP_ACCESS_TOKEN não configurado" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const waba = (body as { waba_id?: string }).waba_id?.trim() || wabaId;
+      if (!waba) {
+        return new Response(JSON.stringify({ error: "WHATSAPP_WABA_ID não configurado" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const postRes = await fetch(
+        `https://graph.facebook.com/${GRAPH_API_VERSION}/${waba}/subscribed_apps`,
+        { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const postJson = await postRes.json();
+      if (!postRes.ok) {
+        return new Response(JSON.stringify({
+          error: (postJson as { error?: { message?: string } })?.error?.message || "Falha ao inscrever WABA",
+          raw: postJson,
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const getRes = await fetch(
+        `https://graph.facebook.com/${GRAPH_API_VERSION}/${waba}/subscribed_apps`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const getJson = await getRes.json();
+
+      return new Response(JSON.stringify({
+        ok: true,
+        subscribe_result: postJson,
+        subscribed_apps: getJson,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     return new Response(JSON.stringify({ error: `Ação desconhecida: ${action}` }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

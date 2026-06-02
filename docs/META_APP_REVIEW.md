@@ -52,6 +52,11 @@ docker compose restart supabase-edge-functions
 4. Assine os campos: `messages` (e opcionalmente `message_template_status_update`).
 5. No painel CRM (**WhatsApp → API Meta**), confira se a URL exibida bate com a pública (`SUPABASE_PUBLIC_URL`).
 6. O webhook **não exige JWT** (exceção em `supabase/functions/main/index.ts` → `whatsapp-webhook`).
+7. **Mensagens reais do celular não chegam?** O botão «Teste» da Meta só valida conectividade. É obrigatório **inscrever a WABA no app**:
+   - No CRM: **Diagnosticar webhook** → **Inscrever WABA no webhook**, ou
+   - Graph API: `POST https://graph.facebook.com/v21.0/{WABA_ID}/subscribed_apps` com o token do sistema.
+8. Confirme que o número comercial está **CONNECTED** (diagnóstico no painel CRM).
+9. App em **desenvolvimento**: cadastre os números pessoais que vão testar em **WhatsApp → API Setup** (destinatários de teste).
 
 ## 4. Cadastrar número no CRM
 
