@@ -79,15 +79,18 @@ type LastNote = {
   authorName: string;
 };
 
+type ModuleKey = "leads" | "cobrancas" | "renovacoes";
+
 type Props = {
   conversation: ConversationRef;
   formatPhone: (raw: string) => string;
   onLinked: (conversationId: string, patch: { card_id: string; contact_name: string | null; module: string }) => void;
   /** Admin: se não achar cobrança, renderiza renovação → leads → cadastro. */
   fallback?: ReactNode;
+  onResolvedModule?: (module: ModuleKey | null) => void;
 };
 
-export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLinked, fallback }: Props) {
+export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLinked, fallback, onResolvedModule }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -137,6 +140,7 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
 
   const applyCobranca = useCallback(
     async (row: CobrancaRow, linkConversation: boolean) => {
+      onResolvedModule?.("cobrancas");
       setCobranca(row);
       const d = row.data || {};
       const nome = String(d.nome || conversation.contact_name || "Cliente");
@@ -171,7 +175,7 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
         }
       }
     },
-    [conversation.contact_name, conversation.card_id, conversation.id, conversation.module, loadLastNote, onLinked],
+    [conversation.contact_name, conversation.card_id, conversation.id, conversation.module, loadLastNote, onLinked, onResolvedModule],
   );
 
   const resolveCobranca = useCallback(async () => {
@@ -179,6 +183,7 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
     setCobranca(null);
     setLastNote(null);
     setAmbiguousOptions(null);
+    onResolvedModule?.(null);
     try {
       if (user?.id) {
         const { data: me } = await supabase
@@ -318,7 +323,7 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
     } finally {
       setLoading(false);
     }
-  }, [user?.id, conversation.card_id, conversation.module, conversation.id, conversation.contact_name, conversation.wa_id, conversation.phone_display, nationalDigits, applyCobranca]);
+  }, [user?.id, conversation.card_id, conversation.module, conversation.id, conversation.contact_name, conversation.wa_id, conversation.phone_display, nationalDigits, applyCobranca, onResolvedModule]);
 
   useEffect(() => {
     resolveCobranca();

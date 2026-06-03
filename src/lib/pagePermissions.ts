@@ -97,6 +97,25 @@ export function shouldUseCobrancaInboxPanel(params: {
   return false;
 }
 
+function isInboxModuleKey(m: string | null | undefined): m is InboxModuleKey {
+  return m === "cobrancas" || m === "renovacoes" || m === "leads";
+}
+
+/** Módulo exibido no Inbox: prioriza onde o card foi encontrado/vinculado no CRM. */
+export function inboxDisplayModuleForConversation(params: {
+  dedicatedCobrancaUser: boolean;
+  storedModule: string | null;
+  cardId: string | null;
+  instanceId: string | null;
+  cobrancaInstanceIds?: ReadonlySet<string>;
+  instanceName?: string | null;
+}): InboxModuleKey {
+  if (params.cardId && isInboxModuleKey(params.storedModule)) {
+    return params.storedModule;
+  }
+  return inboxModuleForConversation(params);
+}
+
 export function inboxModuleForConversation(params: {
   dedicatedCobrancaUser: boolean;
   storedModule: string | null;

@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
+  inboxDisplayModuleForConversation,
   inboxModuleForConversation,
   isCobrancaInboxUser,
   shouldUseCobrancaInboxPanel,
@@ -198,6 +199,8 @@ export default function WhatsAppInbox() {
   const [instancesById, setInstancesById] = useState<Record<string, WaInstanceRow>>({});
   const [cobrancaInstanceIds, setCobrancaInstanceIds] = useState<Set<string>>(() => new Set());
   const [notifyPermission, setNotifyPermission] = useState(() => getNotificationPermission());
+  /** Onde o painel lateral encontrou o card (cobrança / renovação / lead). */
+  const [panelResolvedModule, setPanelResolvedModule] = useState<ModuleKey | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -257,7 +260,33 @@ export default function WhatsAppInbox() {
     };
   }, [conversation, cobrancaInboxMode, cobrancaInstanceIds, instancesById]);
 
-  const mod = MODULE_STYLES[conversationPanelContext.moduleKey];
+  useEffect(() => {
+    setPanelResolvedModule(null);
+  }, [conversation?.id]);
+
+  const displayModuleKey = useMemo((): ModuleKey => {
+    if (!conversation) return conversationPanelContext.moduleKey;
+    if (panelResolvedModule) return panelResolvedModule;
+    return inboxDisplayModuleForConversation({
+      dedicatedCobrancaUser: cobrancaInboxMode,
+      storedModule: conversation.module,
+      cardId: conversation.card_id,
+      instanceId: conversation.instance_id,
+      cobrancaInstanceIds,
+      instanceName: conversation.instance_id
+        ? instancesById[conversation.instance_id]?.name ?? null
+        : null,
+    });
+  }, [
+    conversation,
+    panelResolvedModule,
+    conversationPanelContext.moduleKey,
+    cobrancaInboxMode,
+    cobrancaInstanceIds,
+    instancesById,
+  ]);
+
+  const mod = MODULE_STYLES[displayModuleKey];
   const useCobrancaPanel = conversationPanelContext.useCobrancaPanel;
   const windowOpen = useMemo(() => {
     if (!conversation?.window_expires_at) return false;
@@ -363,6 +392,11 @@ export default function WhatsAppInbox() {
       conversationId: string,
       patch: { card_id: string; contact_name: string | null; module: string },
     ) => {
+      const moduleKey =
+        patch.module === "cobrancas" || patch.module === "renovacoes" || patch.module === "leads"
+          ? (patch.module as ModuleKey)
+          : null;
+      if (moduleKey) setPanelResolvedModule(moduleKey);
       setConversations((prev) =>
         prev.map((c) =>
           c.id === conversationId
@@ -808,9 +842,10 @@ export default function WhatsAppInbox() {
               {filteredList.map((c) => {
                 const active = c.id === selectedId;
                 const inst = c.instance_id ? instancesById[c.instance_id] : undefined;
-                const m = MODULE_STYLES[inboxModuleForConversation({
+                const m = MODULE_STYLES[inboxDisplayModuleForConversation({
                   dedicatedCobrancaUser: cobrancaInboxMode,
                   storedModule: c.module,
+                  cardId: c.card_id,
                   instanceId: c.instance_id,
                   cobrancaInstanceIds,
                   instanceName: inst?.name ?? null,
@@ -1231,12 +1266,14 @@ export default function WhatsAppInbox() {
                           conversation={conversation}
                           formatPhone={formatPhoneDisplay}
                           onLinked={handleLeadLinked}
+                          onResolvedModule={setPanelResolvedModule}
                           fallback={
                             <WhatsAppCreateLeadPanel
                               conversation={conversation}
                               formatPhone={formatPhoneDisplay}
                               onLinked={handleLeadLinked}
                               afterCobrancaSearch
+                              onResolvedModule={setPanelResolvedModule}
                             />
                           }
                         />
@@ -1245,12 +1282,14 @@ export default function WhatsAppInbox() {
                           conversation={conversation}
                           formatPhone={formatPhoneDisplay}
                           onLinked={handleLeadLinked}
+                          onResolvedModule={setPanelResolvedModule}
                         />
                       ) : (
                         <WhatsAppCreateLeadPanel
                           conversation={conversation}
                           formatPhone={formatPhoneDisplay}
                           onLinked={handleLeadLinked}
+                          onResolvedModule={setPanelResolvedModule}
                         />
                       )}
                     </div>

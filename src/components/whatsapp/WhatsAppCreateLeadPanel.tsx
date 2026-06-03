@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -8,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ExternalLink, Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus } from "lucide-react";
 import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
 import { nationalPhoneDigits } from "@/lib/phoneFormat";
+import WhatsAppInboxLinkedCard, { type InboxLinkedRecord } from "@/components/whatsapp/WhatsAppInboxLinkedCard";
 
 type ConversationRef = {
   id: string;
@@ -29,13 +29,9 @@ type FormField = {
   is_phone_field?: boolean;
 };
 
-type LinkedRecord = {
-  module: "leads" | "renovacoes";
-  id: string;
-  nome: string;
-  empresaNome: string | null;
-  statusLabel?: string | null;
-};
+type LinkedRecord = InboxLinkedRecord;
+
+type ModuleKey = "leads" | "cobrancas" | "renovacoes";
 
 type Props = {
   conversation: ConversationRef;
@@ -43,6 +39,7 @@ type Props = {
   onLinked: (conversationId: string, patch: { card_id: string; contact_name: string | null; module: string }) => void;
   /** Texto após busca em cobrança sem resultado (fluxo admin). */
   afterCobrancaSearch?: boolean;
+  onResolvedModule?: (module: ModuleKey | null) => void;
 };
 
 function recordNameFromData(data: Record<string, unknown>, fields: FormField[]): string {
@@ -52,9 +49,19 @@ function recordNameFromData(data: Record<string, unknown>, fields: FormField[]):
   );
 }
 
-export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onLinked, afterCobrancaSearch }: Props) {
+function telefoneFromData(data: Record<string, unknown>, fields: FormField[]): string | null {
+  const fromIdentity = resolveLeadIdentity(data as Record<string, any>, fields).telefone;
+  return fromIdentity || (typeof data.telefone === "string" ? data.telefone : null);
+}
+
+function formatValorLabel(val: unknown): string | null {
+  const n = typeof val === "number" ? val : parseFloat(String(val ?? "").replace(",", "."));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onLinked, afterCobrancaSearch, onResolvedModule }: Props) {
   const { user, isAdmin } = useAuth();
-  const navigate = useNavigate();
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [fields, setFields] = useState<FormField[]>([]);
@@ -72,6 +79,7 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
 
   const linkConversation = useCallback(
     async (record: LinkedRecord, linkDb: boolean) => {
+      onResolvedModule?.(record.module);
       setLinkedRecord(record);
       if (!linkDb || !conversation.id) return;
       const needsLink =
@@ -93,13 +101,13 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
         });
       }
     },
-    [conversation.card_id, conversation.id, conversation.module, onLinked],
+    [conversation.card_id, conversation.id, conversation.module, onLinked, onResolvedModule],
   );
 
   const loadRenovacaoById = useCallback(async (id: string) => {
     const { data, error } = await supabase
       .from("crm_renovacoes")
-      .select("id, data, status")
+      .select("id, data, status, valor")
       .eq("id", id)
       .maybeSingle();
     if (error || !data) return null;
@@ -118,11 +126,17 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
       nome,
       empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
       statusLabel,
+      telefone: telefoneFromData(d, fields),
+      valorLabel: formatValorLabel(data.valor),
     };
   }, [fields]);
 
   const loadLeadById = useCallback(async (leadId: string) => {
-    const { data, error } = await supabase.from("crm_leads").select("id, data").eq("id", leadId).maybeSingle();
+    const { data, error } = await supabase
+      .from("crm_leads")
+      .select("id, data, status")
+      .eq("id", leadId)
+      .maybeSingle();
     if (error || !data) {
       return {
         module: "leads" as const,
@@ -130,15 +144,28 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
         nome: "Lead vinculado",
         empresaNome: null,
         statusLabel: null,
+        telefone: null,
+        valorLabel: null,
       };
     }
     const d = (data.data || {}) as Record<string, unknown>;
+    let statusLabel: string | null = null;
+    if (data.status) {
+      const { data: st } = await supabase
+        .from("crm_statuses")
+        .select("label")
+        .eq("key", data.status)
+        .maybeSingle();
+      statusLabel = st?.label || data.status;
+    }
     return {
       module: "leads" as const,
       id: leadId,
       nome: recordNameFromData(d, fields),
       empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
-      statusLabel: null,
+      statusLabel,
+      telefone: telefoneFromData(d, fields),
+      valorLabel: formatValorLabel(d.valor),
     };
   }, [fields]);
 
@@ -153,7 +180,12 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
     const reno = !renoErr && renoRows?.[0] ? renoRows[0] : null;
     const lead = !leadErr && leadRows?.[0]?.lead_id ? leadRows[0] : null;
 
-    const mapRenovacao = async (renoRow: { id: string; data?: unknown; status?: string }) => {
+    const mapRenovacao = async (renoRow: {
+      id: string;
+      data?: unknown;
+      status?: string;
+      valor?: number | null;
+    }) => {
       const d = (renoRow.data || {}) as Record<string, unknown>;
       const nome = recordNameFromData(d, fields);
       let statusLabel: string | null = renoRow.status || null;
@@ -169,6 +201,8 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
         nome,
         empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
         statusLabel,
+        telefone: telefoneFromData(d, fields),
+        valorLabel: formatValorLabel(renoRow.valor),
       };
     };
 
@@ -198,6 +232,7 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
   const resolveLinkedRecord = useCallback(async () => {
     setLoadingRecord(true);
     setLinkedRecord(null);
+    onResolvedModule?.(null);
     try {
       if (conversation.card_id) {
         if (conversation.module === "renovacoes") {
@@ -222,16 +257,20 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
       const found = await resolveByPhone();
       if (found) {
         await linkConversation(found, true);
+      } else if (afterCobrancaSearch) {
+        onResolvedModule?.("leads");
       }
     } finally {
       setLoadingRecord(false);
     }
   }, [
+    afterCobrancaSearch,
     conversation.card_id,
     conversation.module,
     linkConversation,
     loadLeadById,
     loadRenovacaoById,
+    onResolvedModule,
     resolveByPhone,
   ]);
 
@@ -417,33 +456,7 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
   }
 
   if (linkedRecord) {
-    const isRenovacao = linkedRecord.module === "renovacoes";
-    return (
-      <div className="space-y-3 border-t pt-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {isRenovacao ? "Renovação no CRM" : "Lead no CRM"}
-        </p>
-        <p className="font-semibold leading-snug break-words">{linkedRecord.nome}</p>
-        {linkedRecord.empresaNome ? (
-          <p className="text-xs text-muted-foreground break-words">Empresa: {linkedRecord.empresaNome}</p>
-        ) : null}
-        {linkedRecord.statusLabel ? (
-          <p className="text-xs text-muted-foreground break-words">Coluna: {linkedRecord.statusLabel}</p>
-        ) : null}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-full gap-2"
-          onClick={() =>
-            navigate(isRenovacao ? "/clientes-ativos" : `/?edit=${linkedRecord.id}`)
-          }
-        >
-          <ExternalLink className="h-4 w-4" />
-          {isRenovacao ? "Abrir tela de renovação" : "Abrir na tela de leads"}
-        </Button>
-      </div>
-    );
+    return <WhatsAppInboxLinkedCard record={linkedRecord} displayPhone={displayPhone} />;
   }
 
   return (
