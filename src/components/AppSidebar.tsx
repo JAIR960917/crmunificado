@@ -38,8 +38,8 @@ type NavItem = {
   icon: any;
 };
 
-/** Itens do menu principal — ORDEM IMPORTA (é a ordem visual). */
-const mainNavItemsBeforeConfig: NavItem[] = [
+/** Itens do menu principal — ORDEM IMPORTA (é a ordem visual). Configuração fica sempre por último. */
+const mainNavItems: NavItem[] = [
   { path: "/dashboard",            label: "Dashboard",              icon: BarChart3 },
   { path: "/meu-dashboard",        label: "Meu Dashboard",          icon: LayoutDashboard },
   { path: "/meu-dashboard-cobranca", label: "Dashboard Cobrança",   icon: LayoutDashboard },
@@ -49,9 +49,6 @@ const mainNavItemsBeforeConfig: NavItem[] = [
   { path: "/agendamentos",         label: "Agendamentos",           icon: CalendarCheck },
   { path: "/orcamentos",           label: "Orçamentos",             icon: Receipt },
   { path: "/clientes-ativos",      label: "Renovação",              icon: UserCheck },
-];
-
-const mainNavItemsAfterConfig: NavItem[] = [
   { path: "/whatsapp",             label: "WhatsApp",               icon: MessageSquare },
   { path: "/whatsapp-inbox",       label: "Inbox WhatsApp",         icon: MessageSquare },
 ];
@@ -178,7 +175,7 @@ export default function AppSidebar({ onNavigate }: Props) {
 
       {/* ===== Menu principal (rolável) ===== */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2 min-h-0">
-        {mainNavItemsBeforeConfig.filter(canSee).map((item) => (
+        {mainNavItems.filter(canSee).map((item) => (
           <button
             key={item.path}
             onClick={() => handleNav(item.path)}
@@ -232,22 +229,6 @@ export default function AppSidebar({ onNavigate }: Props) {
             </CollapsibleContent>
           </Collapsible>
         )}
-
-        {mainNavItemsAfterConfig.filter(canSee).map((item) => (
-          <button
-            key={item.path}
-            onClick={() => handleNav(item.path)}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-              location.pathname === item.path
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "hover:bg-sidebar-accent/50"
-            )}
-          >
-            <item.icon className="h-4 w-4 shrink-0" />
-            {item.label}
-          </button>
-        ))}
       </nav>
 
       {/* ===== Rodapé: ações utilitárias + sair ===== */}
