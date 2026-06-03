@@ -132,6 +132,7 @@ export default function ContactAttemptForm({ leadId, userId, leadStatus, leadSna
         const newData = {
           ...curData,
           tratativa_em: new Date().toISOString(),
+          tratativa_status_key: leadStatus,
           tratativa_atendeu: atendeu,
           tratativa_by: userId,
         };

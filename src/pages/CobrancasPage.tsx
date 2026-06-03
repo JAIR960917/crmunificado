@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 import { logTransition } from "@/lib/transitionLogs";
+import { getOldestOverdueParcelTimestamp } from "@/lib/kanbanCardSort";
 
 type CobrancaActivity = {
   id: string;
@@ -409,10 +410,14 @@ export default function CobrancasPage() {
     const oldestVencimento = (g: CobrancaGroup) => {
       let min = Number.POSITIVE_INFINITY;
       for (const it of g.items) {
-        const v = (it as any).vencimento || (it.data as any)?.vencimento;
-        if (!v) continue;
-        const t = new Date(String(v)).getTime();
-        if (!isNaN(t) && t < min) min = t;
+        const d = (it.data && typeof it.data === "object" ? it.data : {}) as Record<string, unknown>;
+        const t = getOldestOverdueParcelTimestamp(d);
+        if (t < min) min = t;
+        const colV = (it as any).vencimento;
+        if (colV) {
+          const tv = new Date(String(colV)).getTime();
+          if (!isNaN(tv) && tv < min) min = tv;
+        }
       }
       return min;
     };

@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 import { useVisibleStatusKeys } from "@/hooks/use-visible-status-keys";
 import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
+import { getLeadExamTimestamp, sortKanbanByExamAndTratativa } from "@/lib/kanbanCardSort";
 
 type CrmColumn = {
   id: string; name: string; field_key: string; field_type: string;
@@ -722,16 +723,6 @@ export default function LeadsPage() {
     return `${nome} ${telefone}`.toLowerCase();
   }, [formFields]);
 
-  // Build a set of lead IDs that have recent activity (completed task or note)
-  const leadsWithRecentActivity = useMemo(() => {
-    const ids = new Set<string>();
-    // Leads with completed activities
-    leadActivities.filter(a => a.completed_at).forEach(a => ids.add(a.lead_id));
-    // Leads with notes
-    leadNoteIds.forEach(id => ids.add(id));
-    return ids;
-  }, [leadActivities, leadNoteIds]);
-
   // Compute task priority per lead: 3=overdue, 2=today, 1=future pending, 0=none
   const leadTaskPriority = useMemo(() => {
     const map = new Map<string, number>();
@@ -749,21 +740,19 @@ export default function LeadsPage() {
     return map;
   }, [leadActivities]);
 
-  const sortByTaskPriority = useCallback((items: Lead[]) => {
-    return [...items].sort((a, b) => {
-      const aPrio = leadTaskPriority.get(a.id) || 0;
-      const bPrio = leadTaskPriority.get(b.id) || 0;
-      if (aPrio !== bPrio) return bPrio - aPrio;
-      const aTratativa = (a.data as any)?.tratativa_em ? 1 : 0;
-      const bTratativa = (b.data as any)?.tratativa_em ? 1 : 0;
-      const aHasRecent = (leadsWithRecentActivity.has(a.id) || aTratativa) ? 1 : 0;
-      const bHasRecent = (leadsWithRecentActivity.has(b.id) || bTratativa) ? 1 : 0;
-      if (aHasRecent !== bHasRecent) return aHasRecent - bHasRecent;
-      const aT = (a.data as any)?.tratativa_em ? new Date((a.data as any).tratativa_em).getTime() : 0;
-      const bT = (b.data as any)?.tratativa_em ? new Date((b.data as any).tratativa_em).getTime() : 0;
-      return aT - bT;
-    });
-  }, [leadTaskPriority, leadsWithRecentActivity]);
+  const sortLeadsInColumn = useCallback(
+    (items: Lead[]) =>
+      sortKanbanByExamAndTratativa(items, {
+        getExamTs: (lead) =>
+          getLeadExamTimestamp(
+            typeof lead.data === "object" ? (lead.data as Record<string, unknown>) : {},
+            formFields,
+          ),
+        taskPriority: leadTaskPriority,
+        requireTratativaStatusMatch: true,
+      }),
+    [formFields, leadTaskPriority],
+  );
 
   // Retorna {items, total, hasMore, loading} por status, usando o hook paginado
   const getColumnState = useCallback((status: string) => {
@@ -772,18 +761,18 @@ export default function LeadsPage() {
     if (isSearching) {
       const filtered = (searchResults || []).filter(l => getLeadDisplayStatus(l) === status && !appointedLeadIds.has(l.id));
       const merged = [...offlineForStatus, ...filtered];
-      return { items: sortByTaskPriority(merged), total: merged.length, hasMore: false, loading: searching };
+      return { items: sortLeadsInColumn(merged), total: merged.length, hasMore: false, loading: searching };
     }
     const col = paginatedColumns[status];
     const items = (col?.items || []).filter(l => !appointedLeadIds.has(l.id));
     const merged = [...offlineForStatus, ...items];
     return {
-      items: sortByTaskPriority(merged),
+      items: sortLeadsInColumn(merged),
       total: (col?.total || 0) + offlineForStatus.length,
       hasMore: col?.hasMore || false,
       loading: col?.loading || false,
     };
-  }, [paginatedColumns, isSearching, searchResults, searching, sortByTaskPriority, appointedLeadIds, offlineLeads, getLeadDisplayStatus]);
+  }, [paginatedColumns, isSearching, searchResults, searching, sortLeadsInColumn, appointedLeadIds, offlineLeads, getLeadDisplayStatus]);
 
   const getLeadsByStatus = (status: string) => getColumnState(status).items;
 

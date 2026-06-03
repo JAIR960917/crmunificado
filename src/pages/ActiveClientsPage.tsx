@@ -19,6 +19,7 @@ import ScheduleLeadDialog from "@/components/leads/ScheduleLeadDialog";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 import { useVisibleStatusKeys } from "@/hooks/use-visible-status-keys";
 import { logTransition } from "@/lib/transitionLogs";
+import { getRenovacaoExamTimestamp, sortKanbanByExamAndTratativa } from "@/lib/kanbanCardSort";
 
 type Renovacao = {
   id: string;
@@ -629,48 +630,31 @@ export default function ActiveClientsPage() {
     return map;
   }, [activities]);
 
-  // Renovacoes with recent interaction (completed task or notes) — go to the END when no pending task
-  const renovacoesWithRecentActivity = useMemo(() => {
-    const ids = new Set<string>();
-    activities.filter(a => a.completed_at).forEach(a => ids.add(a.renovacao_id));
-    noteIds.forEach(id => ids.add(id));
-    return ids;
-  }, [activities, noteIds]);
-
-  const sortByTaskPriority = useCallback((items: Renovacao[]) => {
-    return [...items].sort((a, b) => {
-      // 1) Pending task always dominates: cards with pending tasks go to the TOP
-      const aPrio = renovacaoTaskPriority.get(a.id) || 0;
-      const bPrio = renovacaoTaskPriority.get(b.id) || 0;
-      if (aPrio !== bPrio) return bPrio - aPrio;
-      // 2) When no pending task, cards with recent interaction (note OR tratativa registrada) go to the END
-      const aTratativa = (a.data as any)?.tratativa_em ? 1 : 0;
-      const bTratativa = (b.data as any)?.tratativa_em ? 1 : 0;
-      const aHasRecent = (renovacoesWithRecentActivity.has(a.id) || aTratativa) ? 1 : 0;
-      const bHasRecent = (renovacoesWithRecentActivity.has(b.id) || bTratativa) ? 1 : 0;
-      if (aHasRecent !== bHasRecent) return aHasRecent - bHasRecent;
-      // 3) Among recently-touched, the most recently tratada vai mais ao fim
-      const aT = (a.data as any)?.tratativa_em ? new Date((a.data as any).tratativa_em).getTime() : 0;
-      const bT = (b.data as any)?.tratativa_em ? new Date((b.data as any).tratativa_em).getTime() : 0;
-      return aT - bT;
-    });
-  }, [renovacaoTaskPriority, renovacoesWithRecentActivity]);
+  const sortRenovacoesInColumn = useCallback(
+    (items: Renovacao[]) =>
+      sortKanbanByExamAndTratativa(items, {
+        getExamTs: (item) => getRenovacaoExamTimestamp(item, lastVisitField),
+        taskPriority: renovacaoTaskPriority,
+        requireTratativaStatusMatch: true,
+      }),
+    [lastVisitField, renovacaoTaskPriority],
+  );
 
   // Build per-status item list (paginated or filtered from search)
   const getByStatus = useCallback((key: string): { items: Renovacao[]; total: number; hasMore: boolean; loading: boolean } => {
     if (isSearching) {
       const filtered = (searchResults || []).filter((r) => r.status === key);
-      return { items: sortByTaskPriority(filtered), total: filtered.length, hasMore: false, loading: searching };
+      return { items: sortRenovacoesInColumn(filtered), total: filtered.length, hasMore: false, loading: searching };
     }
     const col = paginatedColumns[key];
     const items = col?.items || [];
     return {
-      items: sortByTaskPriority(items),
+      items: sortRenovacoesInColumn(items),
       total: col?.total || 0,
       hasMore: col?.hasMore || false,
       loading: col?.loading || false,
     };
-  }, [paginatedColumns, isSearching, searchResults, searching, sortByTaskPriority]);
+  }, [paginatedColumns, isSearching, searchResults, searching, sortRenovacoesInColumn]);
 
   const totalDisplayed = useMemo(() => {
     if (isSearching) return searchResults?.length || 0;

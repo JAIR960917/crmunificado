@@ -453,6 +453,9 @@ export default function DashboardPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_lead_notes" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_renovacao_notes" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_cobranca_notes" }, refresh)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_leads" }, refresh)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_renovacoes" }, refresh)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_cobrancas" }, refresh)
       .subscribe();
 
     return () => {
