@@ -41,6 +41,8 @@ type Props = {
   conversation: ConversationRef;
   formatPhone: (raw: string) => string;
   onLinked: (conversationId: string, patch: { card_id: string; contact_name: string | null; module: string }) => void;
+  /** Texto após busca em cobrança sem resultado (fluxo admin). */
+  afterCobrancaSearch?: boolean;
 };
 
 function recordNameFromData(data: Record<string, unknown>, fields: FormField[]): string {
@@ -50,7 +52,7 @@ function recordNameFromData(data: Record<string, unknown>, fields: FormField[]):
   );
 }
 
-export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onLinked }: Props) {
+export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onLinked, afterCobrancaSearch }: Props) {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
 
@@ -151,53 +153,47 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
     const reno = !renoErr && renoRows?.[0] ? renoRows[0] : null;
     const lead = !leadErr && leadRows?.[0]?.lead_id ? leadRows[0] : null;
 
+    const mapRenovacao = async (renoRow: { id: string; data?: unknown; status?: string }) => {
+      const d = (renoRow.data || {}) as Record<string, unknown>;
+      const nome = recordNameFromData(d, fields);
+      let statusLabel: string | null = renoRow.status || null;
+      const { data: st } = await supabase
+        .from("crm_renovacao_statuses")
+        .select("label")
+        .eq("key", renoRow.status)
+        .maybeSingle();
+      if (st?.label) statusLabel = st.label;
+      return {
+        module: "renovacoes" as const,
+        id: renoRow.id as string,
+        nome,
+        empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
+        statusLabel,
+      };
+    };
+
+    // Admin após cobrança: sempre renovação → leads (ignora módulo gravado na conversa).
+    if (afterCobrancaSearch) {
+      if (reno) return mapRenovacao(reno);
+      if (lead?.lead_id) return loadLeadById(lead.lead_id);
+      return null;
+    }
+
     if (conversation.module === "leads" && lead?.lead_id) {
       return loadLeadById(lead.lead_id);
     }
     if (conversation.module === "renovacoes" && reno) {
-      const d = (reno.data || {}) as Record<string, unknown>;
-      const nome = recordNameFromData(d, fields);
-      let statusLabel: string | null = reno.status || null;
-      const { data: st } = await supabase
-        .from("crm_renovacao_statuses")
-        .select("label")
-        .eq("key", reno.status)
-        .maybeSingle();
-      if (st?.label) statusLabel = st.label;
-      return {
-        module: "renovacoes" as const,
-        id: reno.id as string,
-        nome,
-        empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
-        statusLabel,
-      };
+      return mapRenovacao(reno);
     }
 
-    if (reno) {
-      const d = (reno.data || {}) as Record<string, unknown>;
-      const nome = recordNameFromData(d, fields);
-      let statusLabel: string | null = reno.status || null;
-      const { data: st } = await supabase
-        .from("crm_renovacao_statuses")
-        .select("label")
-        .eq("key", reno.status)
-        .maybeSingle();
-      if (st?.label) statusLabel = st.label;
-      return {
-        module: "renovacoes" as const,
-        id: reno.id as string,
-        nome,
-        empresaNome: typeof d.empresa_nome === "string" ? d.empresa_nome : null,
-        statusLabel,
-      };
-    }
+    if (reno) return mapRenovacao(reno);
 
     if (lead?.lead_id) {
       return loadLeadById(lead.lead_id);
     }
 
     return null;
-  }, [conversation.module, fields, loadLeadById, nationalDigits]);
+  }, [afterCobrancaSearch, conversation.module, fields, loadLeadById, nationalDigits]);
 
   const resolveLinkedRecord = useCallback(async () => {
     setLoadingRecord(true);
@@ -406,9 +402,16 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
 
   if (loadingRecord) {
     return (
-      <div className="flex items-center gap-2 border-t pt-4 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Buscando no CRM…
+      <div className="flex flex-col gap-2 border-t pt-4 text-sm text-muted-foreground">
+        {afterCobrancaSearch ? (
+          <p className="text-xs text-muted-foreground">
+            Nenhum card em cobrança para {displayPhone}. Buscando em renovação e leads…
+          </p>
+        ) : null}
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Buscando no CRM…
+        </div>
       </div>
     );
   }
@@ -445,6 +448,11 @@ export default function WhatsAppCreateLeadPanel({ conversation, formatPhone, onL
 
   return (
     <div className="space-y-3 border-t pt-4">
+      {afterCobrancaSearch ? (
+        <p className="text-xs text-muted-foreground">
+          Não encontrado em cobrança, renovação nem leads para {displayPhone}.
+        </p>
+      ) : null}
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cadastrar lead</p>
 
       {loadingMeta ? (

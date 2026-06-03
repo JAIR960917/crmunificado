@@ -465,6 +465,29 @@ function applyTemplateVars(template: string, vars: Record<string, string>): stri
   return out;
 }
 
+/** Parâmetros do corpo do template Meta ({{1}}, {{2}}…) na ordem em que aparecem na mensagem do CRM. */
+function buildMetaTemplateBodyParams(
+  messageTemplate: string,
+  vars: Record<string, string>,
+): string[] {
+  if (!messageTemplate?.trim()) return [];
+  const varsLower: Record<string, string> = {};
+  for (const [k, v] of Object.entries(vars)) {
+    varsLower[k.toLowerCase()] = v ?? "";
+  }
+  const seen = new Set<string>();
+  const params: string[] = [];
+  const re = /\{\s*([a-z0-9_]+)\s*\}/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(messageTemplate)) !== null) {
+    const key = m[1].toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    params.push(varsLower[key] ?? "");
+  }
+  return params;
+}
+
 function resolveCardEnteredAt(card: any): Date {
   const data = (card?.data && typeof card.data === "object") ? card.data : {};
   const currentStatus = String(card?.status || "");
@@ -739,7 +762,7 @@ serve(async (req) => {
               {
                 metaTemplateName: campaign.meta_template_name,
                 metaTemplateLanguage: campaign.meta_template_language,
-                metaTemplateBodyParams: [name],
+                metaTemplateBodyParams: buildMetaTemplateBodyParams(campaign.message, vars),
               },
             );
             if (result.ok) {
@@ -1056,7 +1079,7 @@ serve(async (req) => {
                 {
                   metaTemplateName: step.meta_template_name,
                   metaTemplateLanguage: step.meta_template_language,
-                  metaTemplateBodyParams: [name],
+                  metaTemplateBodyParams: buildMetaTemplateBodyParams(step.message, vars),
                 },
               );
               const instanceName = sessionToInstanceName.get(session!) || session!;

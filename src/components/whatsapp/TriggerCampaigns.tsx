@@ -602,13 +602,23 @@ export default function TriggerCampaigns({ instances }: Props) {
                   onChange={(e) => updateStep(idx, "message", e.target.value)}
                   className="min-h-[70px] text-sm"
                 />
-                <div className="text-[11px] text-muted-foreground leading-relaxed">
-                  <span className="font-semibold">Variáveis disponíveis:</span>{" "}
-                  <code>{"{nome}"}</code>, <code>{"{valor_parcela_vencida}"}</code>,{" "}
-                  <code>{"{valor_parcela_a_vencer}"}</code>, <code>{"{data_parcela_vencida}"}</code>,{" "}
-                  <code>{"{data_parcela_a_vencer}"}</code>, <code>{"{valor_total_parcelas}"}</code>,{" "}
-                  <code>{"{nome_empresa}"}</code>, <code>{"{cnpj_empresa}"}</code>,{" "}
-                  <code>{"{parcelas_vencidas}"}</code>, <code>{"{data_boleto_mais_antigo}"}</code>
+                <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1">
+                  <p>
+                    <span className="font-semibold">Variáveis no CRM (uma chave):</span>{" "}
+                    <code>{"{nome}"}</code>, <code>{"{valor_parcela_vencida}"}</code>,{" "}
+                    <code>{"{valor_parcela_a_vencer}"}</code>, <code>{"{data_parcela_vencida}"}</code>,{" "}
+                    <code>{"{data_parcela_a_vencer}"}</code>, <code>{"{valor_total_parcelas}"}</code>,{" "}
+                    <code>{"{nome_empresa}"}</code>, <code>{"{cnpj_empresa}"}</code>,{" "}
+                    <code>{"{parcelas_vencidas}"}</code>, <code>{"{data_boleto_mais_antigo}"}</code>
+                  </p>
+                  <p>
+                    <span className="font-semibold">Template na Meta (API oficial):</span> use{" "}
+                    <code>{"{{1}}"}</code>, <code>{"{{2}}"}</code>… na{" "}
+                    <span className="font-semibold">mesma ordem</span> das variáveis acima no texto do gatilho
+                    (ex.: <code>{"{cnpj_empresa}"}</code> → <code>{"{{1}}"}</code>,{" "}
+                    <code>{"{nome_empresa}"}</code> → <code>{"{{2}}"}</code>). Não use chave simples{" "}
+                    <code>{"{cnpj}"}</code> no painel da Meta.
+                  </p>
                 </div>
                 <ImageUploadField
                   value={step.image_url || null}

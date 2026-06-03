@@ -1226,7 +1226,21 @@ export default function WhatsAppInbox() {
                           </div>
                         </dl>
                       </div>
-                      {useCobrancaPanel ? (
+                      {isAdmin || isGerente ? (
+                        <WhatsAppCobrancaPanel
+                          conversation={conversation}
+                          formatPhone={formatPhoneDisplay}
+                          onLinked={handleLeadLinked}
+                          fallback={
+                            <WhatsAppCreateLeadPanel
+                              conversation={conversation}
+                              formatPhone={formatPhoneDisplay}
+                              onLinked={handleLeadLinked}
+                              afterCobrancaSearch
+                            />
+                          }
+                        />
+                      ) : useCobrancaPanel ? (
                         <WhatsAppCobrancaPanel
                           conversation={conversation}
                           formatPhone={formatPhoneDisplay}

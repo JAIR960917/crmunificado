@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -83,9 +83,11 @@ type Props = {
   conversation: ConversationRef;
   formatPhone: (raw: string) => string;
   onLinked: (conversationId: string, patch: { card_id: string; contact_name: string | null; module: string }) => void;
+  /** Admin: se não achar cobrança, renderiza renovação → leads → cadastro. */
+  fallback?: ReactNode;
 };
 
-export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLinked }: Props) {
+export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLinked, fallback }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -382,6 +384,9 @@ export default function WhatsAppCobrancaPanel({ conversation, formatPhone, onLin
   }
 
   if (!cobranca) {
+    if (fallback) {
+      return <>{fallback}</>;
+    }
     return (
       <div className="space-y-2 border-t pt-4">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cobrança no CRM</p>
