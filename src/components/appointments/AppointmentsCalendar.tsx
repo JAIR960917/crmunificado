@@ -10,6 +10,7 @@ import {
   isConsultaPaga,
   isSameDay,
   isSameMonth,
+  layoutTimedAppointments,
   ptBR,
   WEEKDAY_LABELS,
   type CalendarViewMode,
@@ -71,7 +72,7 @@ function EventChip({
       type="button"
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       className={cn(
-        "w-full text-left rounded px-1.5 py-0.5 truncate border text-[11px] leading-tight",
+        "h-full w-full text-left rounded px-1.5 py-0.5 truncate border text-[11px] leading-tight overflow-hidden",
         rowColor || "bg-primary/15 border-primary/30 hover:bg-primary/25",
         compact ? "max-w-full" : "",
         appt.is_reschedule_snapshot && "border-dashed",
@@ -200,21 +201,25 @@ function TimeGridView({
           </div>
           {days.map((day) => {
             const dayAppts = byDay.get(dayKey(day)) || [];
+            const layouts = layoutTimedAppointments(dayAppts, SLOT_HEIGHT);
             return (
               <div key={dayKey(day)} className="flex-1 min-w-[100px] border-r last:border-r-0 relative">
                 {HOUR_SLOTS.map((h) => (
                   <div key={h} className="border-b border-border/40" style={{ height: SLOT_HEIGHT }} />
                 ))}
-                {dayAppts.map((a) => {
-                  const dt = new Date(a.scheduled_datetime);
-                  const top = ((dt.getHours() - 7) * 60 + dt.getMinutes()) * (SLOT_HEIGHT / 60);
-                  const height = Math.max(SLOT_HEIGHT * 0.75, 28);
-                  if (dt.getHours() < 7 || dt.getHours() > 20) return null;
+                {layouts.map(({ item: a, top, height, column, columns }) => {
+                  const widthPct = 100 / columns;
+                  const leftPct = column * widthPct;
                   return (
                     <div
                       key={a.id}
-                      className="absolute left-0.5 right-0.5 z-10"
-                      style={{ top, height }}
+                      className="absolute z-10 px-0.5"
+                      style={{
+                        top,
+                        height,
+                        left: `calc(${leftPct}% + 1px)`,
+                        width: `calc(${widthPct}% - 2px)`,
+                      }}
                     >
                       <EventChip appt={a} onClick={() => onSelectAppointment(a)} />
                     </div>
