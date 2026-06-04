@@ -70,21 +70,23 @@ export default function MeuDashboardPage() {
       const leadStatuses = new Map(((leadStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
       const renovStatuses = new Map(((renovStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
 
-      // 2) Atividades pendentes criadas pelo usuário (até o fim de hoje), independente
-      //    de quem está como assigned_to/created_by no lead/renovação.
+      // 2) Tarefas pendentes em leads/renovações que o usuário pode acessar (RLS).
+      //    Não filtrar por created_by — tarefas criadas por gerente/admin no card do vendedor também contam.
       const [leadActsRes, renovActsRes] = await Promise.all([
         supabase
           .from("lead_activities")
           .select("id, lead_id, title, scheduled_date")
           .is("completed_at", null)
           .lte("scheduled_date", endTodayIso)
-          .eq("created_by", uid),
+          .order("scheduled_date", { ascending: true })
+          .limit(2000),
         supabase
           .from("renovacao_activities")
           .select("id, renovacao_id, title, scheduled_date")
           .is("completed_at", null)
           .lte("scheduled_date", endTodayIso)
-          .eq("created_by", uid),
+          .order("scheduled_date", { ascending: true })
+          .limit(2000),
       ]);
 
 
@@ -135,10 +137,13 @@ export default function MeuDashboardPage() {
           const d = new Date(a.scheduled_date);
           const row = buildRow(kind, a);
           if (!row) continue;
-          if (d < now) {
+          // Atrasada: prazo antes de agora OU em dia anterior ao de hoje
+          const isOverdue = d < now || d < startToday;
+          const isTodayFuture = d >= now && d <= endToday;
+          if (isOverdue) {
             atr.push(row);
             (kind === "lead" ? atrL : atrR).add(row.id);
-          } else if (d >= now && d <= endToday) {
+          } else if (isTodayFuture) {
             hoje.push(row);
             (kind === "lead" ? hojeL : hojeR).add(row.id);
           }
