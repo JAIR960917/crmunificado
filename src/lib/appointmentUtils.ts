@@ -57,6 +57,8 @@ export const isSameCalendarDay = (a: string | null | undefined, b: string | null
   }
 };
 
+export const VENDA_ORCAMENTO_STATUSES = ["Gerou Orçamento", "Não Gerou Orçamento"] as const;
+
 export type AppointmentColorInput = {
   consulta_paga: boolean | null;
   consulta_paga_em?: string | null;
@@ -65,10 +67,25 @@ export type AppointmentColorInput = {
   is_reschedule_snapshot?: boolean | null;
   deleted_at?: string | null;
   returned_at?: string | null;
+  venda?: string | null;
+  fez_orcamento?: boolean | null;
 };
+
+export function isMovedToOrcamentos(appt: {
+  venda?: string | null;
+  fez_orcamento?: boolean | null;
+}) {
+  if (appt.venda === "Gerou Orçamento" || appt.venda === "Não Gerou Orçamento") return true;
+  if (appt.fez_orcamento === true) return true;
+  return false;
+}
 
 export function isAppointmentInactive(appt: Pick<AppointmentColorInput, "deleted_at" | "returned_at">) {
   return !!(appt.returned_at || appt.deleted_at);
+}
+
+export function isAppointmentCalendarMuted(appt: Pick<AppointmentColorInput, "deleted_at" | "returned_at" | "venda" | "fez_orcamento">) {
+  return isAppointmentInactive(appt) || isMovedToOrcamentos(appt);
 }
 
 export function getAppointmentRowColor(appt: AppointmentColorInput): string {
@@ -90,7 +107,7 @@ export function getAppointmentRowColor(appt: AppointmentColorInput): string {
 
 /** Cores sólidas no calendário — evita transparência misturando eventos lado a lado */
 export function getAppointmentCalendarColor(appt: AppointmentColorInput): string {
-  if (isAppointmentInactive(appt)) {
+  if (isAppointmentCalendarMuted(appt)) {
     return "bg-zinc-700 text-zinc-200 border-zinc-500 hover:bg-zinc-600";
   }
   if (appt.is_reschedule_snapshot) {

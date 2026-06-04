@@ -131,6 +131,8 @@ export default function OrcamentosPage() {
     const { error } = await supabase
       .from("crm_appointments")
       .update({
+        venda: "Pendente",
+        nao_vendido_motivo: null,
         fez_orcamento: false,
         orcamento_valor: null,
         orcamento_produtos: null,
@@ -150,7 +152,11 @@ export default function OrcamentosPage() {
 
   const fetchAll = async () => {
     setLoading(true);
-    let q = supabase.from("crm_appointments").select("*").eq("fez_orcamento", true).order("scheduled_datetime", { ascending: false });
+    let q = supabase
+      .from("crm_appointments")
+      .select("*")
+      .in("venda", ["Gerou Orçamento", "Não Gerou Orçamento"])
+      .order("scheduled_datetime", { ascending: false });
     if (filterDate) {
       const a = new Date(filterDate); a.setHours(0, 0, 0, 0);
       const b = new Date(filterDate); b.setHours(23, 59, 59, 999);
@@ -178,10 +184,13 @@ export default function OrcamentosPage() {
 
   const stats = useMemo(() => {
     const total = filtered.length;
+    const comOrcamento = filtered.filter((o) => o.venda === "Gerou Orçamento").length;
+    const semOrcamento = filtered.filter((o) => o.venda === "Não Gerou Orçamento").length;
     const valorTotal = filtered.reduce((acc, o) => acc + Number(o.orcamento_valor || 0), 0);
-    const ticketMedio = total > 0 ? valorTotal / total : 0;
-    const comMotivo = filtered.filter((o) => o.nao_vendido_motivo?.trim()).length;
-    return { total, valorTotal, ticketMedio, comMotivo };
+    const ticketMedio = comOrcamento > 0
+      ? filtered.filter((o) => o.venda === "Gerou Orçamento").reduce((acc, o) => acc + Number(o.orcamento_valor || 0), 0) / comOrcamento
+      : 0;
+    return { total, comOrcamento, semOrcamento, valorTotal, ticketMedio };
   }, [filtered]);
 
   const getName = (uid: string) => profiles.find(p => p.user_id === uid)?.full_name || "—";
@@ -225,7 +234,7 @@ export default function OrcamentosPage() {
             <div>
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Orçamentos</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Orçamentos realizados em consultas que não fecharam venda
+                Leads que geraram orçamento ou não compraram após a consulta
               </p>
             </div>
           </div>
@@ -289,14 +298,14 @@ export default function OrcamentosPage() {
           />
           <StatCard
             icon={TrendingUp}
-            label="Ticket médio"
-            value={loading ? "…" : formatBRL(stats.ticketMedio)}
+            label="Gerou orçamento"
+            value={loading ? "…" : String(stats.comOrcamento)}
             tone="text-cyan-500"
           />
           <StatCard
             icon={AlertCircle}
-            label="Com motivo registrado"
-            value={loading ? "…" : String(stats.comMotivo)}
+            label="Não gerou orçamento"
+            value={loading ? "…" : String(stats.semOrcamento)}
             tone="text-amber-500"
           />
         </div>
@@ -325,13 +334,17 @@ export default function OrcamentosPage() {
             {filtered.map((o) => {
               const produtos = getProdutos(o);
               const valor = Number(o.orcamento_valor || 0);
+              const gerouOrcamento = o.venda === "Gerou Orçamento";
 
               return (
                 <Card
                   key={o.id}
                   className="group overflow-hidden border-border/60 bg-card/90 hover:border-primary/35 hover:shadow-md hover:shadow-primary/5 transition-all duration-200"
                 >
-                  <div className="h-1 bg-gradient-to-r from-primary via-primary/60 to-transparent" />
+                  <div className={cn(
+                    "h-1 bg-gradient-to-r to-transparent",
+                    gerouOrcamento ? "from-primary via-primary/60" : "from-amber-500 via-amber-500/60",
+                  )} />
 
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
@@ -361,9 +374,15 @@ export default function OrcamentosPage() {
                       </div>
 
                       <div className="flex flex-col items-end gap-2 shrink-0">
-                        <Badge className="bg-primary/15 text-primary border-primary/30 hover:bg-primary/20 text-sm font-semibold px-2.5 py-1">
-                          {formatBRL(valor)}
-                        </Badge>
+                        {gerouOrcamento ? (
+                          <Badge className="bg-primary/15 text-primary border-primary/30 hover:bg-primary/20 text-sm font-semibold px-2.5 py-1">
+                            {formatBRL(valor)}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold px-2.5 py-1">
+                            Não gerou orçamento
+                          </Badge>
+                        )}
                         <div className="flex items-center gap-0.5 opacity-80 group-hover:opacity-100 transition-opacity">
                           <Button
                             variant="ghost"

@@ -19,9 +19,10 @@ type Profile = { user_id: string; full_name: string };
 type Props = {
   appointmentId: string;
   profiles: Profile[];
+  refreshKey?: number;
 };
 
-export default function AppointmentHistoryPanel({ appointmentId, profiles }: Props) {
+export default function AppointmentHistoryPanel({ appointmentId, profiles, refreshKey = 0 }: Props) {
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +41,7 @@ export default function AppointmentHistoryPanel({ appointmentId, profiles }: Pro
       }
     })();
     return () => { cancelled = true; };
-  }, [appointmentId]);
+  }, [appointmentId, refreshKey]);
 
   const nameOf = (uid: string) => profiles.find((p) => p.user_id === uid)?.full_name || "Usuário";
 
@@ -59,7 +60,7 @@ export default function AppointmentHistoryPanel({ appointmentId, profiles }: Pro
           <div className="relative pl-5 space-y-4">
             <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
             {rows.map((row) => {
-              const isMuted = row.action === "deleted" || row.action === "returned";
+              const isMuted = row.action === "deleted" || row.action === "returned" || row.action === "orcamento" || row.action === "nao_orcamento";
               return (
               <div key={row.id} className="relative">
                 <div

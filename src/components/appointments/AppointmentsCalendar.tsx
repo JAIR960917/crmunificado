@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { getAppointmentCalendarColor, formatRescheduleNote } from "@/lib/appointmentUtils";
+import { getAppointmentCalendarColor, formatRescheduleNote, isAppointmentCalendarMuted } from "@/lib/appointmentUtils";
 import {
   buildMonthGrid,
   buildWeekDays,
@@ -31,6 +31,8 @@ export type CalendarAppointment = {
   rescheduled_to_datetime?: string | null;
   deleted_at?: string | null;
   returned_at?: string | null;
+  venda?: string | null;
+  fez_orcamento?: boolean | null;
 };
 
 type Props = {
@@ -81,6 +83,7 @@ function EventChip({
 }) {
   const dt = new Date(appt.scheduled_datetime);
   const rowColor = getAppointmentCalendarColor(appt as Parameters<typeof getAppointmentCalendarColor>[0]);
+  const muted = isAppointmentCalendarMuted(appt as Parameters<typeof isAppointmentCalendarMuted>[0]);
   const note = formatRescheduleNote(appt);
   const title = note
     ? `${appt.nome} — ${format(dt, "HH:mm", { locale: ptBR })} · ${note}`
@@ -94,6 +97,7 @@ function EventChip({
         rowColor || "bg-primary text-primary-foreground border-primary/50",
         compact ? "h-4 shrink-0 text-[9px] px-1 py-0 leading-4" : "h-full max-h-full px-1 py-0 text-[11px] leading-none",
         appt.is_reschedule_snapshot && "border-dashed",
+        muted && !appt.is_reschedule_snapshot && "opacity-90",
       )}
       title={title}
     >

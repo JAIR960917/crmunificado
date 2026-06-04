@@ -29,6 +29,7 @@ import {
   FORMAS_PAGAMENTO_OCULOS,
   formatRescheduleNote,
   isAppointmentInactive,
+  isMovedToOrcamentos,
   logAppointmentHistory,
 } from "@/lib/appointmentUtils";
 import AppointmentHistoryPanel from "@/components/appointments/AppointmentHistoryPanel";
@@ -150,6 +151,7 @@ export default function AppointmentsPage() {
   const [nvProdutosItens, setNvProdutosItens] = useState<ProdutoItem[]>([{ nome: "", valor: "" }]);
   const [nvObservacao, setNvObservacao] = useState("");
   const [nvSaving, setNvSaving] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
 
 
@@ -164,7 +166,10 @@ export default function AppointmentsPage() {
       .lte("scheduled_datetime", queryEnd.toISOString())
       .order("scheduled_datetime", { ascending: true });
     if (!isAdmin) {
-      query = query.is("deleted_at", null);
+      query = query
+        .is("deleted_at", null)
+        .neq("venda", "Gerou Orçamento")
+        .neq("venda", "Não Gerou Orçamento");
     }
     const [apptRes, profRes] = await Promise.all([
       query,
@@ -407,7 +412,7 @@ export default function AppointmentsPage() {
   };
 
   const handleNvSubmit = async () => {
-    if (!nvApptId) return;
+    if (!nvApptId || !user) return;
     if (!nvMotivo.trim()) { toast.error("Informe o motivo da não compra"); return; }
     const fezOrc = nvVendaTipo === "Gerou Orçamento";
     const itensValidos = nvProdutosItens.filter(p => p.nome.trim() && p.valor);
@@ -416,6 +421,9 @@ export default function AppointmentsPage() {
       return;
     }
     const valorSoma = itensValidos.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0);
+    const appt = appointments.find(a => a.id === nvApptId);
+    const actorName = getProfileName(user.id);
+    const nomeLead = appt?.nome || "lead";
     setNvSaving(true);
     const payload: any = {
       venda: nvVendaTipo,
@@ -428,13 +436,31 @@ export default function AppointmentsPage() {
     };
     const { error } = await supabase.from("crm_appointments").update(payload).eq("id", nvApptId);
     if (error) toast.error("Erro ao salvar");
-    else toast.success("Registrado!");
-    setFormVenda(nvVendaTipo);
+    else {
+      const action = fezOrc ? "orcamento" : "nao_orcamento";
+      const summary = fezOrc
+        ? `${actorName} registrou que ${nomeLead} gerou orçamento e não comprou — lead na tela de Orçamentos`
+        : `${actorName} registrou que ${nomeLead} não gerou orçamento e não comprou — lead na tela de Orçamentos`;
+      await logAppointmentHistory(nvApptId, user.id, action, summary, {
+        venda: nvVendaTipo,
+        motivo: nvMotivo.trim(),
+        valor: fezOrc ? valorSoma : null,
+      });
+      setAppointments((prev) => prev.map((a) => (a.id === nvApptId ? { ...a, ...payload } : a)));
+      await supabase
+        .from("crm_appointments")
+        .update({ venda: nvVendaTipo, fez_orcamento: fezOrc } as any)
+        .eq("snapshot_of_appointment_id", nvApptId)
+        .eq("is_reschedule_snapshot", true);
+      toast.success(fezOrc ? "Orçamento registrado" : "Registro salvo — lead na tela de Orçamentos");
+      setFormVenda(nvVendaTipo);
+      setHistoryRefreshKey((k) => k + 1);
+      if (!isAdmin) setDialogOpen(false);
+    }
     setNvSaving(false);
     setNvDialogOpen(false);
     setNvApptId(null);
     fetchAll();
-
   };
 
 
@@ -743,7 +769,15 @@ export default function AppointmentsPage() {
               </div>
             )}
 
-            {editingAppt && formatRescheduleNote(editingAppt) && !isAppointmentInactive(editingAppt) && (
+            {editingAppt && isMovedToOrcamentos(editingAppt) && !isAppointmentInactive(editingAppt) && (
+              <div className="rounded-md border border-muted-foreground/40 bg-muted/70 px-3 py-2 text-xs text-muted-foreground">
+                {editingAppt.venda === "Gerou Orçamento"
+                  ? "Lead gerou orçamento e não comprou — registrado na tela de Orçamentos. Visível no calendário apenas para administradores."
+                  : "Lead não gerou orçamento e não comprou — registrado na tela de Orçamentos. Visível no calendário apenas para administradores."}
+              </div>
+            )}
+
+            {editingAppt && formatRescheduleNote(editingAppt) && !isAppointmentInactive(editingAppt) && !isMovedToOrcamentos(editingAppt) && (
               <div className={cn(
                 "rounded-md border px-3 py-2 text-xs",
                 editingAppt.is_reschedule_snapshot
@@ -948,10 +982,10 @@ export default function AppointmentsPage() {
             )}
           </form>
           {editingAppt && isAdmin && !editingAppt.is_reschedule_snapshot && (
-            <AppointmentHistoryPanel appointmentId={editingAppt.id} profiles={profiles} />
+            <AppointmentHistoryPanel appointmentId={editingAppt.id} profiles={profiles} refreshKey={historyRefreshKey} />
           )}
           {editingAppt?.is_reschedule_snapshot && isAdmin && editingAppt.snapshot_of_appointment_id && (
-            <AppointmentHistoryPanel appointmentId={editingAppt.snapshot_of_appointment_id} profiles={profiles} />
+            <AppointmentHistoryPanel appointmentId={editingAppt.snapshot_of_appointment_id} profiles={profiles} refreshKey={historyRefreshKey} />
           )}
           </div>
         </DialogContent>
