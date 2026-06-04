@@ -160,6 +160,8 @@ export type Database = {
           renovacao_id: string | null
           rescheduled_from_datetime: string | null
           rescheduled_to_datetime: string | null
+          returned_at: string | null
+          returned_by: string | null
           resumo: string | null
           scheduled_by: string
           scheduled_datetime: string
@@ -205,6 +207,8 @@ export type Database = {
           renovacao_id?: string | null
           rescheduled_from_datetime?: string | null
           rescheduled_to_datetime?: string | null
+          returned_at?: string | null
+          returned_by?: string | null
           resumo?: string | null
           scheduled_by: string
           scheduled_datetime: string
@@ -250,6 +254,8 @@ export type Database = {
           renovacao_id?: string | null
           rescheduled_from_datetime?: string | null
           rescheduled_to_datetime?: string | null
+          returned_at?: string | null
+          returned_by?: string | null
           resumo?: string | null
           scheduled_by?: string
           scheduled_datetime?: string

@@ -63,7 +63,13 @@ export type AppointmentColorInput = {
   created_at: string;
   scheduled_datetime: string;
   is_reschedule_snapshot?: boolean | null;
+  deleted_at?: string | null;
+  returned_at?: string | null;
 };
+
+export function isAppointmentInactive(appt: Pick<AppointmentColorInput, "deleted_at" | "returned_at">) {
+  return !!(appt.returned_at || appt.deleted_at);
+}
 
 export function getAppointmentRowColor(appt: AppointmentColorInput): string {
   if (appt.is_reschedule_snapshot) {
@@ -84,6 +90,9 @@ export function getAppointmentRowColor(appt: AppointmentColorInput): string {
 
 /** Cores sólidas no calendário — evita transparência misturando eventos lado a lado */
 export function getAppointmentCalendarColor(appt: AppointmentColorInput): string {
+  if (isAppointmentInactive(appt)) {
+    return "bg-zinc-700 text-zinc-200 border-zinc-500 hover:bg-zinc-600";
+  }
   if (appt.is_reschedule_snapshot) {
     return "bg-violet-900 text-violet-50 border-violet-700 hover:bg-violet-800";
   }

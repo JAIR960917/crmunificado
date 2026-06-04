@@ -59,24 +59,24 @@ export default function AppointmentHistoryPanel({ appointmentId, profiles }: Pro
           <div className="relative pl-5 space-y-4">
             <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
             {rows.map((row) => {
-              const isDeleted = row.action === "deleted";
+              const isMuted = row.action === "deleted" || row.action === "returned";
               return (
               <div key={row.id} className="relative">
                 <div
                   className={cn(
                     "absolute -left-5 top-1.5 h-3 w-3 rounded-full border-2 border-background",
-                    isDeleted ? "bg-muted-foreground" : "bg-primary",
+                    isMuted ? "bg-muted-foreground" : "bg-primary",
                   )}
                 />
                 <div
                   className={cn(
                     "rounded-lg border p-3",
-                    isDeleted
+                    isMuted
                       ? "border-muted-foreground/40 bg-muted/70 text-muted-foreground"
                       : "border-primary/20 bg-muted/20",
                   )}
                 >
-                  <p className={cn("text-sm font-medium leading-snug", isDeleted && "text-muted-foreground")}>
+                  <p className={cn("text-sm font-medium leading-snug", isMuted && "text-muted-foreground")}>
                     {row.summary}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">

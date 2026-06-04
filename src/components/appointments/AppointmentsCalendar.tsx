@@ -29,6 +29,8 @@ export type CalendarAppointment = {
   rescheduled_from_datetime?: string | null;
   original_scheduled_datetime?: string | null;
   rescheduled_to_datetime?: string | null;
+  deleted_at?: string | null;
+  returned_at?: string | null;
 };
 
 type Props = {

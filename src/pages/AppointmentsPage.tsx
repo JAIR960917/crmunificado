@@ -28,6 +28,7 @@ import { isRealtimeEnabled } from "@/lib/runtime-config";
 import {
   FORMAS_PAGAMENTO_OCULOS,
   formatRescheduleNote,
+  isAppointmentInactive,
   logAppointmentHistory,
 } from "@/lib/appointmentUtils";
 import AppointmentHistoryPanel from "@/components/appointments/AppointmentHistoryPanel";
@@ -51,6 +52,8 @@ type Appointment = {
   created_at: string;
   deleted_at: string | null;
   deleted_by: string | null;
+  returned_at: string | null;
+  returned_by: string | null;
   canal_agendamento: string;
   confirmacao: string;
   comparecimento: string;
@@ -447,28 +450,47 @@ export default function AppointmentsPage() {
   const isFromRenovacao = !!returnAppt?.renovacao_id;
 
   const confirmReturnToLeads = async () => {
-    if (!returnId || !returnAppt) return;
+    if (!returnId || !returnAppt || !user) return;
     setReturning(true);
+    const nowIso = new Date().toISOString();
+    const actorName = getProfileName(user.id);
+    let apptLabel = format(new Date(returnAppt.scheduled_datetime), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+
     if (isFromRenovacao && returnAppt.renovacao_id) {
       await supabase.from("crm_renovacoes").update({ status: returnAppt.previous_status || "novo", scheduled_date: null } as any).eq("id", returnAppt.renovacao_id);
+      await supabase.from("crm_renovacao_notes" as any).insert({
+        renovacao_id: returnAppt.renovacao_id,
+        user_id: user.id,
+        content: `↩ Retornou da tela de Agendamentos (${apptLabel}) — enviado por ${actorName}`,
+      });
     } else if (returnAppt.lead_id) {
       await supabase.from("crm_leads").update({ status: returnAppt.previous_status || "novo", scheduled_date: null } as any).eq("id", returnAppt.lead_id);
+      await supabase.from("crm_lead_notes").insert({
+        lead_id: returnAppt.lead_id,
+        user_id: user.id,
+        content: `↩ Retornou da tela de Agendamentos (${apptLabel}) — enviado por ${actorName}`,
+      });
     }
+
     const { error } = await supabase.from("crm_appointments").update({
-      deleted_at: new Date().toISOString(),
-      deleted_by: user?.id || null,
-    }).eq("id", returnId);
+      deleted_at: nowIso,
+      deleted_by: user.id,
+      returned_at: nowIso,
+      returned_by: user.id,
+    } as any).eq("id", returnId);
+
     if (error) toast.error("Erro ao retornar");
     else {
-      if (user) {
-        await logAppointmentHistory(
-          returnId,
-          user.id,
-          "returned",
-          `${getProfileName(user.id)} retornou o lead à coluna anterior`,
-        );
-      }
+      const destino = isFromRenovacao ? "Renovações" : "Leads";
+      await logAppointmentHistory(
+        returnId,
+        user.id,
+        "returned",
+        `${actorName} retornou o agendamento de ${returnAppt.nome || "lead"} para a tela de ${destino}`,
+        { lead_id: returnAppt.lead_id, renovacao_id: returnAppt.renovacao_id },
+      );
       toast.success(isFromRenovacao ? "Cliente retornado para Renovações" : "Lead retornado para a tela de Leads");
+      setDialogOpen(false);
     }
     setReturning(false);
     setReturnId(null);
@@ -533,6 +555,7 @@ export default function AppointmentsPage() {
     e.preventDefault();
     if (!formDate || !formPagamentoOculos || !user) return;
     if (editingAppt?.is_reschedule_snapshot) return;
+    if (editingAppt && isAppointmentInactive(editingAppt)) return;
     setSaving(true);
     const [h, m] = formTime.split(":").map(Number);
     const dt = new Date(formDate);
@@ -712,7 +735,15 @@ export default function AppointmentsPage() {
           </DialogHeader>
           <div className={cn(editingAppt ? "flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden" : "")}>
           <form onSubmit={handleSubmit} className={cn("space-y-3", editingAppt ? "flex-1 overflow-y-auto pr-0 md:pr-4 max-h-[70vh]" : "")}>
-            {editingAppt && formatRescheduleNote(editingAppt) && (
+            {editingAppt && isAppointmentInactive(editingAppt) && (
+              <div className="rounded-md border border-muted-foreground/40 bg-muted/70 px-3 py-2 text-xs text-muted-foreground">
+                {editingAppt.returned_at
+                  ? `Retornado para ${editingAppt.renovacao_id ? "Renovações" : "Leads"}. Visível aqui apenas para administradores.`
+                  : "Agendamento excluído. Visível aqui apenas para administradores."}
+              </div>
+            )}
+
+            {editingAppt && formatRescheduleNote(editingAppt) && !isAppointmentInactive(editingAppt) && (
               <div className={cn(
                 "rounded-md border px-3 py-2 text-xs",
                 editingAppt.is_reschedule_snapshot
@@ -883,7 +914,7 @@ export default function AppointmentsPage() {
               </>
             )}
 
-            {editingAppt && !editingAppt.is_reschedule_snapshot && (
+            {editingAppt && !editingAppt.is_reschedule_snapshot && !isAppointmentInactive(editingAppt) && (
               <div className="flex gap-2 pt-1">
                 {editingAppt.venda !== "Vendido" && (
                   <Button
@@ -910,8 +941,8 @@ export default function AppointmentsPage() {
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={saving || !formDate || !formPagamentoOculos || !formNome || !!editingAppt?.is_reschedule_snapshot}>
-              {saving ? "Salvando..." : editingAppt ? "Atualizar" : "Criar Agendamento"}
+            <Button type="submit" className="w-full" disabled={saving || !formDate || !formPagamentoOculos || !formNome || !!editingAppt?.is_reschedule_snapshot || !!(editingAppt && isAppointmentInactive(editingAppt))}>
+              {saving ? "Salvando..." : editingAppt ? (isAppointmentInactive(editingAppt) ? "Somente leitura" : "Atualizar") : "Criar Agendamento"}
             </Button>
             </>
             )}
