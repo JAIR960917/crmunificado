@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
@@ -67,6 +67,11 @@ type Appointment = {
 
 type Profile = { user_id: string; full_name: string };
 
+const sortAppointmentsByTime = (list: Appointment[]) =>
+  [...list].sort(
+    (a, b) => new Date(a.scheduled_datetime).getTime() - new Date(b.scheduled_datetime).getTime(),
+  );
+
 const CONFIRMACAO_OPTIONS = ["Pendente", "Confirmado", "Cancelado"];
 const COMPARECIMENTO_OPTIONS = ["Pendente", "Compareceu", "Não Compareceu"];
 const VENDA_OPTIONS = ["Pendente", "Vendido", "Gerou Orçamento", "Não Gerou Orçamento", "Laudo", "Doença no Olho"];
@@ -128,7 +133,11 @@ export default function AppointmentsPage() {
 
   const fetchAll = async () => {
     setLoading(true);
-    let query = supabase.from("crm_appointments").select("*").eq("status", "agendado").order("scheduled_datetime");
+    let query = supabase
+      .from("crm_appointments")
+      .select("*")
+      .eq("status", "agendado")
+      .order("scheduled_datetime", { ascending: true });
     if (!isAdmin) {
       query = query.is("deleted_at", null);
     }
@@ -143,7 +152,7 @@ export default function AppointmentsPage() {
       query,
       supabase.rpc("get_profile_names"),
     ]);
-    setAppointments((apptRes.data || []) as unknown as Appointment[]);
+    setAppointments(sortAppointmentsByTime((apptRes.data || []) as unknown as Appointment[]));
     setProfiles((profRes.data || []) as Profile[]);
     if (isAdmin) {
       const [compRes, profFullRes] = await Promise.all([
@@ -175,12 +184,16 @@ export default function AppointmentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterDate]);
 
-  const filteredAppointments = isAdmin && filterCompanyId !== "all"
-    ? appointments.filter((appt) => {
-        const prof = profilesFull.find(p => p.user_id === appt.scheduled_by);
-        return prof?.company_id === filterCompanyId;
-      })
-    : appointments;
+  const filteredAppointments = useMemo(() => {
+    const base =
+      isAdmin && filterCompanyId !== "all"
+        ? appointments.filter((appt) => {
+            const prof = profilesFull.find((p) => p.user_id === appt.scheduled_by);
+            return prof?.company_id === filterCompanyId;
+          })
+        : appointments;
+    return sortAppointmentsByTime(base);
+  }, [appointments, isAdmin, filterCompanyId, profilesFull]);
 
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
