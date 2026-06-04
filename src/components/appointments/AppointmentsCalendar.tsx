@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { getAppointmentRowColor, formatRescheduleNote } from "@/lib/appointmentUtils";
+import { getAppointmentCalendarColor, formatRescheduleNote } from "@/lib/appointmentUtils";
 import {
   buildMonthGrid,
   buildWeekDays,
@@ -38,6 +38,7 @@ type Props = {
 };
 
 const SLOT_HEIGHT = 48;
+const MONTH_MAX_VISIBLE = 5;
 
 function apptsByDay(appts: CalendarAppointment[]) {
   const map = new Map<string, CalendarAppointment[]>();
@@ -52,6 +53,20 @@ function apptsByDay(appts: CalendarAppointment[]) {
   return map;
 }
 
+function groupLayoutsBySlot<T extends { scheduled_datetime: string }>(
+  layouts: ReturnType<typeof layoutTimedAppointments<T>>,
+) {
+  const groups = new Map<string, typeof layouts>();
+  for (const layout of layouts) {
+    const key = `${layout.top}:${layout.height}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(layout);
+  }
+  return [...groups.values()].map((group) =>
+    [...group].sort((a, b) => a.column - b.column),
+  );
+}
+
 function EventChip({
   appt,
   onClick,
@@ -62,7 +77,7 @@ function EventChip({
   compact?: boolean;
 }) {
   const dt = new Date(appt.scheduled_datetime);
-  const rowColor = getAppointmentRowColor(appt as Parameters<typeof getAppointmentRowColor>[0]);
+  const rowColor = getAppointmentCalendarColor(appt as Parameters<typeof getAppointmentCalendarColor>[0]);
   const note = formatRescheduleNote(appt);
   const title = note
     ? `${appt.nome} — ${format(dt, "HH:mm", { locale: ptBR })} · ${note}`
@@ -72,9 +87,9 @@ function EventChip({
       type="button"
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       className={cn(
-        "h-full w-full text-left rounded px-1.5 py-0.5 truncate border text-[11px] leading-tight overflow-hidden",
-        rowColor || "bg-primary/15 border-primary/30 hover:bg-primary/25",
-        compact ? "max-w-full" : "",
+        "h-full w-full text-left rounded truncate border overflow-hidden box-border",
+        rowColor || "bg-primary text-primary-foreground border-primary/50",
+        compact ? "h-4 text-[9px] px-1 py-0 leading-4" : "px-1.5 py-0.5 text-[11px] leading-tight",
         appt.is_reschedule_snapshot && "border-dashed",
       )}
       title={title}
@@ -113,7 +128,7 @@ function MonthView({ appointments, focusDate, onSelectAppointment, onDayClick }:
             <div
               key={key}
               className={cn(
-                "min-h-[110px] p-1 flex flex-col gap-0.5 bg-background",
+                "min-h-[140px] p-1 flex flex-col gap-0.5 bg-background",
                 !inMonth && "bg-muted/20 text-muted-foreground",
               )}
               onClick={() => onDayClick?.(day)}
@@ -135,12 +150,14 @@ function MonthView({ appointments, focusDate, onSelectAppointment, onDayClick }:
                   </span>
                 )}
               </div>
-              <div className="flex-1 space-y-0.5 overflow-hidden">
-                {dayAppts.slice(0, 3).map((a) => (
+              <div className="flex-1 flex flex-col gap-px min-h-0 overflow-hidden">
+                {dayAppts.slice(0, MONTH_MAX_VISIBLE).map((a) => (
                   <EventChip key={a.id} appt={a} compact onClick={() => onSelectAppointment(a)} />
                 ))}
-                {dayAppts.length > 3 && (
-                  <span className="text-[10px] text-muted-foreground px-1">+{dayAppts.length - 3} mais</span>
+                {dayAppts.length > MONTH_MAX_VISIBLE && (
+                  <span className="text-[9px] text-muted-foreground px-0.5 leading-4 shrink-0">
+                    +{dayAppts.length - MONTH_MAX_VISIBLE} mais
+                  </span>
                 )}
               </div>
             </div>
@@ -202,29 +219,25 @@ function TimeGridView({
           {days.map((day) => {
             const dayAppts = byDay.get(dayKey(day)) || [];
             const layouts = layoutTimedAppointments(dayAppts, SLOT_HEIGHT);
+            const slotGroups = groupLayoutsBySlot(layouts);
             return (
-              <div key={dayKey(day)} className="flex-1 min-w-[100px] border-r last:border-r-0 relative">
+              <div key={dayKey(day)} className="flex-1 min-w-[100px] border-r last:border-r-0 relative isolate">
                 {HOUR_SLOTS.map((h) => (
                   <div key={h} className="border-b border-border/40" style={{ height: SLOT_HEIGHT }} />
                 ))}
-                {layouts.map(({ item: a, top, height, column, columns }) => {
-                  const widthPct = 100 / columns;
-                  const leftPct = column * widthPct;
-                  return (
-                    <div
-                      key={a.id}
-                      className="absolute z-10 px-0.5"
-                      style={{
-                        top,
-                        height,
-                        left: `calc(${leftPct}% + 1px)`,
-                        width: `calc(${widthPct}% - 2px)`,
-                      }}
-                    >
-                      <EventChip appt={a} onClick={() => onSelectAppointment(a)} />
-                    </div>
-                  );
-                })}
+                {slotGroups.map((group) => (
+                  <div
+                    key={`${group[0].top}-${group.map((g) => g.item.id).join("-")}`}
+                    className="absolute left-1 right-1 z-10 flex gap-0.5"
+                    style={{ top: group[0].top, height: group[0].height }}
+                  >
+                    {group.map(({ item: a }) => (
+                      <div key={a.id} className="flex-1 min-w-0">
+                        <EventChip appt={a} onClick={() => onSelectAppointment(a)} />
+                      </div>
+                    ))}
+                  </div>
+                ))}
               </div>
             );
           })}

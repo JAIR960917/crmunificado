@@ -82,6 +82,24 @@ export function getAppointmentRowColor(appt: AppointmentColorInput): string {
   return "bg-green-700/40 hover:bg-green-700/50";
 }
 
+/** Cores sólidas no calendário — evita transparência misturando eventos lado a lado */
+export function getAppointmentCalendarColor(appt: AppointmentColorInput): string {
+  if (appt.is_reschedule_snapshot) {
+    return "bg-violet-900 text-violet-50 border-violet-700 hover:bg-violet-800";
+  }
+  if (appt.consulta_paga !== true) {
+    return "bg-red-950 text-red-50 border-red-800 hover:bg-red-900";
+  }
+  const paidAt = appt.consulta_paga_em || new Date().toISOString();
+  if (isSameCalendarDay(paidAt, appt.created_at)) {
+    return "bg-emerald-900 text-emerald-50 border-emerald-700 hover:bg-emerald-800";
+  }
+  if (isSameCalendarDay(paidAt, appt.scheduled_datetime)) {
+    return "bg-cyan-900 text-cyan-50 border-cyan-700 hover:bg-cyan-800";
+  }
+  return "bg-emerald-900 text-emerald-50 border-emerald-700 hover:bg-emerald-800";
+}
+
 export function glassesPaymentLabel(appt: {
   forma_pagamento_oculos?: string | null;
   forma_pagamento?: string | null;
