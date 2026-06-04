@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Search, Pencil, Trash2, Phone, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2, CalendarPlus, RotateCcw } from "lucide-react";
+import { Search, Pencil, Trash2, Phone, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2, CalendarPlus, RotateCcw, ArrowRightLeft } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,6 +21,7 @@ import { useVisibleStatusKeys } from "@/hooks/use-visible-status-keys";
 import { logTransition } from "@/lib/transitionLogs";
 import { getRenovacaoExamTimestamp, sortKanbanByExamAndTratativa } from "@/lib/kanbanCardSort";
 import { resolveCanalFromLeadData } from "@/lib/appointmentUtils";
+import BulkTransferDialog from "@/components/crm/BulkTransferDialog";
 
 type Renovacao = {
   id: string;
@@ -126,6 +127,7 @@ export default function ActiveClientsPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkTransferOpen, setBulkTransferOpen] = useState(false);
 
   const confirmBulkDelete = async () => {
     setBulkDeleting(true);
@@ -340,6 +342,25 @@ export default function ActiveClientsPage() {
     () => profiles.filter(p => p.full_name?.trim() && (isAdmin || vendedorIds.has(p.user_id)) && (assignableUserIds === null || assignableUserIds.has(p.user_id))),
     [profiles, isAdmin, vendedorIds, assignableUserIds],
   );
+
+  const bulkTransferSourceProfiles = useMemo(() => {
+    if (!isAdmin && !isGerente) return [];
+    if (isAdmin) return profiles.filter((p) => p.full_name?.trim());
+    const companyUsers = profiles.filter(
+      (p) => p.full_name?.trim() && (assignableUserIds === null || assignableUserIds.has(p.user_id)),
+    );
+    const me = profiles.find((p) => p.user_id === user?.id);
+    if (me?.full_name?.trim() && !companyUsers.some((p) => p.user_id === me.user_id)) {
+      return [...companyUsers, me];
+    }
+    return companyUsers;
+  }, [profiles, isAdmin, isGerente, assignableUserIds, user?.id]);
+
+  const bulkTransferDestProfiles = useMemo(() => {
+    if (!isAdmin && !isGerente) return [];
+    if (isAdmin) return profiles.filter((p) => p.full_name?.trim());
+    return assignableProfiles;
+  }, [profiles, isAdmin, isGerente, assignableProfiles]);
   const nameField = useMemo(() => fields.find(f => f.is_name_field), [fields]);
   const phoneField = useMemo(() => fields.find(f => f.is_phone_field), [fields]);
   const lastVisitField = useMemo(() => fields.find(f => f.is_last_visit_field), [fields]);
@@ -889,6 +910,11 @@ export default function ActiveClientsPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-8 h-9 w-full sm:w-48" />
           </div>
+          {(isAdmin || isGerente) && (
+            <Button size="sm" variant="outline" onClick={() => setBulkTransferOpen(true)}>
+              <ArrowRightLeft className="mr-2 h-4 w-4" />Transferir
+            </Button>
+          )}
           {isAdmin && (
             <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
               <Trash2 className="mr-2 h-4 w-4" />Excluir todos
@@ -1139,6 +1165,19 @@ export default function ActiveClientsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {(isAdmin || isGerente) && (
+        <BulkTransferDialog
+          open={bulkTransferOpen}
+          onOpenChange={setBulkTransferOpen}
+          module="renovacoes"
+          entityLabel="renovações"
+          sourceProfiles={bulkTransferSourceProfiles}
+          destProfiles={bulkTransferDestProfiles}
+          companyId={filterCompanyId}
+          onSuccess={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
     </AppLayout>
   );
 }

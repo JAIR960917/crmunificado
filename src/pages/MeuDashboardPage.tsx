@@ -45,9 +45,12 @@ export default function MeuDashboardPage() {
     (async () => {
       const uid = user.id;
       const now = new Date();
+      const nowIso = now.toISOString();
       const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-      const endTodayIso = endToday.toISOString();
+      const endNext7Days = new Date(startToday);
+      endNext7Days.setDate(endNext7Days.getDate() + 6);
+      endNext7Days.setHours(23, 59, 59, 999);
+      const endNext7DaysIso = endNext7Days.toISOString();
 
       // 1) IDs leves dos leads/renovações do usuário (sem o data pesado).
       const [leadIdsRes, renovIdsRes, leadFieldsRes, renovFieldsRes, leadStatusRes, renovStatusRes] = await Promise.all([
@@ -72,36 +75,62 @@ export default function MeuDashboardPage() {
       const leadStatuses = new Map(((leadStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
       const renovStatuses = new Map(((renovStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
 
-      // 2) Tarefas pendentes em leads/renovações que o usuário pode acessar (RLS).
-      //    Não filtrar por created_by — tarefas criadas por gerente/admin no card do vendedor também contam.
-      const [leadActsRes, renovActsRes] = await Promise.all([
+      // 2) Tarefas pendentes: atrasadas (antes de agora) e próximos 7 dias (de agora até fim do 7º dia).
+      const [leadOverdueRes, renovOverdueRes, leadUpcomingRes, renovUpcomingRes] = await Promise.all([
         supabase
           .from("lead_activities")
           .select("id, lead_id, title, scheduled_date")
           .is("completed_at", null)
-          .lte("scheduled_date", endTodayIso)
+          .lt("scheduled_date", nowIso)
           .order("scheduled_date", { ascending: true })
           .limit(2000),
         supabase
           .from("renovacao_activities")
           .select("id, renovacao_id, title, scheduled_date")
           .is("completed_at", null)
-          .lte("scheduled_date", endTodayIso)
+          .lt("scheduled_date", nowIso)
+          .order("scheduled_date", { ascending: true })
+          .limit(2000),
+        supabase
+          .from("lead_activities")
+          .select("id, lead_id, title, scheduled_date")
+          .is("completed_at", null)
+          .gte("scheduled_date", nowIso)
+          .lte("scheduled_date", endNext7DaysIso)
+          .order("scheduled_date", { ascending: true })
+          .limit(2000),
+        supabase
+          .from("renovacao_activities")
+          .select("id, renovacao_id, title, scheduled_date")
+          .is("completed_at", null)
+          .gte("scheduled_date", nowIso)
+          .lte("scheduled_date", endNext7DaysIso)
           .order("scheduled_date", { ascending: true })
           .limit(2000),
       ]);
 
-
-      const leadActs: Activity[] = ((leadActsRes.data || []) as any[]).map((a) => ({
+      const leadOverdueActs: Activity[] = ((leadOverdueRes.data || []) as any[]).map((a) => ({
         id: a.id, ref_id: a.lead_id, scheduled_date: a.scheduled_date, title: a.title,
       }));
-      const renovActs: Activity[] = ((renovActsRes.data || []) as any[]).map((a) => ({
+      const renovOverdueActs: Activity[] = ((renovOverdueRes.data || []) as any[]).map((a) => ({
+        id: a.id, ref_id: a.renovacao_id, scheduled_date: a.scheduled_date, title: a.title,
+      }));
+      const leadUpcomingActs: Activity[] = ((leadUpcomingRes.data || []) as any[]).map((a) => ({
+        id: a.id, ref_id: a.lead_id, scheduled_date: a.scheduled_date, title: a.title,
+      }));
+      const renovUpcomingActs: Activity[] = ((renovUpcomingRes.data || []) as any[]).map((a) => ({
         id: a.id, ref_id: a.renovacao_id, scheduled_date: a.scheduled_date, title: a.title,
       }));
 
       // 3) Buscar `data` apenas dos itens que têm atividade relevante.
-      const neededLeadIds = Array.from(new Set(leadActs.map((a) => a.ref_id)));
-      const neededRenovIds = Array.from(new Set(renovActs.map((a) => a.ref_id)));
+      const neededLeadIds = Array.from(new Set([
+        ...leadOverdueActs.map((a) => a.ref_id),
+        ...leadUpcomingActs.map((a) => a.ref_id),
+      ]));
+      const neededRenovIds = Array.from(new Set([
+        ...renovOverdueActs.map((a) => a.ref_id),
+        ...renovUpcomingActs.map((a) => a.ref_id),
+      ]));
 
       const [leadsRes, renovRes] = await Promise.all([
         neededLeadIds.length
@@ -130,37 +159,38 @@ export default function MeuDashboardPage() {
         };
       };
 
-      const hoje: TaskRow[] = [];
+      const proximos: TaskRow[] = [];
       const atr: TaskRow[] = [];
-      const hojeL = new Set<string>(), hojeR = new Set<string>();
+      const proximosL = new Set<string>(), proximosR = new Set<string>();
       const atrL = new Set<string>(), atrR = new Set<string>();
-      const ingest = (kind: "lead" | "renovacao", acts: Activity[]) => {
+
+      const ingestList = (
+        kind: "lead" | "renovacao",
+        acts: Activity[],
+        target: TaskRow[],
+        idSet: Set<string>,
+      ) => {
         for (const a of acts) {
-          const d = new Date(a.scheduled_date);
           const row = buildRow(kind, a);
           if (!row) continue;
-          // Atrasada: prazo antes de agora OU em dia anterior ao de hoje
-          const isOverdue = d < now || d < startToday;
-          const isTodayFuture = d >= now && d <= endToday;
-          if (isOverdue) {
-            atr.push(row);
-            (kind === "lead" ? atrL : atrR).add(row.id);
-          } else if (isTodayFuture) {
-            hoje.push(row);
-            (kind === "lead" ? hojeL : hojeR).add(row.id);
-          }
+          target.push(row);
+          idSet.add(row.id);
         }
       };
-      ingest("lead", leadActs);
-      ingest("renovacao", renovActs);
-      hoje.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
+
+      ingestList("lead", leadOverdueActs, atr, atrL);
+      ingestList("renovacao", renovOverdueActs, atr, atrR);
+      ingestList("lead", leadUpcomingActs, proximos, proximosL);
+      ingestList("renovacao", renovUpcomingActs, proximos, proximosR);
+
+      proximos.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
       atr.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
 
       setLeadsCount(leadIdsRes.count ?? 0);
       setRenovCount(renovIdsRes.count ?? 0);
-      setHojeRows(hoje);
+      setHojeRows(proximos);
       setAtrasadasRows(atr);
-      setCounts({ hojeL: hojeL.size, hojeR: hojeR.size, atrL: atrL.size, atrR: atrR.size });
+      setCounts({ hojeL: proximosL.size, hojeR: proximosR.size, atrL: atrL.size, atrR: atrR.size });
       setLoading(false);
     })();
     return () => { mounted = false; };
@@ -229,7 +259,7 @@ export default function MeuDashboardPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
           <StatCard
             icon={CalendarClock}
-            label="Tarefas para hoje"
+            label="Próximos 7 dias"
             value={loading ? "…" : hojeRows.length}
             sub={`${counts.hojeL} leads · ${counts.hojeR} renovações`}
             tone="text-blue-500"
@@ -266,11 +296,11 @@ export default function MeuDashboardPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <CalendarClock className="h-4 w-4 text-blue-500" />
-              Tarefas de hoje
+              Tarefas — próximos 7 dias
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <TaskList rows={hojeRows} emptyText="Nenhuma tarefa para hoje." />
+            <TaskList rows={hojeRows} emptyText="Nenhuma tarefa nos próximos 7 dias." />
           </CardContent>
         </Card>
 

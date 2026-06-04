@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Plus, Filter, X, Search } from "lucide-react";
+import { Plus, Filter, X, Search, ArrowRightLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -25,6 +25,7 @@ import { useVisibleStatusKeys } from "@/hooks/use-visible-status-keys";
 import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
 import { resolveCanalFromLeadData } from "@/lib/appointmentUtils";
 import { getLeadExamTimestamp, sortKanbanByExamAndTratativa } from "@/lib/kanbanCardSort";
+import BulkTransferDialog from "@/components/crm/BulkTransferDialog";
 
 type CrmColumn = {
   id: string; name: string; field_key: string; field_type: string;
@@ -36,6 +37,7 @@ type Lead = {
   scheduled_date?: string | null; comprou?: boolean;
 };
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null; company_id?: string | null };
+type UserRole = { user_id: string; role: string };
 type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string; is_system_excluded?: boolean;
 };
@@ -90,6 +92,8 @@ export default function LeadsPage() {
   const [filterDateTo, setFilterDateTo] = useState<Date | undefined>();
   const [showFilters, setShowFilters] = useState(false);
   const [fullProfiles, setFullProfiles] = useState<Profile[]>([]);
+  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
+  const [bulkTransferOpen, setBulkTransferOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Schedule dialog
@@ -193,7 +197,7 @@ export default function LeadsPage() {
     }
 
     try {
-      const [{ data: cols }, { data: profs }, { data: sts }, { data: myProfile }, { data: managerCos }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
+      const [{ data: cols }, { data: profs }, { data: sts }, { data: myProfile }, { data: managerCos }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: rolesData }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
@@ -202,6 +206,7 @@ export default function LeadsPage() {
         supabase.from("crm_form_fields").select("id, label, position, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
         supabase.from("crm_form_fields").select("*").order("position"),
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
+        supabase.from("user_roles").select("user_id, role"),
       ]);
 
       setColumns(cols || []);
@@ -232,6 +237,7 @@ export default function LeadsPage() {
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
       setCurrentUserName(me?.full_name || user?.email || "");
       setFullProfiles((fullProfs || []) as Profile[]);
+      setUserRoles((rolesData || []) as UserRole[]);
 
       // Cache for offline
       try {
@@ -727,6 +733,23 @@ export default function LeadsPage() {
     return fullProfiles.filter(p => p.company_id === myProfile.company_id);
   }, [fullProfiles, isAdmin, isGerente, user?.id]);
 
+  const vendedorIds = useMemo(
+    () => new Set(userRoles.filter((r) => r.role === "vendedor").map((r) => r.user_id)),
+    [userRoles],
+  );
+
+  const bulkTransferSourceProfiles = useMemo(() => {
+    if (!isAdmin && !isGerente) return [];
+    const base = isAdmin ? fullProfiles : vendedorOptions;
+    return base.filter((p) => p.full_name?.trim());
+  }, [fullProfiles, vendedorOptions, isAdmin, isGerente]);
+
+  const bulkTransferDestProfiles = useMemo(() => {
+    if (!isAdmin && !isGerente) return [];
+    if (isAdmin) return fullProfiles.filter((p) => p.full_name?.trim());
+    return vendedorOptions.filter((p) => p.full_name?.trim() && vendedorIds.has(p.user_id));
+  }, [fullProfiles, vendedorOptions, isAdmin, isGerente, vendedorIds]);
+
   // Helper to get lead name/phone for search
   const getLeadSearchText = useCallback((lead: Lead) => {
     const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
@@ -815,6 +838,17 @@ export default function LeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {(isAdmin || isGerente) && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setBulkTransferOpen(true)}
+              className="shrink-0"
+            >
+              <ArrowRightLeft className="mr-1 h-4 w-4" />
+              Transferir
+            </Button>
+          )}
           {(isAdmin || isGerente) && (
             <Button
               size="sm"
@@ -1161,6 +1195,18 @@ export default function LeadsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {(isAdmin || isGerente) && (
+        <BulkTransferDialog
+          open={bulkTransferOpen}
+          onOpenChange={setBulkTransferOpen}
+          module="leads"
+          entityLabel="leads"
+          sourceProfiles={bulkTransferSourceProfiles}
+          destProfiles={bulkTransferDestProfiles}
+          onSuccess={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
 
     </AppLayout>
   );

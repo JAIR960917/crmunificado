@@ -2226,6 +2226,24 @@ export type Database = {
         Args: { p_ttl_seconds?: number }
         Returns: undefined
       }
+      bulk_transfer_crm_records: {
+        Args: {
+          p_company_id?: string | null
+          p_from_user_id: string
+          p_module: string
+          p_quantity: number
+          p_to_user_id: string
+        }
+        Returns: Json
+      }
+      count_transferable_crm_records: {
+        Args: {
+          p_company_id?: string | null
+          p_from_user_id: string
+          p_module: string
+        }
+        Returns: number
+      }
       find_lead_by_phone: {
         Args: { _phone: string }
         Returns: {
