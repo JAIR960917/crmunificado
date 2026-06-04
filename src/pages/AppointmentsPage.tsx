@@ -16,8 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarCheck, Plus, Pencil, Trash2, CalendarIcon, Undo2, ChevronLeft, ChevronRight, List } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CalendarCheck, Plus, Trash2, CalendarIcon, Undo2, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import AppointmentsCalendar from "@/components/appointments/AppointmentsCalendar";
 import {
   getCalendarQueryRange,
@@ -29,8 +28,6 @@ import { isRealtimeEnabled } from "@/lib/runtime-config";
 import {
   FORMAS_PAGAMENTO_OCULOS,
   formatRescheduleNote,
-  getAppointmentRowColor,
-  glassesPaymentLabel,
   logAppointmentHistory,
 } from "@/lib/appointmentUtils";
 import AppointmentHistoryPanel from "@/components/appointments/AppointmentHistoryPanel";
@@ -104,7 +101,6 @@ export default function AppointmentsPage() {
   const [loading, setLoading] = useState(true);
   const [focusDate, setFocusDate] = useState(() => new Date());
   const [calendarView, setCalendarView] = useState<CalendarViewMode>("month");
-  const [pageTab, setPageTab] = useState<"calendario" | "lista">("calendario");
   const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
   // Add/Edit dialog
@@ -439,6 +435,14 @@ export default function AppointmentsPage() {
   };
 
 
+  const handleNvOpenChange = (open: boolean) => {
+    if (!open) {
+      toast.error("Preencha as informações e clique em Salvar para continuar.");
+      return;
+    }
+    setNvDialogOpen(true);
+  };
+
   const returnAppt = appointments.find(a => a.id === returnId);
   const isFromRenovacao = !!returnAppt?.renovacao_id;
 
@@ -610,6 +614,18 @@ export default function AppointmentsPage() {
     fetchAll();
   };
 
+  const handleEditDialogOpenChange = (open: boolean) => {
+    if (!open && nvDialogOpen) {
+      toast.error("Conclua o registro de orçamento antes de fechar o agendamento.");
+      return;
+    }
+    if (!open && saleDialogOpen) {
+      toast.error("Conclua o registro da venda antes de fechar o agendamento.");
+      return;
+    }
+    setDialogOpen(open);
+  };
+
   return (
     <AppLayout>
       <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -640,13 +656,7 @@ export default function AppointmentsPage() {
         </div>
       </div>
 
-      <Tabs value={pageTab} onValueChange={(v) => setPageTab(v as "calendario" | "lista")}>
-        <TabsList className="mb-3">
-          <TabsTrigger value="calendario">Calendário</TabsTrigger>
-          <TabsTrigger value="lista"><List className="h-3.5 w-3.5 mr-1 inline" />Lista</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="calendario" className="mt-0 space-y-3">
+      <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2">
             <div className="flex items-center gap-1">
               <Button variant="outline" size="sm" onClick={() => setFocusDate(new Date())}>Hoje</Button>
@@ -686,163 +696,10 @@ export default function AppointmentsPage() {
               }}
             />
           )}
-        </TabsContent>
-
-        <TabsContent value="lista" className="mt-0">
-      {loading ? (
-        <p className="text-center text-muted-foreground py-8">Carregando...</p>
-      ) : filteredAppointments.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">Nenhum agendamento encontrado.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/70 border-b">
-                <th className="text-left px-3 py-2.5 font-medium">Nome</th>
-                <th className="text-left px-3 py-2.5 font-medium">Telefone</th>
-                <th className="text-left px-3 py-2.5 font-medium">Idade</th>
-                <th className="text-left px-3 py-2.5 font-medium">Horário</th>
-                <th className="text-left px-3 py-2.5 font-medium">Agendado por</th>
-                <th className="text-left px-3 py-2.5 font-medium">Valor</th>
-                <th className="text-left px-3 py-2.5 font-medium">Consulta paga</th>
-                <th className="text-left px-3 py-2.5 font-medium">Forma de pagamento do Óculos</th>
-                <th className="text-left px-3 py-2.5 font-medium">Canal de Agendamento</th>
-                <th className="text-left px-3 py-2.5 font-medium">Confirmação</th>
-                <th className="text-left px-3 py-2.5 font-medium">Comparecimento</th>
-                <th className="text-left px-3 py-2.5 font-medium">Venda</th>
-                <th className="text-left px-3 py-2.5 font-medium">Resumo</th>
-                <th className="text-left px-3 py-2.5 font-medium">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filteredAppointments.map((appt) => {
-                let dtFormatted = "—";
-                try { dtFormatted = format(new Date(appt.scheduled_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR }); } catch {}
-                const cpaga = appt.consulta_paga;
-                const rowColor = getAppointmentRowColor(appt);
-                const consultaPagaLocked = cpaga === true && !isAdmin;
-                const rescheduleNote = formatRescheduleNote(appt);
-                const isSnapshot = !!appt.is_reschedule_snapshot;
-                return (
-                  <tr
-                    key={appt.id}
-                    className={cn(
-                      "transition-colors",
-                      rowColor,
-                      appt.deleted_at && isAdmin ? "opacity-60" : "",
-                      isSnapshot && "border-dashed",
-                    )}
-                  >
-                    <td className="px-3 py-2 font-medium">
-                      {isSnapshot && <span className="text-violet-400 text-[10px] block">↪ Reagendado</span>}
-                      {appt.nome || "—"}
-                      {rescheduleNote && !isSnapshot && (
-                        <span className="text-[10px] text-muted-foreground block">{rescheduleNote}</span>
-                      )}
-                      {isSnapshot && appt.rescheduled_to_datetime && (
-                        <span className="text-[10px] text-muted-foreground block">
-                          Nova data: {format(new Date(appt.rescheduled_to_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR })}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{appt.telefone || "—"}</td>
-                    <td className="px-3 py-2">{appt.idade || "—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{dtFormatted}</td>
-                    <td className="px-3 py-2">{getProfileName(appt.scheduled_by)}</td>
-                    <td className="px-3 py-2">R$ {Number(appt.valor).toFixed(2)}</td>
-                    <td className="px-3 py-2">
-                      {isSnapshot ? (
-                        <span className="text-xs">{cpaga === true ? "Sim" : cpaga === false ? "Não" : "—"}</span>
-                      ) : (
-                      <Select
-                        value={cpaga === true ? "sim" : cpaga === false ? "nao" : ""}
-                        onValueChange={(v) => updateField(appt.id, "consulta_paga", v)}
-                        disabled={consultaPagaLocked}
-                      >
-                        <SelectTrigger className="h-8 text-xs w-[100px]"><SelectValue placeholder="—" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="sim">Sim</SelectItem>
-                          <SelectItem value="nao">Não</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-xs whitespace-nowrap">
-                      {glassesPaymentLabel(appt)}
-                    </td>
-                    <td className="px-3 py-2">{appt.canal_agendamento}</td>
-                    <td className="px-3 py-2">
-                      {isSnapshot ? appt.confirmacao : (
-                      <Select value={appt.confirmacao} onValueChange={(v) => updateField(appt.id, "confirmacao", v)}>
-                        <SelectTrigger className="h-8 text-xs w-[120px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>{CONFIRMACAO_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-                      </Select>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {isSnapshot ? appt.comparecimento : (
-                      <Select value={appt.comparecimento} onValueChange={(v) => updateField(appt.id, "comparecimento", v)}>
-                        <SelectTrigger className="h-8 text-xs w-[140px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>{COMPARECIMENTO_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-                      </Select>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {isSnapshot ? appt.venda : (
-                      <Select value={appt.venda} onValueChange={(v) => updateField(appt.id, "venda", v)}>
-                        <SelectTrigger className="h-8 text-xs w-[120px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>{VENDA_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-                      </Select>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {isSnapshot ? (
-                        <span className="text-xs">{appt.resumo || "—"}</span>
-                      ) : (
-                      <input
-                        type="text"
-                        className="border rounded px-2 py-1 text-xs w-[150px] bg-background"
-                        defaultValue={appt.resumo}
-                        onBlur={(e) => { if (e.target.value !== appt.resumo) updateField(appt.id, "resumo", e.target.value); }}
-                        placeholder="Observações..."
-                      />
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex gap-1">
-                        {!isSnapshot && appt.venda !== "Vendido" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title={appt.renovacao_id ? "Retornar para Renovações" : "Retornar para Leads"}
-                            onClick={() => setReturnId(appt.id)}
-                          >
-                            <Undo2 className="h-3.5 w-3.5 text-primary" />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(appt)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        {!isSnapshot && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteId(appt.id)}>
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleEditDialogOpenChange}>
         <DialogContent className={cn(editingAppt ? "sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" : "sm:max-w-md")}>
           <DialogHeader>
             <DialogTitle>
@@ -1026,6 +883,33 @@ export default function AppointmentsPage() {
               </>
             )}
 
+            {editingAppt && !editingAppt.is_reschedule_snapshot && (
+              <div className="flex gap-2 pt-1">
+                {editingAppt.venda !== "Vendido" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => { setDialogOpen(false); setReturnId(editingAppt.id); }}
+                  >
+                    <Undo2 className="h-3.5 w-3.5 mr-1" />
+                    {editingAppt.renovacao_id ? "Retornar p/ Renovações" : "Retornar p/ Leads"}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-destructive hover:text-destructive"
+                  onClick={() => { setDialogOpen(false); setDeleteId(editingAppt.id); }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  Excluir
+                </Button>
+              </div>
+            )}
+
             <Button type="submit" className="w-full" disabled={saving || !formDate || !formPagamentoOculos || !formNome || !!editingAppt?.is_reschedule_snapshot}>
               {saving ? "Salvando..." : editingAppt ? "Atualizar" : "Criar Agendamento"}
             </Button>
@@ -1110,12 +994,24 @@ export default function AppointmentsPage() {
       </Dialog>
 
       {/* Não Vendido Dialog */}
-      <Dialog open={nvDialogOpen} onOpenChange={(open) => { if (!open) { setNvDialogOpen(false); setNvApptId(null); } }}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <Dialog open={nvDialogOpen} onOpenChange={handleNvOpenChange}>
+        <DialogContent
+          className="sm:max-w-md max-h-[90vh] overflow-y-auto [&>button]:hidden"
+          onEscapeKeyDown={(e) => {
+            e.preventDefault();
+            toast.error("Preencha as informações e clique em Salvar para continuar.");
+          }}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{nvVendaTipo} — informações</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-start gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>Informe os dados abaixo e clique em Salvar. Esta tela só fecha após salvar.</span>
+            </div>
             <div className="space-y-1.5">
               <Label>Por que o cliente não comprou? <span className="text-destructive">*</span></Label>
               <Textarea value={nvMotivo} onChange={(e) => setNvMotivo(e.target.value)} rows={3} maxLength={1000} placeholder="Ex.: achou caro, vai pensar, etc." />
