@@ -332,33 +332,6 @@ export default function AppointmentsPage() {
     }
   };
 
-  const buildShadowPayload = (appt: Appointment, originalFirst: string, newDtIso: string) => ({
-    lead_id: appt.lead_id,
-    renovacao_id: appt.renovacao_id,
-    scheduled_by: appt.scheduled_by,
-    scheduled_datetime: originalFirst,
-    original_scheduled_datetime: originalFirst,
-    rescheduled_to_datetime: newDtIso,
-    is_reschedule_snapshot: true,
-    snapshot_of_appointment_id: appt.id,
-    valor: appt.valor,
-    forma_pagamento: appt.forma_pagamento_oculos || appt.forma_pagamento || "",
-    forma_pagamento_oculos: appt.forma_pagamento_oculos || appt.forma_pagamento || "",
-    canal_agendamento: appt.canal_agendamento,
-    nome: appt.nome,
-    telefone: appt.telefone,
-    idade: appt.idade,
-    confirmacao: appt.confirmacao,
-    comparecimento: appt.comparecimento,
-    venda: appt.venda,
-    resumo: appt.resumo,
-    previous_status: appt.previous_status,
-    status: "agendado",
-    consulta_paga: appt.consulta_paga,
-    consulta_paga_em: appt.consulta_paga_em,
-    consulta_paga_por: appt.consulta_paga_por,
-  });
-
   const handleReschedule = async () => {
     if (!editingAppt || !formRescheduleDate || !user || editingAppt.is_reschedule_snapshot) return;
     const [h, m] = formRescheduleTime.split(":").map(Number);
@@ -374,46 +347,15 @@ export default function AppointmentsPage() {
     const originalFirst = editingAppt.original_scheduled_datetime || editingAppt.scheduled_datetime;
     setRescheduling(true);
 
-    const { error: updateErr } = await supabase.from("crm_appointments").update({
-      scheduled_datetime: newDtIso,
-      original_scheduled_datetime: originalFirst,
-      rescheduled_from_datetime: originalFirst,
-    } as any).eq("id", editingAppt.id);
+    const { error: rescheduleErr } = await supabase.rpc("reschedule_crm_appointment", {
+      p_appointment_id: editingAppt.id,
+      p_new_datetime: newDtIso,
+    });
 
-    if (updateErr) {
-      toast.error(updateErr.message || "Erro ao reagendar");
+    if (rescheduleErr) {
+      toast.error(rescheduleErr.message || "Erro ao reagendar");
       setRescheduling(false);
       return;
-    }
-
-    const { data: existingShadow } = await supabase
-      .from("crm_appointments")
-      .select("id")
-      .eq("snapshot_of_appointment_id", editingAppt.id)
-      .eq("is_reschedule_snapshot", true)
-      .maybeSingle();
-
-    const shadowPayload = buildShadowPayload(editingAppt, originalFirst, newDtIso);
-    let shadowErr: { message: string } | null = null;
-    if (existingShadow?.id) {
-      const { error } = await supabase.from("crm_appointments").update(shadowPayload as any).eq("id", existingShadow.id);
-      shadowErr = error;
-    } else {
-      const { error } = await supabase.from("crm_appointments").insert(shadowPayload as any);
-      shadowErr = error;
-    }
-
-    if (shadowErr) {
-      toast.error(shadowErr.message || "Erro ao salvar histórico do reagendamento");
-      setRescheduling(false);
-      return;
-    }
-
-    if (editingAppt.lead_id) {
-      await supabase.from("crm_leads").update({ scheduled_date: newDtIso } as any).eq("id", editingAppt.lead_id);
-    }
-    if (editingAppt.renovacao_id) {
-      await supabase.from("crm_renovacoes").update({ scheduled_date: newDtIso } as any).eq("id", editingAppt.renovacao_id);
     }
 
     const origLabel = format(new Date(originalFirst), "dd/MM/yyyy", { locale: ptBR });
@@ -668,7 +610,7 @@ export default function AppointmentsPage() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteId) return;
+    if (!deleteId || !user) return;
     const appt = appointments.find(a => a.id === deleteId);
     // Return lead to original column if it has a real lead_id
     if (appt && appt.lead_id) {
@@ -676,18 +618,25 @@ export default function AppointmentsPage() {
     }
     const { error } = await supabase.from("crm_appointments").update({
       deleted_at: new Date().toISOString(),
-      deleted_by: user?.id || null,
+      deleted_by: user.id,
     }).eq("id", deleteId);
-    if (error) toast.error("Erro ao excluir");
+    if (error) toast.error(error.message || "Erro ao excluir");
     else {
-      if (user) {
-        await logAppointmentHistory(
-          deleteId,
-          user.id,
-          "deleted",
-          `${getProfileName(user.id)} excluiu o agendamento de ${appt?.nome || "lead"}`,
-        );
-      }
+      const actorName = getProfileName(user.id);
+      const leadName = appt?.nome?.trim() || "Lead";
+      const vendedorPart = appt && user.id !== appt.scheduled_by
+        ? ` (vendedor: ${getProfileName(appt.scheduled_by)})`
+        : "";
+      await logAppointmentHistory(
+        deleteId,
+        user.id,
+        "deleted",
+        `${actorName} excluiu o agendamento de ${leadName}${vendedorPart}`,
+        {
+          lead_nome: leadName,
+          scheduled_by: appt?.scheduled_by ?? null,
+        },
+      );
       toast.success(isAdmin ? "Agendamento marcado como excluído" : "Agendamento removido da sua lista");
     }
     setDeleteId(null);

@@ -7,13 +7,7 @@ CREATE POLICY "Gerentes can insert company appointments"
 ON public.crm_appointments FOR INSERT TO authenticated
 WITH CHECK (
   has_role(auth.uid(), 'gerente'::app_role)
-  AND (
-    auth.uid() = scheduled_by
-    OR (
-      COALESCE(is_reschedule_snapshot, false) = true
-      AND is_same_company(scheduled_by)
-    )
-  )
+  AND is_same_company(scheduled_by)
 );
 
 CREATE POLICY "Gerentes can update company appointments"
