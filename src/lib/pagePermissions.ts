@@ -23,7 +23,7 @@ export const APP_PAGES: AppPage[] = [
   { key: "clientes_ativos",      label: "Renovação",              path: "/clientes-ativos" },
   { key: "cobrancas",            label: "Cobranças",              path: "/cobrancas" },
   { key: "cobrancas_fluxo",      label: "Fluxo de Cobrança",      path: "/cobrancas/fluxo" },
-  { key: "tarefas_crediario",    label: "Tarefas",                path: "/tarefas-crediario" },
+  { key: "tarefas_crediario",    label: "Tarefas Crediário",      path: "/tarefas-crediario" },
   { key: "dashboard",            label: "Dashboard",              path: "/dashboard" },
   { key: "meu_dashboard",        label: "Meu Dashboard",          path: "/meu-dashboard" },
   { key: "meu_dashboard_cobranca", label: "Dashboard Cobrança",   path: "/meu-dashboard-cobranca" },

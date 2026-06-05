@@ -9,6 +9,7 @@ import { CalendarClock, CalendarIcon, ChevronLeft, ChevronRight, Plus, Trash2 } 
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
 import CrediarioTasksCalendar, { type CrediarioTask } from "@/components/crediario/CrediarioTasksCalendar";
+import CrediarioRenegociacaoPanel, { type RenegociacaoStatus } from "@/components/crediario/CrediarioRenegociacaoPanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +42,10 @@ type TaskRow = CrediarioTask & {
   phone: string | null;
   cpf: string | null;
   observacao: string | null;
+  renegociacao_status: RenegociacaoStatus;
+  renegociacao_comentario: string | null;
+  completed_at: string | null;
+  parent_task_id: string | null;
 };
 
 function formatCpfBR(value: string): string {
@@ -73,6 +78,10 @@ export default function CrediarioTarefasPage() {
   const [formCpf, setFormCpf] = useState("");
   const [formObservacao, setFormObservacao] = useState("");
   const [formTime, setFormTime] = useState("09:00");
+  const [formRenegociou, setFormRenegociou] = useState<RenegociacaoStatus>(null);
+  const [formRenegComentario, setFormRenegComentario] = useState("");
+  const [formProximaData, setFormProximaData] = useState<Date | undefined>();
+  const [formProximaTime, setFormProximaTime] = useState("09:00");
 
   const { queryStart, queryEnd, label: calendarLabel } = useMemo(
     () => getCalendarQueryRange(focusDate, calendarView),
@@ -86,7 +95,7 @@ export default function CrediarioTarefasPage() {
     const end = toDateString(queryEnd);
     const { data, error } = await supabase
       .from("crediario_tasks")
-      .select("id, lead_name, scheduled_date, scheduled_time, phone, cpf, observacao")
+      .select("id, lead_name, scheduled_date, scheduled_time, phone, cpf, observacao, renegociacao_status, renegociacao_comentario, completed_at, parent_task_id")
       .eq("user_id", user.id)
       .gte("scheduled_date", start)
       .lte("scheduled_date", end)
@@ -109,6 +118,10 @@ export default function CrediarioTarefasPage() {
     setFormCpf("");
     setFormObservacao("");
     setFormTime("09:00");
+    setFormRenegociou(null);
+    setFormRenegComentario("");
+    setFormProximaData(undefined);
+    setFormProximaTime("09:00");
     setEditing(null);
   };
 
@@ -126,6 +139,10 @@ export default function CrediarioTarefasPage() {
     setFormCpf(task.cpf ? formatCpfBR(task.cpf) : "");
     setFormObservacao(task.observacao || "");
     setFormTime((task.scheduled_time || "09:00:00").slice(0, 5));
+    setFormRenegociou((task.renegociacao_status as RenegociacaoStatus) || null);
+    setFormRenegComentario(task.renegociacao_comentario || "");
+    setFormProximaData(undefined);
+    setFormProximaTime("09:00");
     setDialogOpen(true);
   };
 
@@ -141,8 +158,19 @@ export default function CrediarioTarefasPage() {
       return;
     }
 
+    if (editing && formRenegociou === "sim") {
+      if (!formRenegComentario.trim()) {
+        toast.error("Informe os comentários da renegociação");
+        return;
+      }
+      if (!formProximaData) {
+        toast.error("Informe a data da próxima renegociação");
+        return;
+      }
+    }
+
     setSaving(true);
-    const payload = {
+    const payload: Record<string, unknown> = {
       user_id: user.id,
       lead_name: nome,
       scheduled_date: toDateString(formDate),
@@ -152,18 +180,48 @@ export default function CrediarioTarefasPage() {
       observacao: formObservacao.trim() || null,
     };
 
+    if (editing && formRenegociou) {
+      payload.renegociacao_status = formRenegociou;
+      payload.renegociacao_comentario = formRenegComentario.trim() || null;
+      payload.completed_at = new Date().toISOString();
+    }
+
     if (editing) {
       const { error } = await supabase
         .from("crediario_tasks")
         .update(payload)
         .eq("id", editing.id);
-      if (error) toast.error("Erro ao salvar tarefa");
-      else {
-        toast.success("Tarefa atualizada");
-        setDialogOpen(false);
-        resetForm();
-        fetchTasks();
+      if (error) {
+        toast.error("Erro ao salvar tarefa");
+        setSaving(false);
+        return;
       }
+
+      if (formRenegociou === "sim" && formProximaData) {
+        const { error: followUpErr } = await supabase.from("crediario_tasks").insert({
+          user_id: user.id,
+          lead_name: nome,
+          scheduled_date: toDateString(formProximaData),
+          scheduled_time: `${formProximaTime}:00`,
+          phone: unformatPhone(formTelefone) || null,
+          cpf: formCpf.replace(/\D/g, "") || null,
+          observacao: formObservacao.trim() || null,
+          parent_task_id: editing.id,
+        });
+        if (followUpErr) {
+          toast.error("Tarefa salva, mas falhou ao agendar a próxima renegociação");
+        } else {
+          toast.success("Renegociação registrada e próxima tarefa agendada");
+        }
+      } else if (formRenegociou) {
+        toast.success("Renegociação registrada");
+      } else {
+        toast.success("Tarefa atualizada");
+      }
+
+      setDialogOpen(false);
+      resetForm();
+      fetchTasks();
     } else {
       const { error } = await supabase.from("crediario_tasks").insert(payload);
       if (error) toast.error("Erro ao criar tarefa");
@@ -265,71 +323,99 @@ export default function CrediarioTarefasPage() {
           setDialogOpen(open);
         }}
       >
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className={cn(
+          "max-h-[90vh] overflow-y-auto",
+          editing ? "max-w-4xl" : "max-w-md",
+        )}>
           <DialogHeader>
             <DialogTitle>{editing ? "Editar Tarefa" : "Nova Tarefa"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome do lead *</Label>
-              <Input
-                value={formNome}
-                onChange={(e) => setFormNome(e.target.value)}
-                placeholder="Nome completo"
-              />
-            </div>
+            <div className={cn(editing ? "grid grid-cols-1 md:grid-cols-2 gap-6" : "space-y-4")}>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Nome do lead *</Label>
+                  <Input
+                    value={formNome}
+                    onChange={(e) => setFormNome(e.target.value)}
+                    placeholder="Nome completo"
+                  />
+                </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Data do agendamento *</Label>
-                <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !formDate && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formDate ? format(formDate, "PPP", { locale: ptBR }) : "Selecione a data"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={formDate} onSelect={setFormDate} locale={ptBR} />
-                </PopoverContent>
-              </Popover>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Data do agendamento *</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn("w-full justify-start text-left font-normal", !formDate && "text-muted-foreground")}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formDate ? format(formDate, "PPP", { locale: ptBR }) : "Selecione a data"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={formDate} onSelect={setFormDate} locale={ptBR} />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Horário</Label>
+                    <Input type="time" value={formTime} onChange={(e) => setFormTime(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Telefone</Label>
+                  <Input
+                    value={formTelefone}
+                    onChange={(e) => setFormTelefone(formatPhoneBR(e.target.value))}
+                    placeholder="(00) 00000-0000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>CPF</Label>
+                  <Input
+                    value={formCpf}
+                    onChange={(e) => setFormCpf(formatCpfBR(e.target.value))}
+                    placeholder="000.000.000-00"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Observação</Label>
+                  <Textarea
+                    value={formObservacao}
+                    onChange={(e) => setFormObservacao(e.target.value)}
+                    placeholder="O que foi agendado para fazer com o lead"
+                    rows={4}
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Horário</Label>
-                <Input type="time" value={formTime} onChange={(e) => setFormTime(e.target.value)} />
+
+              {editing && !editing.renegociacao_status && (
+                <CrediarioRenegociacaoPanel
+                  status={formRenegociou}
+                  onStatusChange={setFormRenegociou}
+                  comentario={formRenegComentario}
+                  onComentarioChange={setFormRenegComentario}
+                  proximaData={formProximaData}
+                  onProximaDataChange={setFormProximaData}
+                  proximaTime={formProximaTime}
+                  onProximaTimeChange={setFormProximaTime}
+                />
+              )}
+            </div>
+
+            {editing?.renegociacao_status && (
+              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                Renegociação registrada:{" "}
+                {editing.renegociacao_status === "sim" ? "Sim, renegociou" : "Não renegociou"}
+                {editing.renegociacao_comentario ? ` — ${editing.renegociacao_comentario}` : ""}
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Telefone</Label>
-              <Input
-                value={formTelefone}
-                onChange={(e) => setFormTelefone(formatPhoneBR(e.target.value))}
-                placeholder="(00) 00000-0000"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>CPF</Label>
-              <Input
-                value={formCpf}
-                onChange={(e) => setFormCpf(formatCpfBR(e.target.value))}
-                placeholder="000.000.000-00"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Observação</Label>
-              <Textarea
-                value={formObservacao}
-                onChange={(e) => setFormObservacao(e.target.value)}
-                placeholder="O que foi agendado para fazer com o lead"
-                rows={4}
-              />
-            </div>
+            )}
 
             <div className="flex flex-wrap gap-2 justify-end pt-2">
               {editing && (

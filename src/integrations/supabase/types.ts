@@ -62,34 +62,46 @@ export type Database = {
         Row: {
           cpf: string | null
           created_at: string
+          completed_at: string | null
           id: string
           lead_name: string
           observacao: string | null
+          parent_task_id: string | null
           phone: string | null
+          renegociacao_comentario: string | null
+          renegociacao_status: string | null
           scheduled_date: string
           scheduled_time: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          completed_at?: string | null
           cpf?: string | null
           created_at?: string
           id?: string
           lead_name: string
           observacao?: string | null
+          parent_task_id?: string | null
           phone?: string | null
+          renegociacao_comentario?: string | null
+          renegociacao_status?: string | null
           scheduled_date: string
           scheduled_time?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          completed_at?: string | null
           cpf?: string | null
           created_at?: string
           id?: string
           lead_name?: string
           observacao?: string | null
+          parent_task_id?: string | null
           phone?: string | null
+          renegociacao_comentario?: string | null
+          renegociacao_status?: string | null
           scheduled_date?: string
           scheduled_time?: string
           updated_at?: string
