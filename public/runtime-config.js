@@ -1,8 +1,3 @@
-// Aponta o frontend para o Lovable Cloud.
-// Na VPS, o deploy.sh sobrescreve este arquivo apenas se as variáveis
-// FRONTEND_SUPABASE_URL/FRONTEND_SUPABASE_PUBLISHABLE_KEY estiverem definidas.
-window.__CRM_RUNTIME_CONFIG__ = {
-  supabaseUrl: "https://flhycgllttqeczrpmfoc.supabase.co",
-  supabasePublishableKey:
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsaHljZ2xsdHRxZWN6cnBtZm9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMjg0NjAsImV4cCI6MjA5MDkwNDQ2MH0.VjVdVgDzRajcD-2ACZY7-3zFwjP_Ti6pbFIBjW0NnhQ",
-};
+// Dev local: use VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY no .env.
+// Produção (VPS): deploy.sh sobrescreve este arquivo com SUPABASE_PUBLIC_URL do .env.
+window.__CRM_RUNTIME_CONFIG__ = window.__CRM_RUNTIME_CONFIG__ || {};

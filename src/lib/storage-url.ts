@@ -10,5 +10,12 @@ export function resolveStoragePublicUrl(url: string | null | undefined): string 
   if (base && storagePath) {
     return `${base}/storage/v1/object/public/${storagePath[1]}`;
   }
+  // URLs legadas do Lovable Cloud ainda gravadas no banco
+  if (base && /supabase\.co/i.test(url)) {
+    const legacyPath = url.match(/supabase\.co(\/storage\/v1\/object\/public\/.+)$/i);
+    if (legacyPath) {
+      return `${base}${legacyPath[1]}`;
+    }
+  }
   return url;
 }
