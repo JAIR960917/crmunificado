@@ -68,24 +68,24 @@ export default function AppointmentsListTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-lg border w-fit max-w-full">
+      <table className="text-xs w-auto table-fixed">
         <thead>
           <tr className="bg-muted/70 border-b">
-            <th className="text-left px-3 py-2.5 font-medium">Nome</th>
-            <th className="text-left px-3 py-2.5 font-medium">Telefone</th>
-            <th className="text-left px-3 py-2.5 font-medium">Idade</th>
-            <th className="text-left px-3 py-2.5 font-medium">Horário</th>
-            <th className="text-left px-3 py-2.5 font-medium">Agendado por</th>
-            <th className="text-left px-3 py-2.5 font-medium">Valor</th>
-            <th className="text-left px-3 py-2.5 font-medium">Consulta paga</th>
-            <th className="text-left px-3 py-2.5 font-medium">Forma de pagamento do Óculos</th>
-            <th className="text-left px-3 py-2.5 font-medium">Canal de Agendamento</th>
-            <th className="text-left px-3 py-2.5 font-medium">Confirmação</th>
-            <th className="text-left px-3 py-2.5 font-medium">Comparecimento</th>
-            <th className="text-left px-3 py-2.5 font-medium">Venda</th>
-            <th className="text-left px-3 py-2.5 font-medium">Resumo</th>
-            <th className="text-left px-3 py-2.5 font-medium">Ações</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[120px]">Nome</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[100px]">Telefone</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[40px]">Idade</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[110px]">Horário</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[90px]">Agendado por</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[70px]">Valor</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[90px]">Consulta paga</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[100px]">Pag. Óculos</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[50px]">Canal</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[100px]">Confirmação</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[110px]">Comparecimento</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[100px]">Venda</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[100px]">Resumo</th>
+            <th className="text-left px-2 py-1.5 font-medium w-[80px]">Ações</th>
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -99,44 +99,48 @@ export default function AppointmentsListTable({
             const consultaPagaLocked = cpaga === true && !isAdmin;
             const rescheduleNote = formatRescheduleNote(appt);
             const isSnapshot = !!appt.is_reschedule_snapshot;
+            const nameTitle = [
+              appt.nome,
+              isSnapshot ? "Reagendado" : null,
+              rescheduleNote,
+              isSnapshot && appt.rescheduled_to_datetime
+                ? `Nova data: ${format(new Date(appt.rescheduled_to_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR })}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" — ");
 
             return (
               <tr
                 key={appt.id}
                 className={cn(
-                  "transition-colors",
+                  "h-9 transition-colors",
                   rowColor,
                   appt.deleted_at && isAdmin ? "opacity-60" : "",
                   isSnapshot && "border-dashed",
                 )}
               >
-                <td className="px-3 py-2 font-medium">
-                  {isSnapshot && <span className="text-violet-400 text-[10px] block">↪ Reagendado</span>}
-                  {appt.nome || "—"}
-                  {rescheduleNote && !isSnapshot && (
-                    <span className="text-[10px] text-muted-foreground block">{rescheduleNote}</span>
-                  )}
-                  {isSnapshot && appt.rescheduled_to_datetime && (
-                    <span className="text-[10px] text-muted-foreground block">
-                      Nova data: {format(new Date(appt.rescheduled_to_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR })}
-                    </span>
-                  )}
+                <td className="px-2 py-0 align-middle overflow-hidden" title={nameTitle}>
+                  <div className="flex items-center gap-1 min-w-0">
+                    {isSnapshot && <span className="text-violet-400 shrink-0">↪</span>}
+                    <span className="truncate">{appt.nome || "—"}</span>
+                  </div>
                 </td>
-                <td className="px-3 py-2">{appt.telefone || "—"}</td>
-                <td className="px-3 py-2">{appt.idade || "—"}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{dtFormatted}</td>
-                <td className="px-3 py-2">{getProfileName(appt.scheduled_by)}</td>
-                <td className="px-3 py-2">R$ {Number(appt.valor).toFixed(2)}</td>
-                <td className="px-3 py-2">
+                <td className="px-2 py-0 align-middle truncate max-w-0" title={appt.telefone || undefined}>{appt.telefone || "—"}</td>
+                <td className="px-2 py-0 align-middle">{appt.idade || "—"}</td>
+                <td className="px-2 py-0 align-middle whitespace-nowrap">{dtFormatted}</td>
+                <td className="px-2 py-0 align-middle truncate max-w-0" title={getProfileName(appt.scheduled_by)}>{getProfileName(appt.scheduled_by)}</td>
+                <td className="px-2 py-0 align-middle whitespace-nowrap">R$ {Number(appt.valor).toFixed(2)}</td>
+                <td className="px-2 py-0 align-middle">
                   {isSnapshot ? (
-                    <span className="text-xs">{cpaga === true ? "Sim" : cpaga === false ? "Não" : "—"}</span>
+                    <span>{cpaga === true ? "Sim" : cpaga === false ? "Não" : "—"}</span>
                   ) : (
                     <Select
                       value={cpaga === true ? "sim" : cpaga === false ? "nao" : ""}
                       onValueChange={(v) => onUpdateField(appt.id, "consulta_paga", v)}
                       disabled={consultaPagaLocked}
                     >
-                      <SelectTrigger className="h-8 text-xs w-[100px]"><SelectValue placeholder="—" /></SelectTrigger>
+                      <SelectTrigger className="h-7 text-[11px] w-[72px] px-2"><SelectValue placeholder="—" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="sim">Sim</SelectItem>
                         <SelectItem value="nao">Não</SelectItem>
@@ -144,72 +148,72 @@ export default function AppointmentsListTable({
                     </Select>
                   )}
                 </td>
-                <td className="px-3 py-2 text-xs whitespace-nowrap">{glassesPaymentLabel(appt)}</td>
-                <td className="px-3 py-2">{appt.canal_agendamento}</td>
-                <td className="px-3 py-2">
+                <td className="px-2 py-0 align-middle truncate max-w-0" title={glassesPaymentLabel(appt)}>{glassesPaymentLabel(appt)}</td>
+                <td className="px-2 py-0 align-middle">{appt.canal_agendamento}</td>
+                <td className="px-2 py-0 align-middle">
                   {isSnapshot ? appt.confirmacao : (
                     <Select value={appt.confirmacao} onValueChange={(v) => onUpdateField(appt.id, "confirmacao", v)}>
-                      <SelectTrigger className="h-8 text-xs w-[120px]"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 text-[11px] w-[88px] px-2"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {confirmacaoOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-2 py-0 align-middle">
                   {isSnapshot ? appt.comparecimento : (
                     <Select value={appt.comparecimento} onValueChange={(v) => onUpdateField(appt.id, "comparecimento", v)}>
-                      <SelectTrigger className="h-8 text-xs w-[140px]"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 text-[11px] w-[100px] px-2"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {comparecimentoOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-2 py-0 align-middle">
                   {isSnapshot ? appt.venda : (
                     <Select value={appt.venda} onValueChange={(v) => onUpdateField(appt.id, "venda", v)}>
-                      <SelectTrigger className="h-8 text-xs w-[120px]"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 text-[11px] w-[88px] px-2"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {vendaOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-2 py-0 align-middle">
                   {isSnapshot ? (
-                    <span className="text-xs">{appt.resumo || "—"}</span>
+                    <span className="truncate block max-w-[100px]" title={appt.resumo || undefined}>{appt.resumo || "—"}</span>
                   ) : (
                     <input
                       type="text"
-                      className="border rounded px-2 py-1 text-xs w-[150px] bg-background"
+                      className="border rounded px-1.5 h-7 text-[11px] w-[100px] bg-background"
                       defaultValue={appt.resumo}
                       onBlur={(e) => {
                         if (e.target.value !== appt.resumo) onUpdateField(appt.id, "resumo", e.target.value);
                       }}
-                      placeholder="Observações..."
+                      placeholder="Obs..."
                     />
                   )}
                 </td>
-                <td className="px-3 py-2">
-                  <div className="flex gap-1">
+                <td className="px-2 py-0 align-middle">
+                  <div className="flex gap-0.5">
                     {!isSnapshot && appt.venda !== "Vendido" && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7"
+                        className="h-6 w-6"
                         title={appt.renovacao_id ? "Retornar para Renovações" : "Retornar para Leads"}
                         onClick={() => onReturn(appt.id)}
                       >
-                        <Undo2 className="h-3.5 w-3.5 text-primary" />
+                        <Undo2 className="h-3 w-3 text-primary" />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(appt)}>
-                      <Pencil className="h-3.5 w-3.5" />
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEdit(appt)}>
+                      <Pencil className="h-3 w-3" />
                     </Button>
                     {!isSnapshot && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(appt.id)}>
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onDelete(appt.id)}>
+                        <Trash2 className="h-3 w-3 text-destructive" />
                       </Button>
                     )}
                   </div>
