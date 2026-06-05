@@ -14,10 +14,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, isSameDay, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarCheck, Plus, Trash2, CalendarIcon, Undo2, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { CalendarCheck, Plus, Trash2, CalendarIcon, Undo2, ChevronLeft, ChevronRight, AlertTriangle, List } from "lucide-react";
 import AppointmentsCalendar from "@/components/appointments/AppointmentsCalendar";
+import AppointmentsListTable from "@/components/appointments/AppointmentsListTable";
 import {
   getCalendarQueryRange,
   shiftFocusDate,
@@ -105,6 +106,7 @@ export default function AppointmentsPage() {
   const [loading, setLoading] = useState(true);
   const [focusDate, setFocusDate] = useState(() => new Date());
   const [calendarView, setCalendarView] = useState<CalendarViewMode>("month");
+  const [listDay, setListDay] = useState<Date | null>(null);
   const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
   // Add/Edit dialog
@@ -217,6 +219,13 @@ export default function AppointmentsPage() {
         : appointments;
     return sortAppointmentsByTime(base);
   }, [appointments, isAdmin, filterCompanyId, profilesFull]);
+
+  const listDayAppointments = useMemo(() => {
+    if (!listDay) return [];
+    return filteredAppointments.filter((a) =>
+      isSameDay(new Date(a.scheduled_datetime), listDay),
+    );
+  }, [filteredAppointments, listDay]);
 
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
@@ -706,6 +715,65 @@ export default function AppointmentsPage() {
       </div>
 
       <div className="space-y-3">
+          {listDay ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2">
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" onClick={() => setListDay(null)}>
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Calendário
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      const next = addDays(listDay, -1);
+                      setListDay(next);
+                      setFocusDate(next);
+                    }}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      const next = addDays(listDay, 1);
+                      setListDay(next);
+                      setFocusDate(next);
+                    }}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm font-semibold capitalize ml-1 flex items-center gap-1.5">
+                    <List className="h-4 w-4 text-muted-foreground" />
+                    {format(listDay, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {listDayAppointments.length} agendamento(s)
+                </span>
+              </div>
+              <AppointmentsListTable
+                appointments={listDayAppointments}
+                isAdmin={isAdmin}
+                loading={loading}
+                getProfileName={getProfileName}
+                onUpdateField={updateField}
+                onEdit={(a) => {
+                  const full = appointments.find((x) => x.id === a.id);
+                  if (full) openEdit(full);
+                }}
+                onDelete={setDeleteId}
+                onReturn={setReturnId}
+                confirmacaoOptions={CONFIRMACAO_OPTIONS}
+                comparecimentoOptions={COMPARECIMENTO_OPTIONS}
+                vendaOptions={VENDA_OPTIONS}
+              />
+            </>
+          ) : (
+            <>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2">
             <div className="flex items-center gap-1">
               <Button variant="outline" size="sm" onClick={() => setFocusDate(new Date())}>Hoje</Button>
@@ -717,7 +785,13 @@ export default function AppointmentsPage() {
               </Button>
               <span className="text-sm font-semibold capitalize ml-1">{calendarLabel}</span>
             </div>
-            <Select value={calendarView} onValueChange={(v) => setCalendarView(v as CalendarViewMode)}>
+            <Select
+              value={calendarView}
+              onValueChange={(v) => {
+                setListDay(null);
+                setCalendarView(v as CalendarViewMode);
+              }}
+            >
               <SelectTrigger className="h-8 w-[120px] text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -740,10 +814,17 @@ export default function AppointmentsPage() {
                 if (full) openEdit(full);
               }}
               onDayClick={(d) => {
-                setFocusDate(d);
-                setCalendarView("day");
+                if (calendarView === "month") {
+                  setFocusDate(d);
+                  setListDay(d);
+                } else {
+                  setFocusDate(d);
+                  setCalendarView("day");
+                }
               }}
             />
+          )}
+            </>
           )}
       </div>
 
