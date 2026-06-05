@@ -31,6 +31,7 @@ import {
   formatRescheduleNote,
   isAppointmentInactive,
   isMovedToOrcamentos,
+  isRescheduleSnapshotVisibleToUser,
   logAppointmentHistory,
 } from "@/lib/appointmentUtils";
 import AppointmentHistoryPanel from "@/components/appointments/AppointmentHistoryPanel";
@@ -170,6 +171,7 @@ export default function AppointmentsPage() {
     if (!isAdmin) {
       query = query
         .is("deleted_at", null)
+        .eq("is_reschedule_snapshot", false)
         .neq("venda", "Gerou Orçamento")
         .neq("venda", "Não Gerou Orçamento");
     }
@@ -217,7 +219,9 @@ export default function AppointmentsPage() {
             return prof?.company_id === filterCompanyId;
           })
         : appointments;
-    return sortAppointmentsByTime(base);
+    return sortAppointmentsByTime(
+      base.filter((appt) => isRescheduleSnapshotVisibleToUser(appt, isAdmin)),
+    );
   }, [appointments, isAdmin, filterCompanyId, profilesFull]);
 
   const listDayAppointments = useMemo(() => {

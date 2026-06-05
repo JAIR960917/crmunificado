@@ -88,6 +88,15 @@ export function isAppointmentCalendarMuted(appt: Pick<AppointmentColorInput, "de
   return isAppointmentInactive(appt) || isMovedToOrcamentos(appt);
 }
 
+/** Snapshots na data original do reagendamento — visíveis apenas para administradores. */
+export function isRescheduleSnapshotVisibleToUser(
+  appt: { is_reschedule_snapshot?: boolean | null },
+  isAdmin: boolean,
+) {
+  if (!appt.is_reschedule_snapshot) return true;
+  return isAdmin;
+}
+
 export function getAppointmentRowColor(appt: AppointmentColorInput): string {
   if (appt.is_reschedule_snapshot) {
     return "bg-violet-700/35 border-violet-500/50 hover:bg-violet-700/45";
