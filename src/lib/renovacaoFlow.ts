@@ -17,6 +17,31 @@ export type RenovacaoFlowItem = {
 
 export type LastVisitFieldLike = { id: string } | null | undefined;
 
+/** Lê campos de outra ótica das colunas dedicadas ou do jsonb `data` (compatível sem migration). */
+export function getOutraOticaFields(item: RenovacaoFlowItem): {
+  renovou: boolean;
+  dataExame: string | null;
+} {
+  const d = (item.data && typeof item.data === "object" ? item.data : {}) as Record<string, unknown>;
+  const renovou = item.renovou_outra_otica === true || d.renovou_outra_otica === true;
+  const raw = item.data_exame_outra_otica ?? d.data_exame_outra_otica;
+  const dataExame = raw != null && String(raw).trim() ? String(raw).trim() : null;
+  return { renovou, dataExame: renovou ? dataExame : null };
+}
+
+export function mergeOutraOticaIntoData(
+  data: Record<string, unknown> | null | undefined,
+  renovou: boolean,
+  dataExame: string | null,
+): Record<string, unknown> {
+  const base = data && typeof data === "object" ? { ...data } : {};
+  return {
+    ...base,
+    renovou_outra_otica: renovou,
+    data_exame_outra_otica: dataExame,
+  };
+}
+
 export function statusKeyForRenovacao(diasDesdeUltimaCompra: number | null): string {
   if (diasDesdeUltimaCompra === null) return "novo";
   if (diasDesdeUltimaCompra < 365) return "em_contato";
@@ -37,9 +62,8 @@ export function getEffectiveRenovacaoExamDate(
   item: RenovacaoFlowItem,
   lastVisitField?: LastVisitFieldLike,
 ): string | null {
-  if (item.renovou_outra_otica && item.data_exame_outra_otica) {
-    return item.data_exame_outra_otica;
-  }
+  const { renovou, dataExame } = getOutraOticaFields(item);
+  if (renovou && dataExame) return dataExame;
   if (item.data_ultima_compra) return item.data_ultima_compra;
   const d = (item.data && typeof item.data === "object" ? item.data : {}) as Record<string, unknown>;
   if (lastVisitField) {

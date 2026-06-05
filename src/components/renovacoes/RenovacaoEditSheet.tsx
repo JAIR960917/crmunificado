@@ -22,6 +22,7 @@ import { formatPhoneBR } from "@/lib/phoneFormat";
 import ClientProductsTab from "@/components/ClientProductsTab";
 import { recordCardOpen } from "@/lib/cardOpens";
 import RenovacaoContactAttemptForm from "./RenovacaoContactAttemptForm";
+import RenovacaoOutraOticaFields from "./RenovacaoOutraOticaFields";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type CrmStatus = { id: string; key: string; label: string };
@@ -374,6 +375,26 @@ export default function RenovacaoEditSheet(props: Props) {
                 </p>
               )}
               {rootFields.flatMap(f => renderFieldTree(f))}
+
+              {isEditing && (
+                <RenovacaoOutraOticaFields
+                  renovou={!!formData.renovou_outra_otica}
+                  onRenovouChange={(v) => {
+                    setFormData((p) => ({
+                      ...p,
+                      renovou_outra_otica: v,
+                      ...(v ? {} : { data_exame_outra_otica: "" }),
+                    }));
+                  }}
+                  examDate={parseStoredDate(formData.data_exame_outra_otica)}
+                  onExamDateChange={(d) =>
+                    setFormData((p) => ({
+                      ...p,
+                      data_exame_outra_otica: d ? format(d, "yyyy-MM-dd") : "",
+                    }))
+                  }
+                />
+              )}
 
               <div className="space-y-2">
                 <Label>Valor (R$)</Label>

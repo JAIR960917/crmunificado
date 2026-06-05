@@ -25,10 +25,13 @@ import BulkTransferDialog from "@/components/crm/BulkTransferDialog";
 import RenovacaoOutraOticaDialog from "@/components/renovacoes/RenovacaoOutraOticaDialog";
 import {
   DIRECIONAMENTO_STATUS,
+  getOutraOticaFields,
   getRenovacaoExamTimestampFromItem,
   getRenovacaoFlowStatusFromItem,
+  mergeOutraOticaIntoData,
   RENOVACAO_OUTRA_OTICA_FOLLOWUP_DAYS,
 } from "@/lib/renovacaoFlow";
+import { syncRenovacaoOutraOticaFollowup } from "@/lib/renovacaoOutraOticaSave";
 
 type Renovacao = {
   id: string;
@@ -193,7 +196,7 @@ export default function ActiveClientsPage() {
     buildSearchOr,
     refreshKey,
     pollingIntervalMs: 30000,
-    select: "id,data,status,assigned_to,created_by,valor,data_ultima_compra,renovou_outra_otica,data_exame_outra_otica,created_at,updated_at,ssotica_cliente_id,ssotica_company_id",
+    select: "id,data,status,assigned_to,created_by,valor,data_ultima_compra,created_at,updated_at,ssotica_cliente_id,ssotica_company_id",
   });
 
   const loadActivityMeta = useCallback(async () => {
@@ -404,6 +407,9 @@ export default function ActiveClientsPage() {
     if (lastVisitField && item.data_ultima_compra) {
       initial[`field_${lastVisitField.id}`] = item.data_ultima_compra;
     }
+    const outraOtica = getOutraOticaFields(item);
+    initial.renovou_outra_otica = outraOtica.renovou;
+    initial.data_exame_outra_otica = outraOtica.dataExame || "";
     setFormData(initial);
     setFormStatus(item.status);
     setFormAssigned(item.assigned_to || "");
@@ -413,27 +419,48 @@ export default function ActiveClientsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const renovouOutra = !!formData.renovou_outra_otica;
+    const outraDateRaw = formData.data_exame_outra_otica
+      ? String(formData.data_exame_outra_otica).trim()
+      : "";
+    const outraDateStr = renovouOutra && outraDateRaw ? outraDateRaw : null;
+
+    if (renovouOutra && !outraDateStr) {
+      toast.error("Informe a data do último exame na outra ótica.");
+      return;
+    }
+
     setSaving(true);
     const valor = parseFloat(formValor) || 0;
-    const dataToSave: Record<string, any> = { ...formData };
+    const dataToSave: Record<string, any> = mergeOutraOticaIntoData(
+      { ...formData },
+      renovouOutra,
+      outraDateStr,
+    );
     if (nameField) dataToSave.nome = formData[`field_${nameField.id}`] || "";
     if (phoneField) dataToSave.telefone = formData[`field_${phoneField.id}`] || "";
     const lastVisitValue = lastVisitField ? formData[`field_${lastVisitField.id}`] : null;
     const assignedTo = formAssigned || null;
     const hasAssignedUser = !!assignedTo;
-    const flowStatus = getRenovacaoFlowStatusFromItem(
-      {
-        ...editingItem,
-        data: dataToSave,
-        data_ultima_compra: lastVisitValue || editingItem?.data_ultima_compra || null,
-      },
-      lastVisitField,
-    );
+
+    const flowItem = {
+      ...editingItem,
+      data: dataToSave,
+      renovou_outra_otica: renovouOutra,
+      data_exame_outra_otica: outraDateStr,
+      data_ultima_compra: lastVisitValue || editingItem?.data_ultima_compra || null,
+      assigned_to: assignedTo,
+    };
+    const flowStatus = getRenovacaoFlowStatusFromItem(flowItem, lastVisitField);
 
     let resolvedStatus = formStatus;
     if (!hasAssignedUser) {
       resolvedStatus = DIRECIONAMENTO_STATUS;
-    } else if (formStatus === DIRECIONAMENTO_STATUS || editingItem?.status === DIRECIONAMENTO_STATUS) {
+    } else if (
+      formStatus === DIRECIONAMENTO_STATUS
+      || editingItem?.status === DIRECIONAMENTO_STATUS
+      || (editingItem && renovouOutra && outraDateStr && editingItem.status !== "excluidos")
+    ) {
       resolvedStatus = flowStatus;
     }
 
@@ -443,11 +470,34 @@ export default function ActiveClientsPage() {
       assigned_to: assignedTo,
       valor,
       data_ultima_compra: lastVisitValue || null,
+      renovou_outra_otica: renovouOutra,
+      data_exame_outra_otica: outraDateStr,
     };
+
+    const prevOutra = editingItem ? getOutraOticaFields(editingItem) : { renovou: false, dataExame: null };
+    const clientName = String(dataToSave.nome || (editingItem?.data as Record<string, unknown>)?.nome || "");
 
     if (editingItem) {
       const { error } = await supabase.from("crm_renovacoes").update(payload).eq("id", editingItem.id);
-      if (error) toast.error("Erro ao atualizar"); else toast.success("Renovação atualizada");
+      if (error) {
+        toast.error("Erro ao atualizar");
+      } else {
+        try {
+          await syncRenovacaoOutraOticaFollowup({
+            renovacaoId: editingItem.id,
+            renovou: renovouOutra,
+            examDate: outraDateStr ? parseStoredDate(outraDateStr) ?? null : null,
+            dateStr: outraDateStr,
+            previousRenovou: prevOutra.renovou,
+            previousDateStr: prevOutra.dataExame,
+            userId: user?.id,
+            clientName,
+          });
+        } catch {
+          toast.error("Salvo, mas falhou ao criar tarefa de retorno");
+        }
+        toast.success("Renovação atualizada");
+      }
     } else {
       const { data: created, error } = await supabase
         .from("crm_renovacoes")
@@ -703,8 +753,9 @@ export default function ActiveClientsPage() {
 
   const renderCard = (item: Renovacao) => {
     const d = item.data as Record<string, any>;
-    const outraOticaDate = item.renovou_outra_otica && item.data_exame_outra_otica
-      ? parseStoredDate(item.data_exame_outra_otica)
+    const { renovou: renovouOutraOtica, dataExame: outraOticaRaw } = getOutraOticaFields(item);
+    const outraOticaDate = renovouOutraOtica && outraOticaRaw
+      ? parseStoredDate(outraOticaRaw)
       : undefined;
     const lastVisit = outraOticaDate
       ?? (item.data_ultima_compra
@@ -843,7 +894,7 @@ export default function ActiveClientsPage() {
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 ${item.renovou_outra_otica ? "text-amber-600 hover:text-amber-700 hover:bg-amber-500/10" : "text-muted-foreground hover:text-foreground"}`}
+            className={`h-7 w-7 ${renovouOutraOtica ? "text-amber-600 hover:text-amber-700 hover:bg-amber-500/10" : "text-muted-foreground hover:text-foreground"}`}
             title="Renovou em outra ótica"
             onClick={() => setOutraOticaItem(item)}
           >

@@ -125,6 +125,7 @@ export function usePaginatedColumns<T extends { id: string; status: string }>(
           };
         });
       } catch (e) {
+        console.error(`[usePaginatedColumns] ${table}/${statusKey}:`, e);
         setColumns((prev) => ({
           ...prev,
           [statusKey]: {
