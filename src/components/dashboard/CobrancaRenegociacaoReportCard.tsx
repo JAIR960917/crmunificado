@@ -18,6 +18,7 @@ import {
   CalendarX,
   Calendar as CalIcon,
   CheckCircle2,
+  ListTodo,
 } from "lucide-react";
 
 const formatDateForInput = (date: Date) => {
@@ -39,6 +40,8 @@ export default function CobrancaRenegociacaoReportCard({ userId }: Props) {
   const [endDate, setEndDate] = useState(formatDateForInput(new Date()));
   const [totals, setTotals] = useState<CobrancaRenegReportTotals>({
     tratados: 0,
+    cobrancasTratadas: 0,
+    tarefas: 0,
     naoAtenderam: 0,
     atenderam: 0,
     renegociados: 0,
@@ -146,8 +149,21 @@ export default function CobrancaRenegociacaoReportCard({ userId }: Props) {
           <Skeleton className="h-28 w-full" />
         ) : (
           <>
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 mb-4">
-              <SummaryStat label="Cobranças Tratadas" value={totals.tratados} icon={Phone} tone="default" />
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 mb-4">
+              <SummaryStat
+                label="Tratadas"
+                value={totals.tratados}
+                sub={`${totals.cobrancasTratadas} cobrança(s)`}
+                icon={Phone}
+                tone="default"
+              />
+              <SummaryStat
+                label="Tarefas"
+                value={totals.tarefas}
+                sub="Crediário + cobrança"
+                icon={ListTodo}
+                tone="default"
+              />
               <SummaryStat label="Não Atenderam" value={totals.naoAtenderam} icon={PhoneOff} tone="danger" />
               <SummaryStat label="Atenderam" value={totals.atenderam} icon={ThumbsUp} tone="success" />
               <SummaryStat label="Renegociados" value={totals.renegociados} icon={CalendarCheck} tone="success" />
@@ -155,8 +171,8 @@ export default function CobrancaRenegociacaoReportCard({ userId }: Props) {
               <SummaryStat label="Tarefas Concluídas" value={totals.tarefasConcluidas} icon={CheckCircle2} tone="default" />
             </div>
             <p className="text-[11px] text-muted-foreground -mt-1">
-              Tratadas = tentativa de contato ou tarefa alterada no card de cobrança.
-              Renegociados / Não renegociados incluem registros nas cobranças e nas tarefas do crediário.
+              Tratadas = cobranças distintas com contato/tarefa no card + tarefas do crediário criadas ou alteradas.
+              Tarefas = novas tarefas do crediário + tarefas criadas nos cards de cobrança no período.
             </p>
           </>
         )}
@@ -168,11 +184,13 @@ export default function CobrancaRenegociacaoReportCard({ userId }: Props) {
 function SummaryStat({
   label,
   value,
+  sub,
   icon: Icon,
   tone,
 }: {
   label: string;
   value: number;
+  sub?: string;
   icon: React.ComponentType<{ className?: string }>;
   tone: "default" | "success" | "danger" | "warning";
 }) {
@@ -191,6 +209,7 @@ function SummaryStat({
         <Icon className="h-4 w-4 opacity-70 shrink-0" />
       </div>
       <div className="text-2xl font-bold mt-1">{value}</div>
+      {sub && <p className="text-[10px] opacity-75 mt-0.5 leading-snug">{sub}</p>}
     </div>
   );
 }
