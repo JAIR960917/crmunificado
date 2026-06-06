@@ -254,7 +254,7 @@ export default function CrediarioTarefasPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <CalendarClock className="h-6 w-6 text-primary" />
-            <h1 className="text-xl sm:text-2xl font-bold">Tarefas</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">Tarefas Cobrança</h1>
           </div>
           <p className="text-sm text-muted-foreground">{tasks.length} tarefa(s) no período</p>
         </div>

@@ -47,7 +47,7 @@ const mainNavItems: NavItem[] = [
   { path: "/relatorio-vendas",     label: "Relatório de Vendas",    icon: FileBarChart },
   { path: "/",                     label: "Leads",                  icon: LayoutDashboard },
   { path: "/cobrancas",            label: "Cobranças",              icon: Receipt },
-  { path: "/tarefas-crediario",    label: "Tarefas Crediário",      icon: CalendarClock },
+  { path: "/tarefas-crediario",    label: "Tarefas Cobrança",      icon: CalendarClock },
   { path: "/agendamentos",         label: "Agendamentos",           icon: CalendarCheck },
   { path: "/orcamentos",           label: "Orçamentos",             icon: Receipt },
   { path: "/clientes-ativos",      label: "Renovação",              icon: UserCheck },
