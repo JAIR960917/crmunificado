@@ -16,9 +16,16 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toast } from "sonner";
 import { format, isSameDay, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarCheck, Plus, Trash2, CalendarIcon, Undo2, ChevronLeft, ChevronRight, AlertTriangle, List } from "lucide-react";
+import { CalendarCheck, Plus, Trash2, CalendarIcon, Undo2, ChevronLeft, ChevronRight, AlertTriangle, List, Users } from "lucide-react";
 import AppointmentsCalendar from "@/components/appointments/AppointmentsCalendar";
 import AppointmentsListTable from "@/components/appointments/AppointmentsListTable";
+import SpecialistScheduleCalendar from "@/components/appointments/SpecialistScheduleCalendar";
+import {
+  resolveCompanyExamColor,
+  type CompanyWithExamColor,
+  type EyeExamSpecialist,
+  type SpecialistScheduleEntry,
+} from "@/lib/eyeExamSchedule";
 import {
   getCalendarQueryRange,
   shiftFocusDate,
@@ -95,8 +102,9 @@ const FORMAS_PAGAMENTO_VENDA = [
   "Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Convênio", "Boleto", "Cortesia",
 ];
 
-type Company = { id: string; name: string };
+type Company = CompanyWithExamColor;
 type ProfileFull = { user_id: string; full_name: string; company_id: string | null };
+type PageMode = "appointments" | "specialist-schedule";
 
 export default function AppointmentsPage() {
   const { user, isAdmin } = useAuth();
@@ -111,6 +119,11 @@ export default function AppointmentsPage() {
   const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
   const [userCompanyId, setUserCompanyId] = useState<string | null>(null);
   const [eyeExamDayKeys, setEyeExamDayKeys] = useState<Set<string>>(new Set());
+  const [pageMode, setPageMode] = useState<PageMode>("appointments");
+  const [filterSpecialistId, setFilterSpecialistId] = useState<string>("all");
+  const [specialists, setSpecialists] = useState<EyeExamSpecialist[]>([]);
+  const [specialistSchedule, setSpecialistSchedule] = useState<SpecialistScheduleEntry[]>([]);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
 
   // Add/Edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -193,6 +206,82 @@ export default function AppointmentsPage() {
     void fetchEyeExamDays();
   }, [fetchEyeExamDays]);
 
+  const fetchSpecialistSchedule = useCallback(async () => {
+    if (!isAdmin || pageMode !== "specialist-schedule") return;
+    setScheduleLoading(true);
+    const { queryStart, queryEnd } = getCalendarQueryRange(focusDate, "month");
+    let query = supabase
+      .from("company_eye_exam_days")
+      .select(`
+        id,
+        exam_date,
+        company_id,
+        companies ( id, name, exam_schedule_color ),
+        company_eye_exam_day_specialists (
+          specialist_id,
+          eye_exam_specialists ( id, name )
+        )
+      `)
+      .gte("exam_date", format(queryStart, "yyyy-MM-dd"))
+      .lte("exam_date", format(queryEnd, "yyyy-MM-dd"));
+    if (filterCompanyId !== "all") {
+      query = query.eq("company_id", filterCompanyId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      toast.error("Erro ao carregar escala de especialistas");
+      setScheduleLoading(false);
+      return;
+    }
+    const companyColorIndex = new Map(companies.map((c, i) => [c.id, i]));
+    const entries: SpecialistScheduleEntry[] = [];
+    for (const day of data || []) {
+      const row = day as {
+        id: string;
+        exam_date: string;
+        company_id: string;
+        companies: { id: string; name: string; exam_schedule_color: string | null } | null;
+        company_eye_exam_day_specialists?: {
+          specialist_id: string;
+          eye_exam_specialists: { id: string; name: string } | null;
+        }[];
+      };
+      const company = row.companies;
+      if (!company) continue;
+      const color = resolveCompanyExamColor(company, companyColorIndex.get(company.id) ?? 0);
+      for (const link of row.company_eye_exam_day_specialists || []) {
+        const spec = link.eye_exam_specialists;
+        if (!spec) continue;
+        if (filterSpecialistId !== "all" && spec.id !== filterSpecialistId) continue;
+        entries.push({
+          examDate: String(row.exam_date).slice(0, 10),
+          companyId: row.company_id,
+          companyName: company.name,
+          companyColor: color,
+          specialistId: spec.id,
+          specialistName: spec.name,
+          eyeExamDayId: row.id,
+        });
+      }
+    }
+    setSpecialistSchedule(entries);
+    setScheduleLoading(false);
+  }, [isAdmin, pageMode, focusDate, filterCompanyId, filterSpecialistId, companies]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void supabase
+      .from("eye_exam_specialists")
+      .select("id, name, active")
+      .eq("active", true)
+      .order("name")
+      .then(({ data }) => setSpecialists((data || []) as EyeExamSpecialist[]));
+  }, [isAdmin]);
+
+  useEffect(() => {
+    void fetchSpecialistSchedule();
+  }, [fetchSpecialistSchedule]);
+
   const fetchAll = async () => {
     setLoading(true);
     const { queryStart, queryEnd } = getCalendarQueryRange(focusDate, calendarView);
@@ -218,7 +307,7 @@ export default function AppointmentsPage() {
     setProfiles((profRes.data || []) as Profile[]);
     if (isAdmin) {
       const [compRes, profFullRes] = await Promise.all([
-        supabase.from("companies").select("id, name").order("name"),
+        supabase.from("companies").select("id, name, exam_schedule_color").order("name"),
         supabase.from("profiles").select("user_id, full_name, company_id"),
       ]);
       setCompanies((compRes.data || []) as Company[]);
@@ -265,6 +354,26 @@ export default function AppointmentsPage() {
       isSameDay(new Date(a.scheduled_datetime), listDay),
     );
   }, [filteredAppointments, listDay]);
+
+  const scheduleLegend = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; color: string }>();
+    for (const e of specialistSchedule) {
+      if (!seen.has(e.companyId)) {
+        seen.set(e.companyId, { id: e.companyId, name: e.companyName, color: e.companyColor });
+      }
+    }
+    if (seen.size > 0) return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    const companyColorIndex = new Map(companies.map((c, i) => [c.id, i]));
+    const list =
+      filterCompanyId === "all"
+        ? companies
+        : companies.filter((c) => c.id === filterCompanyId);
+    return list.map((c) => ({
+      id: c.id,
+      name: c.name,
+      color: resolveCompanyExamColor(c, companyColorIndex.get(c.id) ?? 0),
+    }));
+  }, [specialistSchedule, companies, filterCompanyId]);
 
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
@@ -749,10 +858,33 @@ export default function AppointmentsPage() {
             <CalendarCheck className="h-6 w-6 text-primary" />
             <h1 className="text-xl sm:text-2xl font-bold">Agendamentos</h1>
           </div>
-          <p className="text-sm text-muted-foreground">{filteredAppointments.length} agendamento(s)</p>
+          <p className="text-sm text-muted-foreground">
+            {pageMode === "specialist-schedule" && isAdmin
+              ? `${specialistSchedule.length} escala(s) no período`
+              : `${filteredAppointments.length} agendamento(s)`}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && companies.length > 0 && (
+          {isAdmin && (
+            <Select
+              value={pageMode}
+              onValueChange={(v) => {
+                const mode = v as PageMode;
+                setPageMode(mode);
+                setListDay(null);
+                if (mode === "specialist-schedule") setCalendarView("month");
+              }}
+            >
+              <SelectTrigger className="h-8 w-[200px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="appointments">Agendamentos</SelectItem>
+                <SelectItem value="specialist-schedule">Escala de especialistas</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          {isAdmin && pageMode === "specialist-schedule" && companies.length > 0 && (
             <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
               <SelectTrigger className="h-8 w-[180px] text-xs">
                 <SelectValue placeholder="Todas empresas" />
@@ -765,14 +897,86 @@ export default function AppointmentsPage() {
               </SelectContent>
             </Select>
           )}
-          <Button size="sm" onClick={openAdd}>
-            <Plus className="mr-1 h-4 w-4" /> Novo Agendamento
-          </Button>
+          {isAdmin && pageMode === "specialist-schedule" && (
+            <Select value={filterSpecialistId} onValueChange={setFilterSpecialistId}>
+              <SelectTrigger className="h-8 w-[180px] text-xs">
+                <SelectValue placeholder="Especialista" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos especialistas</SelectItem>
+                {specialists.map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {isAdmin && companies.length > 0 && pageMode === "appointments" && (
+            <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
+              <SelectTrigger className="h-8 w-[180px] text-xs">
+                <SelectValue placeholder="Todas empresas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas empresas</SelectItem>
+                {companies.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {pageMode === "appointments" && (
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="mr-1 h-4 w-4" /> Novo Agendamento
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="space-y-3">
-          {listDay ? (
+          {pageMode === "specialist-schedule" && isAdmin ? (
+            <>
+              {scheduleLegend.length > 0 && (
+                <div className="rounded-lg border bg-card px-3 py-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5" />
+                    Gabarito — cor por loja
+                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {scheduleLegend.map((c) => (
+                      <span key={c.id} className="inline-flex items-center gap-1.5 text-xs">
+                        <span
+                          className="h-3.5 w-3.5 rounded-sm border border-black/10 shrink-0"
+                          style={{ backgroundColor: c.color }}
+                        />
+                        {c.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2">
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" onClick={() => setFocusDate(new Date())}>Hoje</Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setFocusDate((d) => shiftFocusDate(d, "month", -1))}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setFocusDate((d) => shiftFocusDate(d, "month", 1))}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm font-semibold capitalize ml-1">
+                    {format(focusDate, "MMMM 'de' yyyy", { locale: ptBR })}
+                  </span>
+                </div>
+              </div>
+              {scheduleLoading ? (
+                <p className="text-center text-muted-foreground py-8">Carregando escala...</p>
+              ) : (
+                <SpecialistScheduleCalendar
+                  focusDate={focusDate}
+                  entries={specialistSchedule}
+                />
+              )}
+            </>
+          ) : listDay ? (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2">
                 <div className="flex items-center gap-1">
