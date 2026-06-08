@@ -72,6 +72,8 @@ type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   profiles: Profile[];
+  /** Perfis permitidos no campo "Atribuído a" (gerente: vendedores da própria loja) */
+  assignableProfiles?: Profile[];
   companies: Company[];
   currentUserName: string;
   formData: Record<string, any>;
@@ -278,7 +280,7 @@ const formatStoredDateLabel = (value: unknown) => {
 };
 
 export default function LeadFormDialog({
-  open, onOpenChange, profiles, companies, currentUserName,
+  open, onOpenChange, profiles, assignableProfiles, companies, currentUserName,
   formData, setFormData, formStatus, setFormStatus, formAssigned,
   setFormAssigned, saving, isEditing, canReassign, onSubmit, statusOptions, statusLabels,
   leadId, onActivityChange, onLeadStatusChange,
@@ -327,6 +329,7 @@ export default function LeadFormDialog({
   const [tratativaRegistrada, setTratativaRegistrada] = useState(false);
   const [contactDirty, setContactDirty] = useState(false);
   const requiresTratativa = isEditing && !isAdmin;
+  const reassignOptions = assignableProfiles ?? profiles;
 
   useEffect(() => {
     if (open) {
@@ -858,7 +861,7 @@ export default function LeadFormDialog({
                       <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Ninguém" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">Ninguém</SelectItem>
-                        {profiles.map((p) => {
+                        {reassignOptions.map((p) => {
                           const roleLabel = profileRoles[p.user_id] ? ` (${profileRoles[p.user_id]})` : "";
                           return (
                             <SelectItem key={p.user_id} value={p.user_id}>

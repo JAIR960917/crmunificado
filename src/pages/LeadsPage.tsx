@@ -93,6 +93,7 @@ export default function LeadsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [fullProfiles, setFullProfiles] = useState<Profile[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
+  const [assignableUserIds, setAssignableUserIds] = useState<Set<string> | null>(null);
   const [bulkTransferOpen, setBulkTransferOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -237,6 +238,26 @@ export default function LeadsPage() {
         }
       }
       setCompanies(allowedCompanies);
+      if (isAdmin) {
+        setAssignableUserIds(null);
+      } else if (isGerente) {
+        const companyIds = new Set<string>();
+        if (myProfile?.company_id) companyIds.add(myProfile.company_id);
+        (managerCos || []).forEach((mc: { company_id?: string }) => mc.company_id && companyIds.add(mc.company_id));
+        if (companyIds.size > 0) {
+          setAssignableUserIds(
+            new Set(
+              (fullProfs || [])
+                .filter((p: Profile) => p.company_id && companyIds.has(p.company_id))
+                .map((p: Profile) => p.user_id),
+            ),
+          );
+        } else {
+          setAssignableUserIds(new Set());
+        }
+      } else {
+        setAssignableUserIds(new Set());
+      }
       const loadedFields = (ff || []) as unknown as FormFieldInfo[];
       setFormFields(loadedFields);
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
@@ -468,6 +489,10 @@ export default function LeadsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isGerente && !isAdmin && formAssigned && !assignableProfiles.some((p) => p.user_id === formAssigned)) {
+      toast.error("Você só pode atribuir leads aos vendedores da sua loja.");
+      return;
+    }
     setSaving(true);
     if (editingLead) {
       const isExcluded = editingLead.status === "excluidos";
@@ -762,6 +787,25 @@ export default function LeadsPage() {
     [userRoles],
   );
 
+  const assignableProfiles = useMemo(
+    () =>
+      profiles.filter(
+        (p) =>
+          p.full_name?.trim()
+          && (isAdmin || vendedorIds.has(p.user_id))
+          && (assignableUserIds === null || assignableUserIds.has(p.user_id)),
+      ),
+    [profiles, isAdmin, vendedorIds, assignableUserIds],
+  );
+
+  const reassignProfileOptions = useMemo(() => {
+    if (!formAssigned || assignableProfiles.some((p) => p.user_id === formAssigned)) {
+      return assignableProfiles;
+    }
+    const current = profiles.find((p) => p.user_id === formAssigned);
+    return current ? [...assignableProfiles, current] : assignableProfiles;
+  }, [assignableProfiles, formAssigned, profiles]);
+
   const bulkTransferSourceProfiles = useMemo(() => {
     if (!isAdmin && !isGerente) return [];
     const base = isAdmin ? fullProfiles : vendedorOptions;
@@ -771,8 +815,8 @@ export default function LeadsPage() {
   const bulkTransferDestProfiles = useMemo(() => {
     if (!isAdmin && !isGerente) return [];
     if (isAdmin) return fullProfiles.filter((p) => p.full_name?.trim());
-    return vendedorOptions.filter((p) => p.full_name?.trim() && vendedorIds.has(p.user_id));
-  }, [fullProfiles, vendedorOptions, isAdmin, isGerente, vendedorIds]);
+    return assignableProfiles;
+  }, [fullProfiles, isAdmin, isGerente, assignableProfiles]);
 
   // Helper to get lead name/phone for search
   const getLeadSearchText = useCallback((lead: Lead) => {
@@ -1129,6 +1173,7 @@ export default function LeadsPage() {
         open={open}
         onOpenChange={setOpen}
         profiles={profiles}
+        assignableProfiles={reassignProfileOptions}
         companies={companies}
         currentUserName={currentUserName}
         formData={formData}
@@ -1211,7 +1256,7 @@ export default function LeadsPage() {
             <Select value={restoreAssignee} onValueChange={setRestoreAssignee}>
               <SelectTrigger><SelectValue placeholder="Selecione o responsável" /></SelectTrigger>
               <SelectContent>
-                {profiles.map((p) => (
+                {assignableProfiles.map((p) => (
                   <SelectItem key={p.user_id} value={p.user_id}>{p.full_name || p.email}</SelectItem>
                 ))}
               </SelectContent>
