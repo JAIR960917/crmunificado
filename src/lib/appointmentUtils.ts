@@ -185,3 +185,20 @@ export async function logAppointmentHistory(
     details,
   });
 }
+
+/** Lead IDs com agendamento ativo (ainda na tela de Agendamentos). */
+export async function fetchActiveAppointedLeadIds(): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("crm_appointments")
+    .select("lead_id")
+    .eq("status", "agendado")
+    .is("deleted_at", null)
+    .is("returned_at", null)
+    .not("lead_id", "is", null);
+  if (error) return new Set();
+  return new Set(
+    (data || [])
+      .map((row) => row.lead_id)
+      .filter((id): id is string => !!id),
+  );
+}

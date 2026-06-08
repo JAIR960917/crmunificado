@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 import { useVisibleStatusKeys } from "@/hooks/use-visible-status-keys";
 import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
-import { resolveCanalFromLeadData } from "@/lib/appointmentUtils";
+import { resolveCanalFromLeadData, fetchActiveAppointedLeadIds } from "@/lib/appointmentUtils";
 import { getLeadExamTimestamp, sortKanbanByExamAndTratativa } from "@/lib/kanbanCardSort";
 import BulkTransferDialog from "@/components/crm/BulkTransferDialog";
 
@@ -254,14 +254,14 @@ export default function LeadsPage() {
 
       // Fetch secondary data separately (won't break leads display if it fails)
       try {
-        const [{ data: activeAppts }, { data: actData }, { data: noteData }] = await Promise.all([
-          supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
+        const [appointedIds, actRes, noteRes] = await Promise.all([
+          fetchActiveAppointedLeadIds(),
           supabase.from("lead_activities").select("id, lead_id, title, scheduled_date, completed_at"),
           supabase.from("crm_lead_notes").select("lead_id"),
         ]);
-        setAppointedLeadIds(new Set((activeAppts || []).map((a: any) => a.lead_id)));
-        setLeadActivities((actData || []) as LeadActivity[]);
-        setLeadNoteIds(new Set((noteData || []).map((n: any) => n.lead_id)));
+        setAppointedLeadIds(appointedIds);
+        setLeadActivities((actRes.data || []) as LeadActivity[]);
+        setLeadNoteIds(new Set((noteRes.data || []).map((n: { lead_id: string }) => n.lead_id)));
       } catch {
         // Secondary data failed, leads still visible
       }
@@ -664,14 +664,14 @@ export default function LeadsPage() {
 
   const refreshLeadSecondaryMeta = useCallback(async () => {
     try {
-      const [{ data: activeAppts }, { data: actData }, { data: noteData }] = await Promise.all([
-        supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
+      const [appointedIds, actRes, noteRes] = await Promise.all([
+        fetchActiveAppointedLeadIds(),
         supabase.from("lead_activities").select("id, lead_id, title, scheduled_date, completed_at"),
         supabase.from("crm_lead_notes").select("lead_id"),
       ]);
-      setAppointedLeadIds(new Set((activeAppts || []).map((a: { lead_id: string }) => a.lead_id)));
-      setLeadActivities((actData || []) as LeadActivity[]);
-      setLeadNoteIds(new Set((noteData || []).map((n: { lead_id: string }) => n.lead_id)));
+      setAppointedLeadIds(appointedIds);
+      setLeadActivities((actRes.data || []) as LeadActivity[]);
+      setLeadNoteIds(new Set((noteRes.data || []).map((n: { lead_id: string }) => n.lead_id)));
     } catch {
       /* notas/atividades são secundárias */
     }
