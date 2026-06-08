@@ -171,8 +171,8 @@ export default function CobrancaRenegociacaoReportCard({ userId }: Props) {
               <SummaryStat label="Tarefas Concluídas" value={totals.tarefasConcluidas} icon={CheckCircle2} tone="default" />
             </div>
             <p className="text-[11px] text-muted-foreground -mt-1">
-              Tratadas = cobranças distintas com contato/tarefa no card + tarefas do crediário criadas ou alteradas.
-              Tarefas = novas tarefas do crediário + tarefas criadas nos cards de cobrança no período.
+              Tratadas = cobranças distintas com tentativa de contato ou tarefa manual no card + tarefas do crediário criadas ou concluídas com renegociação (sem mudanças automáticas de coluna ou WhatsApp do fluxo).
+              Tarefas = novas tarefas do crediário + tarefas manuais criadas nos cards de cobrança no período.
             </p>
           </>
         )}

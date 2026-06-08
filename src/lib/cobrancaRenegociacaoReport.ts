@@ -2,11 +2,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { attendanceRangeBounds } from "@/lib/attendanceReport";
 
 export type CobrancaRenegReportTotals = {
-  /** Total de tratativas: cobranças distintas + tarefas do crediário no período */
+  /** Cobranças distintas + tarefas do crediário com trabalho real no período */
   tratados: number;
-  /** Cobranças distintas com contato ou tarefa no card */
+  /** Cobranças distintas com tentativa de contato ou tarefa manual no card */
   cobrancasTratadas: number;
-  /** Tarefas registradas no período (crediário + tarefas nos cards de cobrança) */
+  /** Tarefas manuais criadas no período (crediário + cards de cobrança) */
   tarefas: number;
   naoAtenderam: number;
   atenderam: number;
@@ -27,6 +27,11 @@ const inRange = (iso: string, startISO: string, endISO: string) =>
 
 const isContactAttemptNote = (content: string) => content.startsWith("📞 Tentativa de contato");
 
+const isSystemCobrancaActivity = (title: string | null | undefined) => {
+  const t = title || "";
+  return t.startsWith("Mudou de coluna:") || t.startsWith("WhatsApp enviado —");
+};
+
 const classifyCobrancaContactNote = (content: string): ContactCat | null => {
   if (!isContactAttemptNote(content)) return null;
   if (content.includes("NÃO ATENDEU")) return "naoAtendeu";
@@ -44,6 +49,7 @@ type CobActivityRow = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  title?: string | null;
 };
 
 type CrediarioTaskRow = {
@@ -55,25 +61,32 @@ type CrediarioTaskRow = {
   completed_at: string | null;
 };
 
-function mergeById<T extends { id: string }>(...lists: (T[] | null | undefined)[]): T[] {
-  const map = new Map<string, T>();
-  for (const list of lists) {
-    for (const row of list || []) map.set(row.id, row);
-  }
-  return [...map.values()];
-}
-
-function filterActivitiesInRange(
-  rows: CobActivityRow[],
+const activityCountsAsTratado = (
+  a: CobActivityRow,
   startISO: string,
   endISO: string,
-): CobActivityRow[] {
-  return rows.filter(
-    (a) =>
-      inRange(a.created_at, startISO, endISO)
-      || inRange(a.updated_at, startISO, endISO),
-  );
-}
+) => {
+  if (isSystemCobrancaActivity(a.title)) return false;
+  if (inRange(a.created_at, startISO, endISO)) return true;
+  if (inRange(a.updated_at, startISO, endISO) && a.updated_at !== a.created_at) return true;
+  return false;
+};
+
+const crediarioCountsAsTratado = (
+  t: CrediarioTaskRow,
+  startISO: string,
+  endISO: string,
+) => {
+  if (inRange(t.created_at, startISO, endISO)) return true;
+  if (
+    t.completed_at
+    && inRange(t.completed_at, startISO, endISO)
+    && t.renegociacao_status
+  ) {
+    return true;
+  }
+  return false;
+};
 
 export async function fetchCobrancaRenegociacaoReport(
   userId: string,
@@ -84,10 +97,8 @@ export async function fetchCobrancaRenegociacaoReport(
 
   const [
     { data: cobNotes },
-    { data: cobActivitiesCreated },
-    { data: cobActivitiesUpdated },
+    { data: cobActivities },
     { data: crediarioCreated },
-    { data: crediarioUpdated },
     { data: crediarioCompleted },
   ] = await Promise.all([
     supabase
@@ -98,13 +109,7 @@ export async function fetchCobrancaRenegociacaoReport(
       .lte("created_at", endISO),
     supabase
       .from("cobranca_activities")
-      .select("id, cobranca_id, created_by, created_at, updated_at")
-      .eq("created_by", userId)
-      .gte("created_at", startISO)
-      .lte("created_at", endISO),
-    supabase
-      .from("cobranca_activities")
-      .select("id, cobranca_id, created_by, created_at, updated_at")
+      .select("id, cobranca_id, created_by, created_at, updated_at, title")
       .eq("created_by", userId)
       .gte("updated_at", startISO)
       .lte("updated_at", endISO),
@@ -114,12 +119,6 @@ export async function fetchCobrancaRenegociacaoReport(
       .eq("user_id", userId)
       .gte("created_at", startISO)
       .lte("created_at", endISO),
-    supabase
-      .from("crediario_tasks")
-      .select("id, user_id, created_at, updated_at, renegociacao_status, completed_at")
-      .eq("user_id", userId)
-      .gte("updated_at", startISO)
-      .lte("updated_at", endISO),
     supabase
       .from("crediario_tasks")
       .select("id, user_id, created_at, updated_at, renegociacao_status, completed_at")
@@ -130,29 +129,9 @@ export async function fetchCobrancaRenegociacaoReport(
       .lte("completed_at", endISO),
   ]);
 
-  const cobActivities = filterActivitiesInRange(
-    mergeById(
-      (cobActivitiesCreated || []) as CobActivityRow[],
-      (cobActivitiesUpdated || []) as CobActivityRow[],
-    ),
-    startISO,
-    endISO,
+  const manualCobActivities = ((cobActivities || []) as CobActivityRow[]).filter((a) =>
+    activityCountsAsTratado(a, startISO, endISO),
   );
-
-  const crediarioInPeriod = mergeById<CrediarioTaskRow>(
-    (crediarioCreated || []) as CrediarioTaskRow[],
-    (crediarioUpdated || []) as CrediarioTaskRow[],
-  );
-
-  const crediarioTaskMap = new Map<string, CrediarioTaskRow>();
-  for (const t of crediarioInPeriod) {
-    if (
-      inRange(t.created_at, startISO, endISO)
-      || inRange(t.updated_at, startISO, endISO)
-    ) {
-      crediarioTaskMap.set(t.id, t);
-    }
-  }
 
   const cobrancasTratadasSet = new Set<string>();
   const tratadosSet = new Set<string>();
@@ -163,25 +142,32 @@ export async function fetchCobrancaRenegociacaoReport(
     tratadosSet.add(`cobranca:${n.cobranca_id}`);
   });
 
-  cobActivities.forEach((a) => {
+  manualCobActivities.forEach((a) => {
     cobrancasTratadasSet.add(a.cobranca_id);
     tratadosSet.add(`cobranca:${a.cobranca_id}`);
   });
 
-  crediarioTaskMap.forEach((t) => {
-    tratadosSet.add(`crediario:${t.id}`);
+  const crediarioCreatedInPeriod = (crediarioCreated || []) as CrediarioTaskRow[];
+  const crediarioCompletedInPeriod = (crediarioCompleted || []) as CrediarioTaskRow[];
+
+  const crediarioWorked = new Map<string, CrediarioTaskRow>();
+  crediarioCreatedInPeriod.forEach((t) => crediarioWorked.set(t.id, t));
+  crediarioCompletedInPeriod.forEach((t) => {
+    if (crediarioCountsAsTratado(t, startISO, endISO)) crediarioWorked.set(t.id, t);
+  });
+
+  crediarioWorked.forEach((t) => {
+    if (crediarioCountsAsTratado(t, startISO, endISO)) {
+      tratadosSet.add(`crediario:${t.id}`);
+    }
   });
 
   let tarefasCobranca = 0;
-  let tarefasCrediario = 0;
-
-  cobActivities.forEach((a) => {
+  manualCobActivities.forEach((a) => {
     if (inRange(a.created_at, startISO, endISO)) tarefasCobranca += 1;
   });
 
-  crediarioTaskMap.forEach((t) => {
-    if (inRange(t.created_at, startISO, endISO)) tarefasCrediario += 1;
-  });
+  const tarefasCrediario = crediarioCreatedInPeriod.length;
 
   type LastEntry = { ts: number; cat: ContactCat };
   const latestPerCardDay = new Map<string, LastEntry>();
@@ -210,7 +196,7 @@ export async function fetchCobrancaRenegociacaoReport(
   let renegociadosTasks = 0;
   let naoRenegociadosTasks = 0;
 
-  ((crediarioCompleted || []) as CrediarioTaskRow[]).forEach((t) => {
+  crediarioCompletedInPeriod.forEach((t) => {
     if (t.renegociacao_status === "sim") renegociadosTasks += 1;
     else if (t.renegociacao_status === "nao") naoRenegociadosTasks += 1;
   });
@@ -228,6 +214,6 @@ export async function fetchCobrancaRenegociacaoReport(
     atenderam,
     renegociados,
     naoRenegociados,
-    tarefasConcluidas: (crediarioCompleted || []).length,
+    tarefasConcluidas: crediarioCompletedInPeriod.length,
   };
 }
