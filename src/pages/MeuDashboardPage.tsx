@@ -27,6 +27,46 @@ type TaskRow = {
   title: string;
 };
 
+const chunk = <T,>(items: T[], size: number): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+};
+
+async function fetchPendingActivities(
+  table: "lead_activities" | "renovacao_activities",
+  fk: "lead_id" | "renovacao_id",
+  parentIds: string[],
+  mode: "overdue" | "upcoming",
+  nowIso: string,
+) {
+  if (parentIds.length === 0) return [] as Activity[];
+  const rows: Activity[] = [];
+  for (const ids of chunk(parentIds, 100)) {
+    let query = supabase
+      .from(table)
+      .select(`id, ${fk}, title, scheduled_date`)
+      .in(fk, ids)
+      .is("completed_at", null)
+      .order("scheduled_date", { ascending: true });
+    query = mode === "overdue"
+      ? query.lt("scheduled_date", nowIso)
+      : query.gte("scheduled_date", nowIso);
+    const { data, error } = await query;
+    if (error) throw error;
+    for (const a of data || []) {
+      const row = a as Record<string, string>;
+      rows.push({
+        id: row.id,
+        ref_id: row[fk],
+        scheduled_date: row.scheduled_date,
+        title: row.title,
+      });
+    }
+  }
+  return rows;
+}
+
 export default function MeuDashboardPage() {
   const { user, isGerente, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -46,24 +86,38 @@ export default function MeuDashboardPage() {
       const uid = user.id;
       const now = new Date();
       const nowIso = now.toISOString();
-      const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      const endNext7Days = new Date(startToday);
-      endNext7Days.setDate(endNext7Days.getDate() + 6);
-      endNext7Days.setHours(23, 59, 59, 999);
-      const endNext7DaysIso = endNext7Days.toISOString();
 
-      // 1) IDs leves dos leads/renovações do usuário (sem o data pesado).
-      const [leadIdsRes, renovIdsRes, leadFieldsRes, renovFieldsRes, leadStatusRes, renovStatusRes] = await Promise.all([
+      const scopeOr = async (): Promise<string> => {
+        if (!isGerenteView) return `assigned_to.eq.${uid},created_by.eq.${uid}`;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("user_id", uid)
+          .maybeSingle();
+        const companyId = (profile as { company_id?: string | null } | null)?.company_id;
+        if (!companyId) return `assigned_to.eq.${uid},created_by.eq.${uid}`;
+        const { data: team } = await supabase
+          .from("profiles")
+          .select("user_id")
+          .eq("company_id", companyId);
+        const teamIds = Array.from(new Set((team || []).map((p: { user_id: string }) => p.user_id)));
+        if (teamIds.length === 0) return `assigned_to.eq.${uid},created_by.eq.${uid}`;
+        return teamIds.flatMap((id) => [`assigned_to.eq.${id}`, `created_by.eq.${id}`]).join(",");
+      };
+
+      const ownerFilter = await scopeOr();
+
+      const [leadsRes, renovRes, leadFieldsRes, renovFieldsRes, leadStatusRes, renovStatusRes] = await Promise.all([
         supabase
           .from("crm_leads")
-          .select("id", { count: "exact", head: true })
+          .select("id, data, status")
           .neq("status", "excluidos")
-          .or(`assigned_to.eq.${uid},created_by.eq.${uid}`),
+          .or(ownerFilter),
         supabase
           .from("crm_renovacoes")
-          .select("id", { count: "exact", head: true })
+          .select("id, data, status")
           .neq("status", "excluidos")
-          .or(`assigned_to.eq.${uid},created_by.eq.${uid}`),
+          .or(ownerFilter),
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field"),
         supabase.from("crm_renovacao_form_fields").select("id, label, is_name_field, is_phone_field"),
         supabase.from("crm_statuses").select("key, label"),
@@ -75,76 +129,22 @@ export default function MeuDashboardPage() {
       const leadStatuses = new Map(((leadStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
       const renovStatuses = new Map(((renovStatusRes.data || []) as StatusRow[]).map((s) => [s.key, s.label]));
 
-      // 2) Tarefas pendentes: atrasadas (antes de agora) e próximos 7 dias (de agora até fim do 7º dia).
-      const [leadOverdueRes, renovOverdueRes, leadUpcomingRes, renovUpcomingRes] = await Promise.all([
-        supabase
-          .from("lead_activities")
-          .select("id, lead_id, title, scheduled_date")
-          .is("completed_at", null)
-          .lt("scheduled_date", nowIso)
-          .order("scheduled_date", { ascending: true })
-          .limit(2000),
-        supabase
-          .from("renovacao_activities")
-          .select("id, renovacao_id, title, scheduled_date")
-          .is("completed_at", null)
-          .lt("scheduled_date", nowIso)
-          .order("scheduled_date", { ascending: true })
-          .limit(2000),
-        supabase
-          .from("lead_activities")
-          .select("id, lead_id, title, scheduled_date")
-          .is("completed_at", null)
-          .gte("scheduled_date", nowIso)
-          .lte("scheduled_date", endNext7DaysIso)
-          .order("scheduled_date", { ascending: true })
-          .limit(2000),
-        supabase
-          .from("renovacao_activities")
-          .select("id, renovacao_id, title, scheduled_date")
-          .is("completed_at", null)
-          .gte("scheduled_date", nowIso)
-          .lte("scheduled_date", endNext7DaysIso)
-          .order("scheduled_date", { ascending: true })
-          .limit(2000),
-      ]);
+      const leads = (leadsRes.data || []) as Item[];
+      const renovacoes = (renovRes.data || []) as Item[];
+      const leadIds = leads.map((l) => l.id);
+      const renovIds = renovacoes.map((r) => r.id);
 
-      const leadOverdueActs: Activity[] = ((leadOverdueRes.data || []) as any[]).map((a) => ({
-        id: a.id, ref_id: a.lead_id, scheduled_date: a.scheduled_date, title: a.title,
-      }));
-      const renovOverdueActs: Activity[] = ((renovOverdueRes.data || []) as any[]).map((a) => ({
-        id: a.id, ref_id: a.renovacao_id, scheduled_date: a.scheduled_date, title: a.title,
-      }));
-      const leadUpcomingActs: Activity[] = ((leadUpcomingRes.data || []) as any[]).map((a) => ({
-        id: a.id, ref_id: a.lead_id, scheduled_date: a.scheduled_date, title: a.title,
-      }));
-      const renovUpcomingActs: Activity[] = ((renovUpcomingRes.data || []) as any[]).map((a) => ({
-        id: a.id, ref_id: a.renovacao_id, scheduled_date: a.scheduled_date, title: a.title,
-      }));
-
-      // 3) Buscar `data` apenas dos itens que têm atividade relevante.
-      const neededLeadIds = Array.from(new Set([
-        ...leadOverdueActs.map((a) => a.ref_id),
-        ...leadUpcomingActs.map((a) => a.ref_id),
-      ]));
-      const neededRenovIds = Array.from(new Set([
-        ...renovOverdueActs.map((a) => a.ref_id),
-        ...renovUpcomingActs.map((a) => a.ref_id),
-      ]));
-
-      const [leadsRes, renovRes] = await Promise.all([
-        neededLeadIds.length
-          ? supabase.from("crm_leads").select("id, data, status").in("id", neededLeadIds)
-          : Promise.resolve({ data: [] as any[] }),
-        neededRenovIds.length
-          ? supabase.from("crm_renovacoes").select("id, data, status").in("id", neededRenovIds)
-          : Promise.resolve({ data: [] as any[] }),
+      const [leadOverdueActs, renovOverdueActs, leadUpcomingActs, renovUpcomingActs] = await Promise.all([
+        fetchPendingActivities("lead_activities", "lead_id", leadIds, "overdue", nowIso),
+        fetchPendingActivities("renovacao_activities", "renovacao_id", renovIds, "overdue", nowIso),
+        fetchPendingActivities("lead_activities", "lead_id", leadIds, "upcoming", nowIso),
+        fetchPendingActivities("renovacao_activities", "renovacao_id", renovIds, "upcoming", nowIso),
       ]);
 
       if (!mounted) return;
 
-      const leadMap = new Map(((leadsRes.data || []) as Item[]).map((l) => [l.id, l]));
-      const renovMap = new Map(((renovRes.data || []) as Item[]).map((r) => [r.id, r]));
+      const leadMap = new Map(leads.map((l) => [l.id, l]));
+      const renovMap = new Map(renovacoes.map((r) => [r.id, r]));
 
       const buildRow = (kind: "lead" | "renovacao", act: Activity): TaskRow | null => {
         const item = kind === "lead" ? leadMap.get(act.ref_id) : renovMap.get(act.ref_id);
@@ -186,15 +186,15 @@ export default function MeuDashboardPage() {
       proximos.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
       atr.sort((a, b) => new Date(a.scheduled).getTime() - new Date(b.scheduled).getTime());
 
-      setLeadsCount(leadIdsRes.count ?? 0);
-      setRenovCount(renovIdsRes.count ?? 0);
+      setLeadsCount(leads.length);
+      setRenovCount(renovacoes.length);
       setHojeRows(proximos);
       setAtrasadasRows(atr);
       setCounts({ hojeL: proximosL.size, hojeR: proximosR.size, atrL: atrL.size, atrR: atrR.size });
       setLoading(false);
     })();
     return () => { mounted = false; };
-  }, [user?.id]);
+  }, [user?.id, isGerenteView]);
 
   const goTo = (row: TaskRow) => {
     navigate(row.kind === "lead" ? "/" : "/clientes-ativos");
@@ -259,7 +259,7 @@ export default function MeuDashboardPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
           <StatCard
             icon={CalendarClock}
-            label="Próximos 7 dias"
+            label="Tarefas pendentes"
             value={loading ? "…" : hojeRows.length}
             sub={`${counts.hojeL} leads · ${counts.hojeR} renovações`}
             tone="text-blue-500"
@@ -296,11 +296,11 @@ export default function MeuDashboardPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <CalendarClock className="h-4 w-4 text-blue-500" />
-              Tarefas — próximos 7 dias
+              Tarefas pendentes
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <TaskList rows={hojeRows} emptyText="Nenhuma tarefa nos próximos 7 dias." />
+            <TaskList rows={hojeRows} emptyText="Nenhuma tarefa pendente." />
           </CardContent>
         </Card>
 
