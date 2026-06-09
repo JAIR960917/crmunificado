@@ -24,6 +24,7 @@ import {
   CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart,
   History, BarChart3, FileBarChart, RefreshCw, Workflow, Activity,
   ChevronDown, SlidersHorizontal, CalendarClock,
+  Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,7 @@ const mainNavItems: NavItem[] = [
   { path: "/meu-dashboard-cobranca", label: "Dashboard Cobrança",   icon: LayoutDashboard },
   { path: "/relatorio-vendas",     label: "Relatório de Vendas",    icon: FileBarChart },
   { path: "/",                     label: "Leads",                  icon: LayoutDashboard },
+  { path: "/campanhas-copa",       label: "Campanhas Copa",         icon: Trophy },
   { path: "/cobrancas",            label: "Cobranças",              icon: Receipt },
   { path: "/tarefas-crediario",    label: "Tarefas Cobrança",      icon: CalendarClock },
   { path: "/agendamentos",         label: "Agendamentos",           icon: CalendarCheck },

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campanha Copa — Óticas Joonker</title>
+  <meta name="description" content="Participe da campanha Copa das Óticas Joonker. Dê seu palpite e concorra a prêmios!" />
+  <link rel="stylesheet" href="/campanha-copa/form.css" />
+  <!-- Meta Pixel: cole o script do pixel abaixo desta linha -->
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div class="hero-badge">Campanha Copa 2026</div>
+      <h1>Óticas Joonker</h1>
+      <p>Palpite no jogo <strong>Brasil x Marrocos</strong>, preencha seus dados e participe do sorteio.</p>
+    </header>
+
+    <form id="copa-form" class="form-card" novalidate>
+      <!-- Palpite -->
+      <section class="field-block">
+        <label class="field-label">Qual o seu palpite para Brasil x Marrocos? <span class="req">*</span></label>
+        <div class="score-row" role="group" aria-label="Palpite de placar">
+          <div class="score-team">
+            <span class="flag" aria-hidden="true">🇧🇷</span>
+            <span class="team-name">Brasil</span>
+          </div>
+          <input
+            type="number"
+            id="palpite_brasil"
+            name="palpite_brasil"
+            class="score-input"
+            min="0"
+            max="99"
+            inputmode="numeric"
+            placeholder="0"
+            required
+          />
+          <span class="score-sep" aria-hidden="true">X</span>
+          <input
+            type="number"
+            id="palpite_marrocos"
+            name="palpite_marrocos"
+            class="score-input"
+            min="0"
+            max="99"
+            inputmode="numeric"
+            placeholder="0"
+            required
+          />
+          <div class="score-team score-team-right">
+            <span class="flag" aria-hidden="true">🇲🇦</span>
+            <span class="team-name">Marrocos</span>
+          </div>
+        </div>
+        <p class="field-hint">Digite quantos gols cada time fará no jogo.</p>
+      </section>
+
+      <section class="field-block">
+        <label class="field-label" for="nome">Qual o seu nome completo? <span class="req">*</span></label>
+        <input type="text" id="nome" name="nome" class="text-input" placeholder="Sua resposta" required />
+      </section>
+
+      <section class="field-block">
+        <label class="field-label" for="idade">Qual a sua idade? <span class="req">*</span></label>
+        <p class="field-hint">Exemplo: 35 anos</p>
+        <input type="text" id="idade" name="idade" class="text-input" placeholder="Sua resposta" required />
+      </section>
+
+      <section class="field-block">
+        <label class="field-label" for="cidade">Em qual cidade você mora? (Cidade + UF) <span class="req">*</span></label>
+        <p class="field-hint">Ex.: Caicó/RN</p>
+        <input type="text" id="cidade" name="cidade" class="text-input" placeholder="Sua resposta" required />
+      </section>
+
+      <section class="field-block">
+        <label class="field-label" for="telefone">Qual o seu telefone para contato? (DDD + Telefone) <span class="req">*</span></label>
+        <p class="field-hint">Ex.: (84) 9 9999-9999</p>
+        <input type="tel" id="telefone" name="telefone" class="text-input" placeholder="Sua resposta" required />
+      </section>
+
+      <section class="field-block">
+        <p class="field-label">Você usa óculos de grau? <span class="req">*</span></p>
+        <div class="radio-group">
+          <label class="radio-item"><input type="radio" name="usa_oculos" value="sim" required /> Sim</label>
+          <label class="radio-item"><input type="radio" name="usa_oculos" value="nao" /> Não</label>
+        </div>
+      </section>
+
+      <section class="field-block">
+        <label class="field-label" for="ultimo_exame_vista">Quando foi a última vez que você fez um exame de vista? <span class="req">*</span></label>
+        <select id="ultimo_exame_vista" name="ultimo_exame_vista" class="text-input" required>
+          <option value="">Escolher</option>
+          <option value="Menos de 6 meses">Menos de 6 meses</option>
+          <option value="6 meses a 1 ano">6 meses a 1 ano</option>
+          <option value="1 a 2 anos">1 a 2 anos</option>
+          <option value="Mais de 2 anos">Mais de 2 anos</option>
+          <option value="Nunca fiz">Nunca fiz</option>
+        </select>
+      </section>
+
+      <section class="field-block consent-block">
+        <p class="field-label">Marque a opção abaixo e clique em enviar! <span class="req">*</span></p>
+        <label class="checkbox-item">
+          <input type="checkbox" id="consentimento_marketing" name="consentimento_marketing" required />
+          <span>Autorizo o uso dos meus dados para participação no sorteio e para receber comunicações de marketing e ofertas futuras das <strong>Óticas Joonker</strong>.</span>
+        </label>
+      </section>
+
+      <p id="form-error" class="form-error" hidden></p>
+
+      <div class="actions">
+        <button type="submit" id="btn-submit" class="btn-primary">Enviar</button>
+        <button type="button" id="btn-clear" class="btn-ghost">Limpar formulário</button>
+      </div>
+    </form>
+
+    <div id="success-screen" class="success-screen" hidden>
+      <div class="success-icon">✓</div>
+      <h2>Inscrição enviada!</h2>
+      <p>Obrigado por participar da campanha Copa das Óticas Joonker. Boa sorte no sorteio!</p>
+    </div>
+
+    <footer class="footer">
+      <p>Óticas Joonker — Campanha Copa</p>
+      <p><a href="/privacidade">Política de privacidade</a></p>
+    </footer>
+  </div>
+
+  <script src="/runtime-config.js"></script>
+  <script src="/campanha-copa/form.js"></script>
+</body>
+</html>

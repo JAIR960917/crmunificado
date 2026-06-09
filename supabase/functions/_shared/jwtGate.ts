@@ -13,7 +13,11 @@ export function decodeJwtRole(authHeader: string): string | null {
 }
 
 /** Serviços públicos (sem JWT de usuário). */
-export const JWT_EXEMPT_SERVICES = new Set(["whatsapp-webhook", "seed-admin"]);
+export const JWT_EXEMPT_SERVICES = new Set([
+  "whatsapp-webhook",
+  "seed-admin",
+  "submit-campanha-copa",
+]);
 
 /** Bloqueia uso da chave anon em funções que exigem usuário ou bootstrap. */
 export function rejectAnonJwt(
