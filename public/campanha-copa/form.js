@@ -105,6 +105,24 @@
     return name.replace(/^CRM\s+/i, "");
   }
 
+  function formatTeamLabel(name) {
+    var n = String(name || "").trim();
+    if (!n) return "—";
+    var words = n.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) return words.join("\n");
+    if (n.length > 9) {
+      var mid = Math.ceil(n.length / 2);
+      return n.slice(0, mid) + "\n" + n.slice(mid);
+    }
+    return n;
+  }
+
+  function applyTeamLabel(el, name) {
+    if (!el) return;
+    el.textContent = formatTeamLabel(name);
+    el.title = name;
+  }
+
   function applyPublicConfig(data, supabaseUrl) {
     var brandName = displayBrandName(data.system_name);
     var jogoLabel = data.jogo_label || "Brasil x Marrocos";
@@ -143,8 +161,8 @@
 
     var homeLabel = document.getElementById("team-home-label");
     var awayLabel = document.getElementById("team-away-label");
-    if (homeLabel) homeLabel.textContent = homeName;
-    if (awayLabel) awayLabel.textContent = awayName;
+    applyTeamLabel(homeLabel, homeName);
+    applyTeamLabel(awayLabel, awayName);
 
     var homeFlagEl = document.getElementById("team-home-flag");
     var awayFlagEl = document.getElementById("team-away-flag");
