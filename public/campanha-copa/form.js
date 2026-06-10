@@ -98,10 +98,13 @@
     return url;
   }
 
+  var CAMPAIGN_TITLE = "BOLÃO DA COPA JOONKER";
+
   function applyPublicConfig(data, supabaseUrl) {
-    var name = data.system_name || "Óticas Joonker";
+    var brandName = data.system_name || "Óticas Joonker";
     var jogoLabel = data.jogo_label || "Brasil x Marrocos";
     var logoUrl = resolveLogoUrl(data.logo_url || "", supabaseUrl);
+    var bannerUrl = resolveLogoUrl(data.banner_url || "", supabaseUrl);
     var homeName = data.team_home_name || "Brasil";
     var awayName = data.team_away_name || "Marrocos";
     var homeFlag = data.team_home_flag || "br";
@@ -112,10 +115,10 @@
     pixelSuccessSnippet = data.pixel_success || "";
     injectFormPixel(data.pixel_form || "");
 
-    document.title = "Campanha Copa — " + name;
+    document.title = CAMPAIGN_TITLE;
 
-    var nameEl = document.getElementById("system-name");
-    if (nameEl) nameEl.textContent = name;
+    var titleEl = document.getElementById("campaign-title");
+    if (titleEl) titleEl.textContent = CAMPAIGN_TITLE;
 
     ["jogo-label", "palpite-jogo-label"].forEach(function (id) {
       var el = document.getElementById(id);
@@ -124,7 +127,7 @@
 
     ["consent-brand", "footer-brand"].forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.textContent = name;
+      if (el) el.textContent = brandName;
     });
 
     var metaEl = document.getElementById("match-meta");
@@ -149,6 +152,16 @@
       awayFlagEl.alt = awayName;
     }
 
+    if (bannerUrl) {
+      var heroBanner = document.getElementById("hero-banner");
+      var hero = document.querySelector(".hero");
+      if (heroBanner) {
+        heroBanner.src = bannerUrl;
+        heroBanner.hidden = false;
+      }
+      if (hero) hero.classList.add("hero--has-banner");
+    }
+
     if (logoUrl) {
       var favicon = document.getElementById("page-favicon");
       if (favicon) favicon.href = logoUrl;
@@ -156,7 +169,7 @@
       var heroLogo = document.getElementById("hero-logo");
       if (heroLogo) {
         heroLogo.src = logoUrl;
-        heroLogo.alt = name;
+        heroLogo.alt = brandName;
         heroLogo.hidden = false;
       }
     }
@@ -289,6 +302,8 @@
 
       form.hidden = true;
       successEl.hidden = false;
+      var heroEl = document.querySelector(".hero");
+      if (heroEl) heroEl.hidden = true;
       injectSuccessPixel();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {

@@ -5,7 +5,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarClock, CalendarIcon, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, CalendarIcon, ChevronLeft, ChevronRight, ExternalLink, Plus, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
 import CrediarioTasksCalendar, { type CrediarioTask } from "@/components/crediario/CrediarioTasksCalendar";
@@ -35,10 +36,20 @@ import {
   type CalendarViewMode,
 } from "@/lib/appointmentCalendarUtils";
 import { formatPhoneBR, unformatPhone } from "@/lib/phoneFormat";
+import {
+  calendarRangeIso,
+  mapCobrancaActivityToCalendarTask,
+  type CalendarTaskSource,
+} from "@/lib/cobrancaCalendarTasks";
+
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 type TaskRow = CrediarioTask & {
+  source: CalendarTaskSource;
+  activityId?: string;
+  activityTitle?: string;
+  cobrancaId?: string;
   phone: string | null;
   cpf: string | null;
   observacao: string | null;
@@ -62,6 +73,7 @@ function toDateString(d: Date): string {
 
 export default function CrediarioTarefasPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [focusDate, setFocusDate] = useState(() => new Date());
@@ -93,17 +105,64 @@ export default function CrediarioTarefasPage() {
     setLoading(true);
     const start = toDateString(queryStart);
     const end = toDateString(queryEnd);
-    const { data, error } = await supabase
-      .from("crediario_tasks")
-      .select("id, lead_name, scheduled_date, scheduled_time, phone, cpf, observacao, renegociacao_status, renegociacao_comentario, completed_at, parent_task_id")
-      .eq("user_id", user.id)
-      .gte("scheduled_date", start)
-      .lte("scheduled_date", end)
-      .order("scheduled_date", { ascending: true })
-      .order("lead_name", { ascending: true });
+    const { startIso, endIso } = calendarRangeIso(queryStart, queryEnd);
 
-    if (error) toast.error("Erro ao carregar tarefas");
-    else setTasks((data || []) as TaskRow[]);
+    const [crediarioRes, activitiesRes] = await Promise.all([
+      supabase
+        .from("crediario_tasks")
+        .select("id, lead_name, scheduled_date, scheduled_time, phone, cpf, observacao, renegociacao_status, renegociacao_comentario, completed_at, parent_task_id")
+        .eq("user_id", user.id)
+        .gte("scheduled_date", start)
+        .lte("scheduled_date", end)
+        .order("scheduled_date", { ascending: true })
+        .order("lead_name", { ascending: true }),
+      supabase
+        .from("cobranca_activities")
+        .select("id, cobranca_id, title, description, scheduled_date, completed_at")
+        .eq("created_by", user.id)
+        .gte("scheduled_date", startIso)
+        .lte("scheduled_date", endIso)
+        .order("scheduled_date", { ascending: true }),
+    ]);
+
+    if (crediarioRes.error || activitiesRes.error) {
+      toast.error("Erro ao carregar tarefas");
+      setLoading(false);
+      return;
+    }
+
+    const crediarioTasks: TaskRow[] = ((crediarioRes.data || []) as Omit<TaskRow, "source">[]).map(
+      (task) => ({ ...task, source: "crediario" as const }),
+    );
+
+    const activities = activitiesRes.data || [];
+    const cobrancaIds = Array.from(new Set(activities.map((a) => a.cobranca_id)));
+    let cobrancaMap = new Map<string, { id: string; data: Record<string, unknown> | null }>();
+
+    if (cobrancaIds.length > 0) {
+      const { data: cobs } = await supabase
+        .from("crm_cobrancas")
+        .select("id, data")
+        .in("id", cobrancaIds);
+      cobrancaMap = new Map(
+        ((cobs || []) as { id: string; data: Record<string, unknown> | null }[]).map((c) => [c.id, c]),
+      );
+    }
+
+    const cobrancaTasks: TaskRow[] = activities.map((activity) =>
+      mapCobrancaActivityToCalendarTask(
+        activity,
+        cobrancaMap.get(activity.cobranca_id) ?? null,
+      ),
+    );
+
+    const merged = [...crediarioTasks, ...cobrancaTasks].sort((a, b) => {
+      const dateCmp = a.scheduled_date.localeCompare(b.scheduled_date);
+      if (dateCmp !== 0) return dateCmp;
+      return a.lead_name.localeCompare(b.lead_name, "pt-BR");
+    });
+
+    setTasks(merged);
     setLoading(false);
   }, [user, queryStart, queryEnd]);
 
@@ -133,7 +192,7 @@ export default function CrediarioTarefasPage() {
 
   const openEdit = (task: TaskRow) => {
     setEditing(task);
-    setFormNome(task.lead_name);
+    setFormNome(task.source === "cobranca" ? task.activityTitle || task.lead_name : task.lead_name);
     setFormDate(parseISO(task.scheduled_date));
     setFormTelefone(task.phone ? formatPhoneBR(task.phone) : "");
     setFormCpf(task.cpf ? formatCpfBR(task.cpf) : "");
@@ -170,6 +229,32 @@ export default function CrediarioTarefasPage() {
     }
 
     setSaving(true);
+
+    if (editing?.source === "cobranca" && editing.activityId) {
+      const [h, m] = formTime.split(":").map(Number);
+      const dt = new Date(formDate!);
+      dt.setHours(h || 9, m || 0, 0, 0);
+
+      const { error } = await supabase
+        .from("cobranca_activities")
+        .update({
+          title: nome,
+          description: formObservacao.trim() || null,
+          scheduled_date: dt.toISOString(),
+        })
+        .eq("id", editing.activityId);
+
+      if (error) toast.error("Erro ao salvar tarefa");
+      else {
+        toast.success("Tarefa atualizada");
+        setDialogOpen(false);
+        resetForm();
+        fetchTasks();
+      }
+      setSaving(false);
+      return;
+    }
+
     const payload: Record<string, unknown> = {
       user_id: user.id,
       lead_name: nome,
@@ -236,8 +321,13 @@ export default function CrediarioTarefasPage() {
   };
 
   const handleDelete = async () => {
-    if (!deleteId) return;
-    const { error } = await supabase.from("crediario_tasks").delete().eq("id", deleteId);
+    if (!deleteId || !editing) return;
+
+    const error =
+      editing.source === "cobranca" && editing.activityId
+        ? (await supabase.from("cobranca_activities").delete().eq("id", editing.activityId)).error
+        : (await supabase.from("crediario_tasks").delete().eq("id", deleteId)).error;
+
     if (error) toast.error("Erro ao excluir tarefa");
     else {
       toast.success("Tarefa excluída");
@@ -331,14 +421,19 @@ export default function CrediarioTarefasPage() {
             <DialogTitle>{editing ? "Editar Tarefa" : "Nova Tarefa"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {editing?.source === "cobranca" && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                Tarefa vinculada a um card de cobrança. Você pode editar aqui ou abrir a cobrança do cliente.
+              </div>
+            )}
             <div className={cn(editing ? "grid grid-cols-1 md:grid-cols-2 gap-6" : "space-y-4")}>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Nome do lead *</Label>
+                  <Label>{editing?.source === "cobranca" ? "Título da tarefa *" : "Nome do lead *"}</Label>
                   <Input
                     value={formNome}
                     onChange={(e) => setFormNome(e.target.value)}
-                    placeholder="Nome completo"
+                    placeholder={editing?.source === "cobranca" ? "Ex.: Ligar para confirmar pagamento" : "Nome completo"}
                   />
                 </div>
 
@@ -372,6 +467,8 @@ export default function CrediarioTarefasPage() {
                     value={formTelefone}
                     onChange={(e) => setFormTelefone(formatPhoneBR(e.target.value))}
                     placeholder="(00) 00000-0000"
+                    readOnly={editing?.source === "cobranca"}
+                    className={editing?.source === "cobranca" ? "bg-muted" : undefined}
                   />
                 </div>
 
@@ -381,6 +478,8 @@ export default function CrediarioTarefasPage() {
                     value={formCpf}
                     onChange={(e) => setFormCpf(formatCpfBR(e.target.value))}
                     placeholder="000.000.000-00"
+                    readOnly={editing?.source === "cobranca"}
+                    className={editing?.source === "cobranca" ? "bg-muted" : undefined}
                   />
                 </div>
 
@@ -395,7 +494,7 @@ export default function CrediarioTarefasPage() {
                 </div>
               </div>
 
-              {editing && !editing.renegociacao_status && (
+              {editing && editing.source === "crediario" && !editing.renegociacao_status && (
                 <CrediarioRenegociacaoPanel
                   status={formRenegociou}
                   onStatusChange={setFormRenegociou}
@@ -418,6 +517,18 @@ export default function CrediarioTarefasPage() {
             )}
 
             <div className="flex flex-wrap gap-2 justify-end pt-2">
+              {editing?.source === "cobranca" && editing.cobrancaId && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    navigate("/cobrancas", { state: { openCobrancaId: editing.cobrancaId } })
+                  }
+                >
+                  <ExternalLink className="mr-1 h-4 w-4" /> Abrir cobrança
+                </Button>
+              )}
               {editing && (
                 <Button
                   type="button"

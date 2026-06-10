@@ -60,10 +60,22 @@ export default function CampanhaCopaPixelConfigCard({
           <Code2 className="h-4 w-4" />
           Pixels de rastreamento (Meta, Google etc.)
         </CardTitle>
-        <CardDescription>
-          Cole o código do pixel fornecido pela plataforma de anúncios. O script da{" "}
-          <strong>tela do formulário</strong> roda ao abrir a página; o da{" "}
-          <strong>tela pós-envio</strong> roda somente após o participante concluir o cadastro.
+        <CardDescription className="space-y-2">
+          <p>
+            Configure aqui no CRM — <strong>não é necessário editar o HTML</strong> do formulário
+            público. Após salvar, o código é injetado automaticamente em{" "}
+            <code className="text-xs">/campanha-copa</code>.
+          </p>
+          <ul className="list-disc pl-5 text-sm space-y-1">
+            <li>
+              <strong>Pixel — tela do formulário:</strong> dispara quando o visitante abre a página
+              do bolão (antes de enviar).
+            </li>
+            <li>
+              <strong>Pixel — tela de confirmação:</strong> dispara somente depois que o formulário
+              é enviado com sucesso (tela &quot;Inscrição enviada!&quot;).
+            </li>
+          </ul>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

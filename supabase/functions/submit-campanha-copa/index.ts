@@ -49,6 +49,7 @@ async function loadPublicConfig(supabase: ReturnType<typeof createClient>) {
     .in("setting_key", [
       "system_name",
       "logo_url",
+      "campanha_copa_banner_url",
       "campanha_copa_pixel_form",
       "campanha_copa_pixel_success",
     ]);
@@ -58,6 +59,7 @@ async function loadPublicConfig(supabase: ReturnType<typeof createClient>) {
   return {
     system_name: map.get("system_name") || "Óticas Joonker",
     logo_url: map.get("logo_url") || "",
+    banner_url: map.get("campanha_copa_banner_url") || "",
     pixel_form: map.get("campanha_copa_pixel_form") || "",
     pixel_success: map.get("campanha_copa_pixel_success") || "",
     jogo_key: jogo.jogo_key,

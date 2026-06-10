@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -127,6 +128,7 @@ const colorMap: Record<string, { header: string; badge: string }> = {
 
 export default function CobrancasPage() {
   const { user, isAdmin, isGerente, isFinanceiro } = useAuth();
+  const location = useLocation();
   const canCreate = isAdmin || isFinanceiro;
   const [financeiroIds, setFinanceiroIds] = useState<Set<string>>(new Set());
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
@@ -213,6 +215,28 @@ export default function CobrancasPage() {
   }, [isFinanceiro, isAdmin, isGerente]);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
+
+  useEffect(() => {
+    const openCobrancaId = (location.state as { openCobrancaId?: string } | null)?.openCobrancaId;
+    if (!openCobrancaId) return;
+
+    let mounted = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("crm_cobrancas")
+        .select("*")
+        .eq("id", openCobrancaId)
+        .maybeSingle();
+      if (!mounted || error || !data) return;
+      setEditingCobranca(data as Cobranca);
+      setDialogOpen(true);
+      window.history.replaceState({}, document.title);
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [location.state]);
 
   useEffect(() => {
     if (statuses.length > 0 && !mobileTab) setMobileTab(statuses[0].key);

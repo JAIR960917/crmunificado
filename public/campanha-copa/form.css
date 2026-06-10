@@ -16,6 +16,7 @@ body {
   max-width: 720px;
   margin: 0 auto;
   padding: 24px 16px 48px;
+  width: 100%;
 }
 
 .hero {
@@ -47,16 +48,35 @@ body {
   border-radius: 12px;
 }
 
-.hero h1 {
-  margin: 0 0 8px;
-  font-size: 1.75rem;
+.hero-banner {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto 16px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
-.hero p {
-  margin: 0 0 16px;
+.hero.hero--has-banner .hero-logo {
+  display: none;
+}
+
+.hero h1 {
+  margin: 0 0 8px;
+  font-size: clamp(1.25rem, 5vw, 1.75rem);
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.hero-lead {
+  margin: 0 auto 16px;
+  max-width: 36rem;
   opacity: 0.9;
-  line-height: 1.5;
-  font-size: 0.95rem;
+  line-height: 1.55;
+  font-size: clamp(0.875rem, 3.5vw, 0.95rem);
+  padding: 0 4px;
 }
 
 .btn-regulamento {
@@ -203,6 +223,8 @@ body {
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
   padding: 8px 0 20px;
+  width: 100%;
+  overflow: hidden;
 }
 
 .field-block {
@@ -268,25 +290,37 @@ select.text-input {
 
 .score-match {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 6px;
   padding: 12px 0;
+  width: 100%;
 }
 
-.score-side {
+.score-team {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
-.score-side-home {
-  flex-direction: row;
+.score-team-home {
+  justify-content: flex-end;
 }
 
-.score-side-away {
-  flex-direction: row;
+.score-team-away {
+  justify-content: flex-start;
+}
+
+.score-inputs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 
 .team-flag {
@@ -297,22 +331,34 @@ select.text-input {
 }
 
 .team-label {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #334155;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .score-input {
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   border: 2px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 10px;
   text-align: center;
-  font-size: 1.75rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: #0f172a;
   outline: none;
+  flex-shrink: 0;
+  padding: 0;
+  -moz-appearance: textfield;
+}
+
+.score-input::-webkit-outer-spin-button,
+.score-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .score-input:focus {
@@ -321,10 +367,12 @@ select.text-input {
 }
 
 .score-sep {
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 800;
   color: #94a3b8;
-  padding: 0 4px;
+  padding: 0 2px;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 .radio-group {
@@ -450,23 +498,126 @@ select.text-input {
   color: #93c5fd;
 }
 
-@media (max-width: 480px) {
+@media (min-width: 520px) {
   .score-match {
-    gap: 8px;
+    gap: 14px;
   }
 
-  .score-input {
-    width: 56px;
-    height: 56px;
-    font-size: 1.5rem;
+  .score-team {
+    gap: 8px;
+    flex: 0 1 auto;
+  }
+
+  .score-inputs {
+    gap: 10px;
   }
 
   .team-label {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
+    overflow: visible;
+    text-overflow: clip;
   }
 
   .team-flag {
-    width: 28px;
-    height: 19px;
+    width: 36px;
+    height: 24px;
+  }
+
+  .score-input {
+    width: 64px;
+    height: 64px;
+    font-size: 1.75rem;
+    border-radius: 12px;
+  }
+
+  .score-sep {
+    font-size: 1.25rem;
+    padding: 0 4px;
+  }
+}
+
+@media (max-width: 519px) {
+  .page {
+    padding: 16px 12px 32px;
+  }
+
+  .hero-logo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .btn-regulamento {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .field-block {
+    padding: 16px;
+  }
+
+  .field-label {
+    font-size: 0.95rem;
+  }
+
+  .form-error {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 16px 0;
+    gap: 8px;
+  }
+
+  .btn-primary,
+  .btn-ghost {
+    width: 100%;
+    text-align: center;
+  }
+
+  .success-screen {
+    padding: 32px 20px;
+  }
+
+  .regulamento-body {
+    padding: 16px;
+  }
+
+  .score-match {
+    gap: 3px;
+    padding: 8px 0;
+  }
+
+  .score-team {
+    gap: 2px;
+  }
+
+  .team-label {
+    font-size: 0.68rem;
+    max-width: 3.4rem;
+  }
+
+  .team-flag {
+    width: 18px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  .score-inputs {
+    gap: 2px;
+  }
+
+  .score-input {
+    width: 32px;
+    height: 32px;
+    font-size: 0.9rem;
+    border-radius: 6px;
+    border-width: 1px;
+  }
+
+  .score-sep {
+    font-size: 0.7rem;
   }
 }

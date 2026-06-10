@@ -11,10 +11,12 @@
 <body>
   <div class="page">
     <header class="hero">
+      <!-- Banner largo da campanha (ex.: arte promocional). URL via campanha_copa_banner_url no CRM -->
+      <img id="hero-banner" class="hero-banner" src="" alt="Campanha Copa Joonker" hidden />
       <img id="hero-logo" class="hero-logo" src="" alt="" hidden />
       <div class="hero-badge">Campanha Copa 2026</div>
-      <h1 id="system-name">Carregando...</h1>
-      <p>Preencha o formulário abaixo com o <strong id="jogo-label">SEU PALPITE </strong> para o jogo entre <strong id="jogo-label">BRASIL x MARROCOS</strong>, que acontece neste sábado, dia 13/06, às 19h. Depois complete com as suas informações e clieuqe em <strong id="jogo-label">ENVIAR PALPITE</strong>. Pronto, você já estará concorrendo a um dos <strong id="jogo-label">3 ÓCULOS SOLARES.</strong></p>
+      <h1 id="campaign-title">BOLÃO DA COPA JOONKER</h1>
+      <p class="hero-lead">Palpite no jogo <strong id="jogo-label">Brasil x Marrocos</strong>, preencha seus dados e participe do sorteio.</p>
       <button type="button" id="btn-regulamento" class="btn-regulamento">Consultar regulamento</button>
     </header>
 
@@ -23,34 +25,36 @@
         <label class="field-label">Qual o seu palpite para <span id="palpite-jogo-label">Brasil x Marrocos</span>? <span class="req">*</span></label>
         <p class="match-meta" id="match-meta"></p>
         <div class="score-match" role="group" aria-label="Palpite de placar">
-          <div class="score-side score-side-home">
+          <div class="score-team score-team-home">
             <span class="team-label" id="team-home-label">—</span>
             <img src="" alt="" id="team-home-flag" class="team-flag" width="36" height="24" />
           </div>
-          <input
-            type="number"
-            id="palpite_home"
-            name="palpite_home"
-            class="score-input"
-            min="0"
-            max="99"
-            inputmode="numeric"
-            placeholder="0"
-            required
-          />
-          <span class="score-sep" aria-hidden="true">×</span>
-          <input
-            type="number"
-            id="palpite_away"
-            name="palpite_away"
-            class="score-input"
-            min="0"
-            max="99"
-            inputmode="numeric"
-            placeholder="0"
-            required
-          />
-          <div class="score-side score-side-away">
+          <div class="score-inputs">
+            <input
+              type="number"
+              id="palpite_home"
+              name="palpite_home"
+              class="score-input"
+              min="0"
+              max="99"
+              inputmode="numeric"
+              placeholder="0"
+              required
+            />
+            <span class="score-sep" aria-hidden="true">×</span>
+            <input
+              type="number"
+              id="palpite_away"
+              name="palpite_away"
+              class="score-input"
+              min="0"
+              max="99"
+              inputmode="numeric"
+              placeholder="0"
+              required
+            />
+          </div>
+          <div class="score-team score-team-away">
             <img src="" alt="" id="team-away-flag" class="team-flag" width="36" height="24" />
             <span class="team-label" id="team-away-label">—</span>
           </div>
