@@ -3,6 +3,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { internalCorsHeaders } from "../_shared/internalAuth.ts";
 import { loadCampanhaCopaJogoConfig } from "../_shared/campanhaCopaJogo.ts";
 import { loadCidadeLojaRoutes, pickAssigneeForCity } from "../_shared/campanhaCopaAssign.ts";
+import {
+  applyUltimoExameVistaToLeadData,
+  loadLeadLastVisitFieldId,
+} from "../_shared/campanhaCopaExameVista.ts";
 
 const corsHeaders = internalCorsHeaders;
 
@@ -169,6 +173,7 @@ serve(async (req) => {
 
     const cityRoutes = await loadCidadeLojaRoutes(supabase);
     const assignedUserId = await pickAssigneeForCity(supabase, cidade, cityRoutes);
+    const lastVisitFieldId = await loadLeadLastVisitFieldId(supabase);
 
     const leadData: Record<string, unknown> = {
       origem_campanha: "copa",
@@ -178,7 +183,6 @@ serve(async (req) => {
       idade,
       cidade,
       usa_oculos: usaOculosNorm,
-      ultimo_exame_vista: ultimoExame,
       palpite_home: palpiteHome,
       palpite_away: palpiteAway,
       palpite_brasil: palpiteHome,
@@ -190,6 +194,8 @@ serve(async (req) => {
       team_away_name: jogoCfg.team_away_name,
       consentimento_marketing: true,
     };
+
+    applyUltimoExameVistaToLeadData(leadData, ultimoExame, lastVisitFieldId);
 
     const { data: lead, error: leadError } = await supabase
       .from("crm_leads")
