@@ -643,17 +643,18 @@ export default function TriggerCampaigns({ instances }: Props) {
                 />
                 <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1">
                   <p>
-                    <span className="font-semibold">Variáveis no CRM:</span>{" "}
+                    <span className="font-semibold">Variáveis no CRM (máx. 20 caracteres na Meta):</span>{" "}
                     <code>{"{nome}"}</code>, <code>{"{valor_a_vencer}"}</code>, <code>{"{data_a_vencer}"}</code>,{" "}
+                    <code>{"{valor_vencido}"}</code>, <code>{"{data_vencida}"}</code>,{" "}
                     <code>{"{cnpj_empresa}"}</code>, <code>{"{nome_empresa}"}</code>,{" "}
-                    <code>{"{valor_parcela_vencida}"}</code>, <code>{"{data_parcela_vencida}"}</code>,{" "}
-                    <code>{"{valor_total_parcelas}"}</code>, <code>{"{parcelas_vencidas}"}</code>
+                    <code>{"{valor_total}"}</code>, <code>{"{data_boleto_ant}"}</code>,{" "}
+                    <code>{"{parcelas_vencidas}"}</code>
                   </p>
                   <p>
                     <span className="font-semibold">Template na Meta:</span> use os{" "}
                     <span className="font-semibold">mesmos nomes</span> no painel da Meta (
-                    <code>{"{{nome}}"}</code>, <code>{"{{valor_a_vencer}}"}</code>,{" "}
-                    <code>{"{{data_a_vencer}}"}</code>, etc.) e repita as mesmas chaves no texto do gatilho acima,
+                    <code>{"{{nome}}"}</code>, <code>{"{{valor_total}}"}</code>,{" "}
+                    <code>{"{{data_boleto_ant}}"}</code>, etc.) e repita as mesmas chaves no texto do gatilho acima,
                     na mesma ordem.
                   </p>
                 </div>

@@ -4,40 +4,49 @@ export type MetaTemplateBodyParam = {
   text: string;
 };
 
-/** Nome do parâmetro na API Meta para cada chave usada no texto do CRM. */
+/**
+ * Nome do parâmetro na API Meta para cada chave usada no texto do CRM.
+ * A Meta limita nomes de variáveis a 20 caracteres — use sempre as chaves curtas
+ * (valor_total, data_boleto_ant, etc.) em templates novos.
+ */
 const CRM_KEY_TO_META_PARAM: Record<string, string> = {
   nome: "nome",
-  valor_parcela_a_vencer: "valor_a_vencer",
   valor_a_vencer: "valor_a_vencer",
-  valor_parcela_vencida: "valor_vencido",
   valor_vencido: "valor_vencido",
-  data_parcela_a_vencer: "data_a_vencer",
   data_a_vencer: "data_a_vencer",
-  data_parcela_vencida: "data_vencida",
   data_vencida: "data_vencida",
   cnpj_empresa: "cnpj_empresa",
   nome_empresa: "nome_empresa",
-  valor_total_parcelas: "valor_total_parcelas",
+  valor_total: "valor_total",
   parcelas_vencidas: "parcelas_vencidas",
-  data_boleto_mais_antigo: "data_boleto_mais_antigo",
+  data_boleto_ant: "data_boleto_ant",
+  // Legado (>20 chars na Meta) → parâmetro curto aprovado
+  valor_parcela_a_vencer: "valor_a_vencer",
+  valor_parcela_vencida: "valor_vencido",
+  data_parcela_a_vencer: "data_a_vencer",
+  data_parcela_vencida: "data_vencida",
+  valor_total_parcelas: "valor_total",
+  data_boleto_mais_antigo: "data_boleto_ant",
 };
 
 /** Chaves alternativas no mapa de variáveis (CRM pode usar nome longo ou curto). */
 const VAR_LOOKUP_ALIASES: Record<string, string[]> = {
   nome: ["nome"],
-  valor_parcela_a_vencer: ["valor_parcela_a_vencer", "valor_a_vencer"],
   valor_a_vencer: ["valor_a_vencer", "valor_parcela_a_vencer"],
-  valor_parcela_vencida: ["valor_parcela_vencida", "valor_vencido"],
+  valor_parcela_a_vencer: ["valor_parcela_a_vencer", "valor_a_vencer"],
   valor_vencido: ["valor_vencido", "valor_parcela_vencida"],
-  data_parcela_a_vencer: ["data_parcela_a_vencer", "data_a_vencer"],
+  valor_parcela_vencida: ["valor_parcela_vencida", "valor_vencido"],
   data_a_vencer: ["data_a_vencer", "data_parcela_a_vencer"],
-  data_parcela_vencida: ["data_parcela_vencida", "data_vencida"],
+  data_parcela_a_vencer: ["data_parcela_a_vencer", "data_a_vencer"],
   data_vencida: ["data_vencida", "data_parcela_vencida"],
+  data_parcela_vencida: ["data_parcela_vencida", "data_vencida"],
   cnpj_empresa: ["cnpj_empresa"],
   nome_empresa: ["nome_empresa"],
-  valor_total_parcelas: ["valor_total_parcelas"],
+  valor_total: ["valor_total", "valor_total_parcelas"],
+  valor_total_parcelas: ["valor_total_parcelas", "valor_total"],
   parcelas_vencidas: ["parcelas_vencidas"],
-  data_boleto_mais_antigo: ["data_boleto_mais_antigo"],
+  data_boleto_ant: ["data_boleto_ant", "data_boleto_mais_antigo"],
+  data_boleto_mais_antigo: ["data_boleto_mais_antigo", "data_boleto_ant"],
 };
 
 export function formatBRL(v: unknown): string {
@@ -124,21 +133,27 @@ export function buildCobrancaVars(
   const valorParcelaVencida = pVencida ? formatBRL(pVencida.valor) : "";
   const dataParcelaVencida = pVencida ? formatDateBR(pVencida.vencimento) : "";
 
+  const valorTotalFmt = formatBRL(totalEffective);
+  const dataBoletoAnt = maisAntigo ? formatDateBR(maisAntigo.vencimento) : "";
+
   return {
     nome: name || "Cliente",
-    valor_parcela_vencida: valorParcelaVencida,
     valor_vencido: valorParcelaVencida,
-    valor_parcela_a_vencer: valorParcelaAVencer,
     valor_a_vencer: valorParcelaAVencer,
-    data_parcela_vencida: dataParcelaVencida,
     data_vencida: dataParcelaVencida,
-    data_parcela_a_vencer: dataParcelaAVencer,
     data_a_vencer: dataParcelaAVencer,
     cnpj_empresa: company?.cnpj || "",
     nome_empresa: company?.name || "",
-    valor_total_parcelas: formatBRL(totalEffective),
+    valor_total: valorTotalFmt,
     parcelas_vencidas: listaParcelasVencidas,
-    data_boleto_mais_antigo: maisAntigo ? formatDateBR(maisAntigo.vencimento) : "",
+    data_boleto_ant: dataBoletoAnt,
+    // Aliases legados (gatilhos antigos no CRM)
+    valor_parcela_vencida: valorParcelaVencida,
+    valor_parcela_a_vencer: valorParcelaAVencer,
+    data_parcela_vencida: dataParcelaVencida,
+    data_parcela_a_vencer: dataParcelaAVencer,
+    valor_total_parcelas: valorTotalFmt,
+    data_boleto_mais_antigo: dataBoletoAnt,
   };
 }
 
