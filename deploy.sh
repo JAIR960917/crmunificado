@@ -493,5 +493,11 @@ esac
 
 ok "Deploy finalizado."
 echo ""
+if [ "$MODE" = "--migrations" ]; then
+  warn "Modo --migrations: só o banco foi atualizado."
+  warn "Mudanças de tela (calendário, botões, layout) exigem rebuild do frontend:"
+  echo -e "      ${B}./deploy.sh --frontend${N}   ou   ${B}./deploy.sh${N} (deploy completo)"
+  echo ""
+fi
 echo "Nota: nesta VPS o deploy usa Docker (migrations + edge functions + frontend)."
 echo "      Não é necessário 'supabase login' nem 'supabase link' — esses comandos são só para o Supabase Cloud."
