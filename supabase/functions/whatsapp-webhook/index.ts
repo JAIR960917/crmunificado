@@ -5,8 +5,8 @@
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { cleanPhone } from "../_shared/whatsappSend.ts";
-import { insertWhatsAppMessageRow, parseWhatsAppMessage } from "../_shared/whatsappInboxMedia.ts";
+import { cleanPhone, normalizeWaId, waIdsEquivalent } from "../_shared/whatsappSend.ts";
+import { findInboxConversationId, insertWhatsAppMessageRow, parseWhatsAppMessage } from "../_shared/whatsappInboxMedia.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -116,33 +116,6 @@ function resolveMetaInstance(
   return { instanceId: null, resolvedVia: "none" };
 }
 
-async function findConversationId(
-  supabase: ReturnType<typeof createClient>,
-  waId: string,
-  instanceId: string | null,
-): Promise<string | null> {
-  if (instanceId) {
-    const { data } = await supabase
-      .from("whatsapp_conversations")
-      .select("id")
-      .eq("instance_id", instanceId)
-      .eq("wa_id", waId)
-      .maybeSingle();
-    return data?.id || null;
-  }
-
-  // Linha não cadastrada no CRM: não reutilizar conversa de outro número (mesmo cliente).
-  const { data } = await supabase
-    .from("whatsapp_conversations")
-    .select("id")
-    .eq("wa_id", waId)
-    .is("instance_id", null)
-    .order("last_message_at", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-  return data?.id || null;
-}
-
 /** wa_id do cliente (contato) a partir do payload Meta. */
 function resolveCustomerWaId(
   msg: Record<string, unknown>,
@@ -164,7 +137,7 @@ function resolveCustomerWaId(
 }
 
 function contactNameFromPayload(contacts: { profile?: { name?: string }; wa_id?: string }[], waId: string): string | null {
-  const hit = contacts.find((c) => cleanPhone(String(c.wa_id || "")) === waId);
+  const hit = contacts.find((c) => waIdsEquivalent(String(c.wa_id || ""), waId));
   return hit?.profile?.name?.trim() || null;
 }
 
@@ -191,7 +164,8 @@ async function upsertConversationMessage(
   },
 ): Promise<boolean> {
   const { instanceId, waId, contactName, direction, text, preview, waMessageId, initialStatus, incrementUnread } = opts;
-  if (!waId) {
+  const canonicalWaId = normalizeWaId(waId);
+  if (!canonicalWaId) {
     console.warn("[whatsapp-webhook] wa_id vazio — mensagem ignorada");
     return false;
   }
@@ -200,13 +174,14 @@ async function upsertConversationMessage(
   const windowExpires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const previewText = preview.slice(0, 200);
 
-  let conversationId = await findConversationId(supabase, waId, instanceId);
+  let { id: conversationId } = await findInboxConversationId(supabase, canonicalWaId, instanceId);
 
   if (conversationId) {
     const patch: Record<string, unknown> = {
       last_message_at: now.toISOString(),
       last_preview: previewText,
-      phone_display: waId,
+      phone_display: canonicalWaId,
+      wa_id: canonicalWaId,
       updated_at: now.toISOString(),
     };
     if (direction === "in") patch.window_expires_at = windowExpires.toISOString();
@@ -225,9 +200,9 @@ async function upsertConversationMessage(
   } else {
     const { data: inserted, error: insertErr } = await supabase.from("whatsapp_conversations").insert({
       instance_id: instanceId,
-      wa_id: waId,
+      wa_id: canonicalWaId,
       contact_name: contactName,
-      phone_display: waId,
+      phone_display: canonicalWaId,
       window_expires_at: direction === "in" ? windowExpires.toISOString() : null,
       last_message_at: now.toISOString(),
       last_preview: previewText,
@@ -236,7 +211,8 @@ async function upsertConversationMessage(
 
     if (insertErr) {
       if (insertErr.code === "23505") {
-        conversationId = await findConversationId(supabase, waId, instanceId);
+        const retry = await findInboxConversationId(supabase, canonicalWaId, instanceId);
+        conversationId = retry.id;
       } else {
         console.error("[whatsapp-webhook] erro ao criar conversa:", insertErr.message, insertErr.details);
         return false;
@@ -284,7 +260,7 @@ async function upsertConversationMessage(
     return false;
   }
 
-  console.log(`[whatsapp-webhook] gravado conv=${conversationId} wa_id=${waId} dir=${direction}`);
+  console.log(`[whatsapp-webhook] gravado conv=${conversationId} wa_id=${canonicalWaId} dir=${direction}`);
   return true;
 }
 

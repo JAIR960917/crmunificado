@@ -43,12 +43,53 @@ const ERROR_TOKENS = [
   "restri", "banimento", "banido", "bloqueio", "limite excedido",
 ];
 
+/** Dígitos nacionais BR (DDD + número), sem código 55. */
+export function nationalPhoneDigits(value: string): string {
+  let d = (value || "").replace(/\D/g, "");
+  while (d.startsWith("55") && d.length >= 12) d = d.slice(2);
+  while (d.startsWith("0") && d.length > 11) d = d.slice(1);
+  return d;
+}
+
+function isBrazilianMobileNational(d: string): boolean {
+  if (d.length !== 10 && d.length !== 11) return false;
+  const ddd = Number(d.slice(0, 2));
+  if (!Number.isFinite(ddd) || ddd < 11 || ddd > 99) return false;
+  if (d.length === 11) return d.charAt(2) === "9";
+  const firstSubscriber = d.charAt(2);
+  return firstSubscriber >= "6" && firstSubscriber <= "9";
+}
+
+/** Celular BR com 9 dígitos após o DDD (insere o 9º dígito móvel quando faltar). */
+export function nationalMobileDigits(value: string): string {
+  let d = nationalPhoneDigits(value);
+  if (d.length === 10 && isBrazilianMobileNational(d)) {
+    d = `${d.slice(0, 2)}9${d.slice(2)}`;
+  }
+  return d;
+}
+
+export function waIdsEquivalent(a: string, b: string): boolean {
+  const da = nationalMobileDigits(a);
+  const db = nationalMobileDigits(b);
+  if (da.length >= 10 && db.length >= 10 && da === db) return true;
+  if (da.length >= 10 && db.length >= 10 && da.slice(-8) === db.slice(-8)) return true;
+  return false;
+}
+
+/** wa_id canônico para inbox e envio (55 + DDD + celular com 9 dígitos). */
+export function normalizeWaId(phone: string): string {
+  let d = (phone || "").replace(/\D/g, "");
+  if (!d) return "";
+  if (d.startsWith("0")) d = d.slice(1);
+  const national = nationalMobileDigits(d.startsWith("55") ? d : `55${d}`);
+  if (national.length >= 10) return `55${national}`;
+  if (!d.startsWith("55")) return `55${d}`;
+  return d;
+}
+
 export function cleanPhone(phone: string): string {
-  let clean = (phone || "").replace(/\D/g, "");
-  if (!clean) return "";
-  if (clean.startsWith("0")) clean = clean.substring(1);
-  if (!clean.startsWith("55")) clean = "55" + clean;
-  return clean;
+  return normalizeWaId(phone);
 }
 
 export function instanceRowToTarget(row: InstanceRow | null): SendTarget | null {
@@ -194,14 +235,27 @@ export async function isMetaWindowOpen(
   if (!cp) return false;
 
   if (instanceId) {
-    const { data } = await supabase
+    const { data: exact } = await supabase
       .from("whatsapp_conversations")
       .select("window_expires_at")
       .eq("instance_id", instanceId)
       .eq("wa_id", cp)
       .maybeSingle();
-    if (data?.window_expires_at && new Date(data.window_expires_at).getTime() > Date.now()) {
+    if (exact?.window_expires_at && new Date(exact.window_expires_at).getTime() > Date.now()) {
       return true;
+    }
+
+    const { data: rows } = await supabase
+      .from("whatsapp_conversations")
+      .select("window_expires_at, wa_id")
+      .eq("instance_id", instanceId)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(80);
+    for (const row of rows || []) {
+      if (!waIdsEquivalent(String(row.wa_id || ""), cp)) continue;
+      if (row.window_expires_at && new Date(row.window_expires_at).getTime() > Date.now()) {
+        return true;
+      }
     }
   }
 

@@ -51,10 +51,19 @@ export function nationalPhoneDigits(value: string): string {
   return d;
 }
 
-/** DDD + celular com 9 dígitos (insere o 9 após o DDD quando faltar). */
+function isBrazilianMobileNational(d: string): boolean {
+  if (d.length !== 10 && d.length !== 11) return false;
+  const ddd = Number(d.slice(0, 2));
+  if (!Number.isFinite(ddd) || ddd < 11 || ddd > 99) return false;
+  if (d.length === 11) return d.charAt(2) === "9";
+  const firstSubscriber = d.charAt(2);
+  return firstSubscriber >= "6" && firstSubscriber <= "9";
+}
+
+/** DDD + celular com 9 dígitos (insere o 9º dígito móvel quando faltar). */
 export function nationalMobileDigits(value: string): string {
   let d = nationalPhoneDigits(value);
-  if (d.length === 10 && d.charAt(2) !== "9") {
+  if (d.length === 10 && isBrazilianMobileNational(d)) {
     d = `${d.slice(0, 2)}9${d.slice(2)}`;
   }
   return d;

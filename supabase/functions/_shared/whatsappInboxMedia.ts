@@ -1,10 +1,17 @@
 /** Parsing e persistência de mensagens com mídia (WhatsApp Cloud API). */
 
-import { cleanPhone } from "./whatsappSend.ts";
+import { normalizeWaId, waIdsEquivalent } from "./whatsappSend.ts";
 
 type SupabaseAdmin = ReturnType<typeof import("https://esm.sh/@supabase/supabase-js@2").createClient>;
 
-async function findInboxConversationId(
+type ConversationRow = {
+  id: string;
+  wa_id: string;
+  contact_name?: string | null;
+  card_id?: string | null;
+};
+
+async function findExactInboxConversationId(
   admin: SupabaseAdmin,
   waId: string,
   instanceId: string | null,
@@ -30,6 +37,48 @@ async function findInboxConversationId(
   return data?.id || null;
 }
 
+function pickBestEquivalentConversation(
+  rows: ConversationRow[],
+  canonicalWaId: string,
+): ConversationRow | null {
+  const matches = rows.filter((row) => waIdsEquivalent(row.wa_id, canonicalWaId));
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0];
+
+  return matches.slice().sort((a, b) => {
+    const score = (row: ConversationRow) =>
+      (row.card_id ? 100 : 0) + (row.contact_name?.trim() ? 10 : 0);
+    return score(b) - score(a);
+  })[0];
+}
+
+/** Localiza conversa existente (inclui variantes BR sem/com 9º dígito). */
+export async function findInboxConversationId(
+  admin: SupabaseAdmin,
+  waId: string,
+  instanceId: string | null,
+): Promise<{ id: string | null; canonicalWaId: string }> {
+  const canonicalWaId = normalizeWaId(waId);
+  if (!canonicalWaId) return { id: null, canonicalWaId: "" };
+
+  for (const candidate of [canonicalWaId, waId.trim()].filter(Boolean)) {
+    const exactId = await findExactInboxConversationId(admin, candidate, instanceId);
+    if (exactId) return { id: exactId, canonicalWaId };
+  }
+
+  let query = admin
+    .from("whatsapp_conversations")
+    .select("id, wa_id, contact_name, card_id")
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(150);
+
+  query = instanceId ? query.eq("instance_id", instanceId) : query.is("instance_id", null);
+
+  const { data: rows } = await query;
+  const best = pickBestEquivalentConversation((rows || []) as ConversationRow[], canonicalWaId);
+  return { id: best?.id || null, canonicalWaId };
+}
+
 /** Grava mensagem enviada (campanha/gatilho/API) no Inbox WhatsApp. */
 export async function recordOutboundWhatsAppInbox(
   admin: SupabaseAdmin,
@@ -46,8 +95,8 @@ export async function recordOutboundWhatsAppInbox(
     sentByName?: string;
   },
 ): Promise<void> {
-  const waId = cleanPhone(opts.phone);
-  if (!waId) {
+  const canonicalWaId = normalizeWaId(opts.phone);
+  if (!canonicalWaId) {
     console.warn("[recordOutboundWhatsAppInbox] telefone inválido — ignorado");
     return;
   }
@@ -57,12 +106,13 @@ export async function recordOutboundWhatsAppInbox(
   const previewText = bodyText.slice(0, 200)
     || (opts.isTemplate ? `[Template] ${opts.metaTemplateName || "Meta"}` : "(mensagem)");
 
-  let conversationId = await findInboxConversationId(admin, waId, opts.instanceId);
+  let { id: conversationId } = await findInboxConversationId(admin, canonicalWaId, opts.instanceId);
 
   const convPatch: Record<string, unknown> = {
     last_message_at: now.toISOString(),
     last_preview: previewText,
-    phone_display: waId,
+    phone_display: canonicalWaId,
+    wa_id: canonicalWaId,
     updated_at: now.toISOString(),
   };
   if (opts.contactName) convPatch.contact_name = opts.contactName;
@@ -84,9 +134,9 @@ export async function recordOutboundWhatsAppInbox(
       .from("whatsapp_conversations")
       .insert({
         instance_id: opts.instanceId,
-        wa_id: waId,
+        wa_id: canonicalWaId,
         contact_name: opts.contactName ?? null,
-        phone_display: waId,
+        phone_display: canonicalWaId,
         module: opts.module ?? null,
         card_id: opts.cardId ?? null,
         window_expires_at: null,
@@ -99,7 +149,8 @@ export async function recordOutboundWhatsAppInbox(
 
     if (insertErr) {
       if (insertErr.code === "23505") {
-        conversationId = await findInboxConversationId(admin, waId, opts.instanceId);
+        const retry = await findInboxConversationId(admin, canonicalWaId, opts.instanceId);
+        conversationId = retry.id;
         if (conversationId) {
           await admin.from("whatsapp_conversations").update(convPatch).eq("id", conversationId);
         }
@@ -147,7 +198,7 @@ export async function recordOutboundWhatsAppInbox(
     return;
   }
 
-  console.log(`[recordOutboundWhatsAppInbox] gravado conv=${conversationId} wa_id=${waId}`);
+  console.log(`[recordOutboundWhatsAppInbox] gravado conv=${conversationId} wa_id=${canonicalWaId}`);
 }
 
 /** Texto enviado ao cliente: cabeçalho em negrito (Markdown WhatsApp) + conteúdo. */
