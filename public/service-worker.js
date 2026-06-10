@@ -1,4 +1,4 @@
-const CACHE = "crm-pwa-v4";
+const CACHE = "crm-pwa-v5";
 
 const PRECACHE = [
   "/",

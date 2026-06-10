@@ -1,7 +1,7 @@
 /**
- * Ponto de entrada: bootstrap PWA (iOS) + montagem do React.
+ * Ponto de entrada: monta o React primeiro; service worker depois (evita removeChild no 1º acesso).
  */
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import App from "./App.tsx";
 import RootErrorBoundary from "./components/RootErrorBoundary.tsx";
 import "@/hooks/use-pwa-install";
@@ -28,6 +28,8 @@ const isPreviewHost =
 const canRegisterServiceWorker =
   "serviceWorker" in navigator && !isPreviewHost && !isInIframe;
 
+let reactRoot: Root | null = null;
+
 function showBootMessage(html: string) {
   const root = document.getElementById("root");
   if (root) root.innerHTML = html;
@@ -39,6 +41,8 @@ function mountApp() {
     showBootMessage("<p style='padding:24px;font-family:system-ui'>Elemento root não encontrado.</p>");
     return;
   }
+
+  if (reactRoot) return;
 
   if (isIOSInAppBrowser()) {
     showBootMessage(`
@@ -68,35 +72,44 @@ function mountApp() {
     return;
   }
 
-  createRoot(rootEl).render(
+  reactRoot = createRoot(rootEl);
+  reactRoot.render(
     <RootErrorBoundary>
       <App />
     </RootErrorBoundary>,
   );
 }
 
-async function boot() {
-  if (canRegisterServiceWorker) {
-    await runPwaBootstrap();
-    const controlled = await registerPushServiceWorker();
-    if (!controlled) {
-      try {
-        if (!sessionStorage.getItem("crm_sw_reload")) {
-          sessionStorage.setItem("crm_sw_reload", "1");
-          location.reload();
-          return;
-        }
-      } catch {
-        // Safari modo privado / restrição de storage
-      }
-    }
-  } else {
+async function setupServiceWorkerInBackground() {
+  if (!canRegisterServiceWorker) {
     navigator.serviceWorker?.getRegistrations().then((registrations) => {
       registrations.forEach((registration) => registration.unregister());
     });
+    return;
   }
 
-  mountApp();
+  try {
+    await runPwaBootstrap();
+    await registerPushServiceWorker();
+    // Não forçamos reload no primeiro acesso — evita corrida com o React (removeChild).
+    // Push/notificações passam a valer na próxima visita ou quando o SW assumir o controle.
+  } catch (error) {
+    console.warn("[CRM] Falha ao registrar service worker:", error);
+  }
 }
 
-void boot();
+function scheduleServiceWorkerSetup() {
+  const run = () => void setupServiceWorkerInBackground();
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(run, { timeout: 4000 });
+  } else {
+    window.setTimeout(run, 1500);
+  }
+}
+
+function boot() {
+  mountApp();
+  scheduleServiceWorkerSetup();
+}
+
+boot();

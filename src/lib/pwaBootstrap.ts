@@ -1,5 +1,5 @@
 /** Bump quando precisar limpar SW/cache antigo (ex.: tela branca no iPhone). */
-const SW_CACHE_GENERATION = "4";
+const SW_CACHE_GENERATION = "5";
 
 const isIOS = () =>
   /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as Window & { MSStream?: unknown }).MSStream;
