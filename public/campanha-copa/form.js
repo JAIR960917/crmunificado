@@ -9,6 +9,55 @@
   var cpfInput = document.getElementById("cpf");
 
   var currentJogoKey = "";
+  var pixelSuccessSnippet = "";
+  var pixelFormInjected = false;
+  var pixelSuccessInjected = false;
+
+  function injectPixelSnippet(html, slot) {
+    var code = (html || "").trim();
+    if (!code) return;
+
+    var marker = "data-copa-pixel-" + slot;
+    if (document.querySelector("[" + marker + "]")) return;
+
+    function mountScript(oldScript) {
+      var script = document.createElement("script");
+      script.setAttribute(marker, "1");
+      Array.from(oldScript.attributes || []).forEach(function (attr) {
+        script.setAttribute(attr.name, attr.value);
+      });
+      script.textContent = oldScript.textContent;
+      document.head.appendChild(script);
+    }
+
+    if (code.indexOf("<") >= 0) {
+      var tpl = document.createElement("template");
+      tpl.innerHTML = code;
+      tpl.content.querySelectorAll("script").forEach(mountScript);
+      tpl.content.querySelectorAll("noscript").forEach(function (ns) {
+        var clone = ns.cloneNode(true);
+        if (clone.setAttribute) clone.setAttribute(marker, "1");
+        document.body.appendChild(clone);
+      });
+    } else {
+      var inline = document.createElement("script");
+      inline.setAttribute(marker, "1");
+      inline.textContent = code;
+      document.head.appendChild(inline);
+    }
+  }
+
+  function injectFormPixel(snippet) {
+    if (pixelFormInjected || !snippet) return;
+    injectPixelSnippet(snippet, "form");
+    pixelFormInjected = true;
+  }
+
+  function injectSuccessPixel() {
+    if (pixelSuccessInjected || !pixelSuccessSnippet) return;
+    injectPixelSnippet(pixelSuccessSnippet, "success");
+    pixelSuccessInjected = true;
+  }
 
   function getConfig() {
     var cfg = window.__CRM_RUNTIME_CONFIG__ || {};
@@ -60,6 +109,8 @@
     var matchMeta = data.match_meta || "";
 
     currentJogoKey = data.jogo_key || "";
+    pixelSuccessSnippet = data.pixel_success || "";
+    injectFormPixel(data.pixel_form || "");
 
     document.title = "Campanha Copa — " + name;
 
@@ -238,6 +289,7 @@
 
       form.hidden = true;
       successEl.hidden = false;
+      injectSuccessPixel();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       showError(err.message || "Erro ao enviar. Tente novamente.");

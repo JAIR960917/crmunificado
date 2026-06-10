@@ -9,6 +9,8 @@ export type CampanhaCopaJogoConfig = {
 };
 
 export const CAMPANHA_COPA_JOGO_SETTING_KEY = "campanha_copa_jogo_config";
+export const CAMPANHA_COPA_PIXEL_FORM_KEY = "campanha_copa_pixel_form";
+export const CAMPANHA_COPA_PIXEL_SUCCESS_KEY = "campanha_copa_pixel_success";
 
 export const DEFAULT_CAMPANHA_COPA_JOGO: CampanhaCopaJogoConfig = {
   team_home_name: "Brasil",

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { internalCorsHeaders } from "../_shared/internalAuth.ts";
 import { loadCampanhaCopaJogoConfig } from "../_shared/campanhaCopaJogo.ts";
+import { loadCidadeLojaRoutes, pickAssigneeForCity } from "../_shared/campanhaCopaAssign.ts";
 
 const corsHeaders = internalCorsHeaders;
 
@@ -45,13 +46,20 @@ async function loadPublicConfig(supabase: ReturnType<typeof createClient>) {
   const { data } = await supabase
     .from("system_settings")
     .select("setting_key, setting_value")
-    .in("setting_key", ["system_name", "logo_url"]);
+    .in("setting_key", [
+      "system_name",
+      "logo_url",
+      "campanha_copa_pixel_form",
+      "campanha_copa_pixel_success",
+    ]);
 
   const map = new Map((data || []).map((r) => [r.setting_key, r.setting_value || ""]));
 
   return {
     system_name: map.get("system_name") || "Óticas Joonker",
     logo_url: map.get("logo_url") || "",
+    pixel_form: map.get("campanha_copa_pixel_form") || "",
+    pixel_success: map.get("campanha_copa_pixel_success") || "",
     jogo_key: jogo.jogo_key,
     jogo_label: jogo.jogo_label,
     team_home_name: jogo.team_home_name,
@@ -157,13 +165,8 @@ serve(async (req) => {
     const palpiteTexto = `${palpiteHome} x ${palpiteAway}`;
     const usaOculosNorm = usaOculos.toLowerCase().startsWith("s") ? "sim" : "nao";
 
-    const { data: setting } = await supabase
-      .from("system_settings")
-      .select("setting_value")
-      .eq("setting_key", "campanha_copa_default_user_id")
-      .maybeSingle();
-
-    const defaultUserId = (setting?.setting_value || "").trim() || null;
+    const cityRoutes = await loadCidadeLojaRoutes(supabase);
+    const assignedUserId = await pickAssigneeForCity(supabase, cidade, cityRoutes);
 
     const leadData: Record<string, unknown> = {
       origem_campanha: "copa",
@@ -191,8 +194,8 @@ serve(async (req) => {
       .insert({
         data: leadData,
         status: "campanha_copa",
-        assigned_to: defaultUserId,
-        created_by: defaultUserId,
+        assigned_to: assignedUserId,
+        created_by: assignedUserId,
       })
       .select("id")
       .single();
@@ -219,7 +222,7 @@ serve(async (req) => {
         jogo: jogoKey,
         jogo_label: jogoCfg.jogo_label,
         consentimento_marketing: true,
-        assigned_to: defaultUserId,
+        assigned_to: assignedUserId,
       })
       .select("id")
       .single();

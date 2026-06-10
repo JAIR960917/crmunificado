@@ -1,15 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ExternalLink, Pencil, RefreshCw, Search, Trophy, UserPlus } from "lucide-react";
+import { ExternalLink, Pencil, RefreshCw, Search, Share2, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
 import CampanhaCopaSubmissionDialog, {
   type CampanhaCopaSubmission,
 } from "@/components/campanha-copa/CampanhaCopaSubmissionDialog";
 import CampanhaCopaJogoConfigCard from "@/components/campanha-copa/CampanhaCopaJogoConfigCard";
+import CampanhaCopaPixelConfigCard from "@/components/campanha-copa/CampanhaCopaPixelConfigCard";
+import CampanhaCopaCidadeLojaConfigCard from "@/components/campanha-copa/CampanhaCopaCidadeLojaConfigCard";
 import { supabase } from "@/integrations/supabase/client";
-import { CAMPANHA_COPA_JOGO_SETTING_KEY } from "@/lib/campanha-copa-jogo";
+import {
+  CAMPANHA_COPA_JOGO_SETTING_KEY,
+  CAMPANHA_COPA_PIXEL_FORM_KEY,
+  CAMPANHA_COPA_PIXEL_SUCCESS_KEY,
+} from "@/lib/campanha-copa-jogo";
+import {
+  distributeUsersEqually,
+  matchCityToRoute,
+  resolveCompanyForCity,
+  type CidadeLojaRoute,
+} from "@/lib/campanha-copa-cidade";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,23 +43,35 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type Profile = { user_id: string; full_name: string; email?: string };
+type Profile = {
+  user_id: string;
+  full_name: string;
+  email?: string;
+  company_id: string | null;
+};
 
+type UserRole = { user_id: string; role: string };
+
+const ALL = "__all__";
 const NONE = "__none__";
 
 export default function CampanhasCopaPage() {
   const { isAdmin, user } = useAuth();
   const [rows, setRows] = useState<CampanhaCopaSubmission[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [defaultUserId, setDefaultUserId] = useState("");
+  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
+  const [cityRoutes, setCityRoutes] = useState<CidadeLojaRoute[]>([]);
   const [loading, setLoading] = useState(true);
-  const [savingDefault, setSavingDefault] = useState(false);
   const [search, setSearch] = useState("");
+  const [cityFilter, setCityFilter] = useState(ALL);
   const [reassigning, setReassigning] = useState<string | null>(null);
+  const [distributing, setDistributing] = useState(false);
   const [detailRow, setDetailRow] = useState<CampanhaCopaSubmission | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [jogoConfigRaw, setJogoConfigRaw] = useState<string | null>(null);
+  const [pixelForm, setPixelForm] = useState("");
+  const [pixelSuccess, setPixelSuccess] = useState("");
 
   const profileName = useCallback(
     (id: string | null) => {
@@ -64,40 +88,76 @@ export default function CampanhasCopaPage() {
     return p?.full_name || p?.email || "Usuário";
   }, [profiles, user?.id]);
 
+  const eligibleUserIds = useCallback(
+    (companyId: string) => {
+      const ids = profiles.filter((p) => p.company_id === companyId).map((p) => p.user_id);
+      return userRoles
+        .filter((r) => ids.includes(r.user_id) && (r.role === "vendedor" || r.role === "gerente"))
+        .map((r) => r.user_id);
+    },
+    [profiles, userRoles],
+  );
+
+  const eligibleForSubmission = useCallback(
+    (submission: CampanhaCopaSubmission) => {
+      const route = resolveCompanyForCity(submission.cidade, cityRoutes);
+      if (!route) return [];
+      const ids = new Set(eligibleUserIds(route.company_id));
+      return profiles.filter((p) => ids.has(p.user_id));
+    },
+    [cityRoutes, eligibleUserIds, profiles],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [subRes, profRes, settingRes, jogoRes] = await Promise.all([
-        supabase
-          .from("campanha_copa_submissions")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(2000),
-        supabase.from("profiles").select("user_id, full_name, email").order("full_name"),
-        isAdmin
-          ? supabase
-              .from("system_settings")
-              .select("setting_value")
-              .eq("setting_key", "campanha_copa_default_user_id")
-              .maybeSingle()
-          : Promise.resolve({ data: null, error: null }),
-        isAdmin
-          ? supabase
-              .from("system_settings")
-              .select("setting_value")
-              .eq("setting_key", CAMPANHA_COPA_JOGO_SETTING_KEY)
-              .maybeSingle()
-          : Promise.resolve({ data: null, error: null }),
-      ]);
+      const [subRes, profRes, rolesRes, routesRes, jogoRes, pixelFormRes, pixelSuccessRes] =
+        await Promise.all([
+          supabase
+            .from("campanha_copa_submissions")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(2000),
+          supabase
+            .from("profiles")
+            .select("user_id, full_name, email, company_id")
+            .order("full_name"),
+          supabase.from("user_roles").select("user_id, role"),
+          supabase
+            .from("campanha_copa_cidade_lojas" as never)
+            .select("id, cidade_label, company_id"),
+          isAdmin
+            ? supabase
+                .from("system_settings")
+                .select("setting_value")
+                .eq("setting_key", CAMPANHA_COPA_JOGO_SETTING_KEY)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          isAdmin
+            ? supabase
+                .from("system_settings")
+                .select("setting_value")
+                .eq("setting_key", CAMPANHA_COPA_PIXEL_FORM_KEY)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          isAdmin
+            ? supabase
+                .from("system_settings")
+                .select("setting_value")
+                .eq("setting_key", CAMPANHA_COPA_PIXEL_SUCCESS_KEY)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+        ]);
 
       if (subRes.error) throw subRes.error;
       setRows((subRes.data || []) as CampanhaCopaSubmission[]);
       setProfiles((profRes.data || []) as Profile[]);
-      if (settingRes.data?.setting_value) {
-        setDefaultUserId(settingRes.data.setting_value);
-      }
-      if (jogoRes.data?.setting_value) {
-        setJogoConfigRaw(jogoRes.data.setting_value);
+      setUserRoles((rolesRes.data || []) as UserRole[]);
+      setCityRoutes((routesRes.data || []) as CidadeLojaRoute[]);
+      if (jogoRes.data?.setting_value) setJogoConfigRaw(jogoRes.data.setting_value);
+      if (pixelFormRes.data?.setting_value != null) setPixelForm(pixelFormRes.data.setting_value);
+      if (pixelSuccessRes.data?.setting_value != null) {
+        setPixelSuccess(pixelSuccessRes.data.setting_value);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao carregar inscrições");
@@ -110,7 +170,16 @@ export default function CampanhasCopaPage() {
     void load();
   }, [load]);
 
-  const filtered = useMemo(() => {
+  const cityOptions = useMemo(() => {
+    const labels = new Set<string>();
+    cityRoutes.forEach((r) => labels.add(r.cidade_label));
+    rows.forEach((r) => {
+      if (r.cidade?.trim()) labels.add(r.cidade.trim());
+    });
+    return [...labels].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [rows, cityRoutes]);
+
+  const searchFiltered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) =>
@@ -120,30 +189,21 @@ export default function CampanhasCopaPage() {
     );
   }, [rows, search, profileName]);
 
+  const filtered = useMemo(() => {
+    if (cityFilter === ALL) return searchFiltered;
+    return searchFiltered.filter(
+      (r) => r.cidade && matchCityToRoute(r.cidade, cityFilter),
+    );
+  }, [searchFiltered, cityFilter]);
+
+  const unassignedInFilter = useMemo(
+    () => filtered.filter((r) => !r.assigned_to),
+    [filtered],
+  );
+
   const openDetail = (row: CampanhaCopaSubmission) => {
     setDetailRow(row);
     setDetailOpen(true);
-  };
-
-  const saveDefaultUser = async () => {
-    if (!isAdmin) return;
-    setSavingDefault(true);
-    try {
-      const { error } = await supabase.from("system_settings").upsert(
-        {
-          setting_key: "campanha_copa_default_user_id",
-          setting_value: defaultUserId === NONE ? "" : defaultUserId,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "setting_key" },
-      );
-      if (error) throw error;
-      toast.success("Responsável padrão das novas inscrições atualizado.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao salvar");
-    } finally {
-      setSavingDefault(false);
-    }
   };
 
   const reassign = async (submission: CampanhaCopaSubmission, newUserId: string) => {
@@ -192,6 +252,83 @@ export default function CampanhasCopaPage() {
     }
   };
 
+  const distributeEqually = async () => {
+    if (cityFilter === ALL) {
+      toast.error("Selecione uma cidade para distribuir os leads.");
+      return;
+    }
+
+    const route = resolveCompanyForCity(cityFilter, cityRoutes);
+    if (!route) {
+      toast.error("Esta cidade não está vinculada a uma loja. Configure em Cidades e lojas.");
+      return;
+    }
+
+    const eligible = eligibleUserIds(route.company_id);
+    if (eligible.length === 0) {
+      toast.error("Não há vendedores ou gerentes cadastrados nesta loja.");
+      return;
+    }
+
+    const targets = [...unassignedInFilter].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+    if (targets.length === 0) {
+      toast.info("Não há inscrições sem responsável nesta cidade.");
+      return;
+    }
+
+    const assignments = distributeUsersEqually(
+      targets.map((t) => t.id),
+      eligible,
+    );
+
+    setDistributing(true);
+    try {
+      for (const submission of targets) {
+        const targetId = assignments.get(submission.id);
+        if (!targetId) continue;
+
+        const { error: subErr } = await supabase
+          .from("campanha_copa_submissions")
+          .update({ assigned_to: targetId })
+          .eq("id", submission.id);
+        if (subErr) throw subErr;
+
+        if (submission.lead_id) {
+          const { error: leadErr } = await supabase
+            .from("crm_leads")
+            .update({ assigned_to: targetId })
+            .eq("id", submission.lead_id);
+          if (leadErr) throw leadErr;
+        }
+
+        await supabase.from("campanha_copa_history" as never).insert({
+          submission_id: submission.id,
+          user_id: user?.id ?? null,
+          action: "reassigned",
+          summary: `${currentUserName} distribuiu igualmente para ${profileName(targetId)} (${cityFilter}).`,
+        } as never);
+      }
+
+      const lastId = assignments.get(targets[targets.length - 1].id);
+      if (lastId) {
+        await supabase.from("campanha_copa_round_robin" as never).upsert({
+          company_id: route.company_id,
+          last_user_id: lastId,
+          updated_at: new Date().toISOString(),
+        } as never);
+      }
+
+      toast.success(`${targets.length} inscrição(ões) distribuída(s) entre ${eligible.length} responsável(is).`);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao distribuir leads");
+    } finally {
+      setDistributing(false);
+    }
+  };
+
   const formUrl = `${window.location.origin}/campanha-copa`;
 
   return (
@@ -204,7 +341,7 @@ export default function CampanhasCopaPage() {
               Campanhas Copa
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Inscrições do formulário público da campanha Copa.
+              Inscrições do formulário público — distribuídas por cidade e loja.
             </p>
           </div>
           <div className="flex gap-2">
@@ -245,58 +382,74 @@ export default function CampanhasCopaPage() {
         </div>
 
         {isAdmin && (
-          <CampanhaCopaJogoConfigCard
-            initialRaw={jogoConfigRaw}
+          <CampanhaCopaCidadeLojaConfigCard onSaved={() => void load()} />
+        )}
+
+        {isAdmin && (
+          <CampanhaCopaJogoConfigCard initialRaw={jogoConfigRaw} onSaved={() => void load()} />
+        )}
+
+        {isAdmin && (
+          <CampanhaCopaPixelConfigCard
+            initialFormPixel={pixelForm}
+            initialSuccessPixel={pixelSuccess}
             onSaved={() => void load()}
           />
         )}
 
-        {isAdmin && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <UserPlus className="h-4 w-4" />
-                Responsável padrão (novas inscrições)
-              </CardTitle>
-              <CardDescription>
-                Leads do formulário público entram atribuídos a este usuário. Depois você pode
-                redirecionar para gerentes ou vendedores na tabela abaixo.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row gap-3">
-              <Select value={defaultUserId || NONE} onValueChange={setDefaultUserId}>
-                <SelectTrigger className="sm:max-w-md">
-                  <SelectValue placeholder="Selecione o usuário" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Nenhum (sem atribuição)</SelectItem>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.user_id} value={p.user_id}>
-                      {p.full_name || p.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button onClick={() => void saveDefaultUser()} disabled={savingDefault}>
-                {savingDefault ? "Salvando..." : "Salvar padrão"}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
         <Card>
           <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-              <CardTitle className="text-base">Inscrições</CardTitle>
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  className="pl-8"
-                  placeholder="Buscar nome, CPF, telefone..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                <CardTitle className="text-base">Inscrições</CardTitle>
+                <div className="relative w-full sm:w-72">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    className="pl-8"
+                    placeholder="Buscar nome, CPF, telefone..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
               </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">Cidade:</span>
+                  <Select value={cityFilter} onValueChange={setCityFilter}>
+                    <SelectTrigger className="w-full sm:w-[220px]">
+                      <SelectValue placeholder="Todas as cidades" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Todas as cidades</SelectItem>
+                      {cityOptions.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={distributing || cityFilter === ALL}
+                  onClick={() => void distributeEqually()}
+                  className="w-full sm:w-auto"
+                >
+                  <Share2 className="h-4 w-4 mr-1" />
+                  {distributing
+                    ? "Distribuindo..."
+                    : `Distribuir ${unassignedInFilter.length} sem responsável`}
+                </Button>
+              </div>
+              {cityFilter !== ALL && (
+                <CardDescription>
+                  {filtered.length} inscrição(ões) nesta cidade
+                  {unassignedInFilter.length > 0
+                    ? ` · ${unassignedInFilter.length} aguardando distribuição`
+                    : ""}
+                </CardDescription>
+              )}
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -332,58 +485,66 @@ export default function CampanhasCopaPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="Ver inscrição"
-                            onClick={() => openDetail(r)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs">
-                          {format(new Date(r.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
-                        </TableCell>
-                        <TableCell className="font-medium">{r.nome}</TableCell>
-                        <TableCell>{r.telefone}</TableCell>
-                        <TableCell>{r.cidade || "—"}</TableCell>
-                        <TableCell>{r.idade || "—"}</TableCell>
-                        <TableCell className="text-xs max-w-[120px] truncate">
-                          {r.jogo_label || r.jogo || "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {r.palpite_texto || `${r.palpite_brasil ?? "?"} x ${r.palpite_marrocos ?? "?"}`}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{r.usa_oculos === "sim" ? "Sim" : r.usa_oculos === "nao" ? "Não" : "—"}</TableCell>
-                        <TableCell className="max-w-[140px] truncate text-xs">{r.ultimo_exame_vista || "—"}</TableCell>
-                        <TableCell className="text-sm">{profileName(r.assigned_to)}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={r.assigned_to || NONE}
-                            onValueChange={(v) => void reassign(r, v)}
-                            disabled={reassigning === r.id}
-                          >
-                            <SelectTrigger className="h-8 w-[160px] text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={NONE}>Sem responsável</SelectItem>
-                              {profiles.map((p) => (
-                                <SelectItem key={p.user_id} value={p.user_id}>
-                                  {p.full_name || p.email}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    filtered.map((r) => {
+                      const storeStaff = eligibleForSubmission(r);
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="Ver inscrição"
+                              onClick={() => openDetail(r)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-xs">
+                            {format(new Date(r.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
+                          </TableCell>
+                          <TableCell className="font-medium">{r.nome}</TableCell>
+                          <TableCell>{r.telefone}</TableCell>
+                          <TableCell>{r.cidade || "—"}</TableCell>
+                          <TableCell>{r.idade || "—"}</TableCell>
+                          <TableCell className="text-xs max-w-[120px] truncate">
+                            {r.jogo_label || r.jogo || "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {r.palpite_texto ||
+                                `${r.palpite_brasil ?? "?"} x ${r.palpite_marrocos ?? "?"}`}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {r.usa_oculos === "sim" ? "Sim" : r.usa_oculos === "nao" ? "Não" : "—"}
+                          </TableCell>
+                          <TableCell className="max-w-[140px] truncate text-xs">
+                            {r.ultimo_exame_vista || "—"}
+                          </TableCell>
+                          <TableCell className="text-sm">{profileName(r.assigned_to)}</TableCell>
+                          <TableCell>
+                            <Select
+                              value={r.assigned_to || NONE}
+                              onValueChange={(v) => void reassign(r, v)}
+                              disabled={reassigning === r.id}
+                            >
+                              <SelectTrigger className="h-8 w-[160px] text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NONE}>Sem responsável</SelectItem>
+                                {storeStaff.map((p) => (
+                                  <SelectItem key={p.user_id} value={p.user_id}>
+                                    {p.full_name || p.email}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
