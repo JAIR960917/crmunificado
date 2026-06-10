@@ -758,10 +758,13 @@ export type Database = {
           parent_field_id: string | null
           parent_trigger_value: string | null
           position: number
+          appear_after_field_id: string | null
+          show_at_end: boolean
           show_on_card: boolean
           status_mapping: Json | null
         }
         Insert: {
+          appear_after_field_id?: string | null
           created_at?: string
           date_status_ranges?: Json | null
           field_type?: string
@@ -774,10 +777,12 @@ export type Database = {
           parent_field_id?: string | null
           parent_trigger_value?: string | null
           position?: number
+          show_at_end?: boolean
           show_on_card?: boolean
           status_mapping?: Json | null
         }
         Update: {
+          appear_after_field_id?: string | null
           created_at?: string
           date_status_ranges?: Json | null
           field_type?: string
@@ -790,10 +795,18 @@ export type Database = {
           parent_field_id?: string | null
           parent_trigger_value?: string | null
           position?: number
+          show_at_end?: boolean
           show_on_card?: boolean
           status_mapping?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_form_fields_appear_after_field_id_fkey"
+            columns: ["appear_after_field_id"]
+            isOneToOne: false
+            referencedRelation: "crm_form_fields"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_form_fields_parent_field_id_fkey"
             columns: ["parent_field_id"]
@@ -955,10 +968,13 @@ export type Database = {
           parent_field_id: string | null
           parent_trigger_value: string | null
           position: number
+          appear_after_field_id: string | null
+          show_at_end: boolean
           show_on_card: boolean
           status_mapping: Json | null
         }
         Insert: {
+          appear_after_field_id?: string | null
           created_at?: string
           date_status_ranges?: Json | null
           field_type?: string
@@ -973,10 +989,12 @@ export type Database = {
           parent_field_id?: string | null
           parent_trigger_value?: string | null
           position?: number
+          show_at_end?: boolean
           show_on_card?: boolean
           status_mapping?: Json | null
         }
         Update: {
+          appear_after_field_id?: string | null
           created_at?: string
           date_status_ranges?: Json | null
           field_type?: string
@@ -991,10 +1009,18 @@ export type Database = {
           parent_field_id?: string | null
           parent_trigger_value?: string | null
           position?: number
+          show_at_end?: boolean
           show_on_card?: boolean
           status_mapping?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_renovacao_form_fields_appear_after_field_id_fkey"
+            columns: ["appear_after_field_id"]
+            isOneToOne: false
+            referencedRelation: "crm_renovacao_form_fields"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_renovacao_form_fields_parent_field_id_fkey"
             columns: ["parent_field_id"]

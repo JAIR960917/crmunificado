@@ -26,6 +26,7 @@ import {
   mapToCanalAgendamento,
   resolveCanalFromForm,
 } from "@/lib/appointmentUtils";
+import { buildVisibleFormFieldOrder } from "@/lib/formFieldOrder";
 
 type DateStatusRange = { max_years: number; status_key: string };
 type DateStatusConfig = { ranges: DateStatusRange[]; above_all: string; no_answer: string };
@@ -43,6 +44,8 @@ type FormField = {
   date_status_ranges: DateStatusConfig | null;
   is_name_field?: boolean;
   is_phone_field?: boolean;
+  show_at_end?: boolean;
+  appear_after_field_id?: string | null;
 };
 
 type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
@@ -115,7 +118,7 @@ export default function NewLeadPage() {
     const fetchData = async () => {
       try {
         const [{ data: flds }, { data: sts }, { data: profs }, { data: myProfile }, { data: managerCos }] = await Promise.all([
-          supabase.from("crm_form_fields").select("id, label, field_type, options, position, is_required, parent_field_id, parent_trigger_value, status_mapping, date_status_ranges, is_name_field, is_phone_field").order("position"),
+          supabase.from("crm_form_fields").select("id, label, field_type, options, position, is_required, parent_field_id, parent_trigger_value, status_mapping, date_status_ranges, is_name_field, is_phone_field, show_at_end, appear_after_field_id").order("position"),
           supabase.from("crm_statuses").select("*").order("position"),
           supabase.rpc("get_profile_names"),
           supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle(),
@@ -195,23 +198,10 @@ export default function NewLeadPage() {
     return triggerValues.includes(parentValue);
   }, [fields, formData]);
 
-  // Get visible root fields and their visible children flattened
-  const getVisibleFields = useCallback((): FormField[] => {
-    const result: FormField[] = [];
-    const addWithChildren = (field: FormField) => {
-      if (!isFieldVisible(field)) return;
-      result.push(field);
-      fields
-        .filter((f) => f.parent_field_id === field.id)
-        .sort((a, b) => a.position - b.position)
-        .forEach(addWithChildren);
-    };
-    fields
-      .filter((f) => !f.parent_field_id)
-      .sort((a, b) => a.position - b.position)
-      .forEach(addWithChildren);
-    return result;
-  }, [fields, isFieldVisible]);
+  const getVisibleFields = useCallback(
+    (): FormField[] => buildVisibleFormFieldOrder(fields, isFieldVisible),
+    [fields, isFieldVisible],
+  );
 
   const visibleFields = getVisibleFields();
 
@@ -226,9 +216,7 @@ export default function NewLeadPage() {
     : [];
 
   const getVisibleAnswers = () => {
-    const answers: { label: string; value: string }[] = [];
-    const processField = (field: FormField) => {
-      if (!isFieldVisible(field)) return;
+    return getVisibleFields().map((field) => {
       const fieldKey = `field_${field.id}`;
       const raw = formData[fieldKey];
       let display = "";
@@ -237,17 +225,8 @@ export default function NewLeadPage() {
       } else {
         display = raw ? String(raw) : "—";
       }
-      answers.push({ label: field.label, value: display });
-      fields
-        .filter((f) => f.parent_field_id === field.id)
-        .sort((a, b) => a.position - b.position)
-        .forEach(processField);
-    };
-    fields
-      .filter((f) => !f.parent_field_id)
-      .sort((a, b) => a.position - b.position)
-      .forEach(processField);
-    return answers;
+      return { label: field.label, value: display };
+    });
   };
 
   const resolveCanalAgendamento = (): string => {

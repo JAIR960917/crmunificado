@@ -27,6 +27,8 @@ type FormField = {
   is_phone_field: boolean;
   is_last_visit_field: boolean;
   show_on_card: boolean;
+  show_at_end: boolean;
+  appear_after_field_id: string | null;
 };
 
 const FIELD_TYPES = [
@@ -54,6 +56,7 @@ export default function RenovacaoFormBuilderPage() {
   const [isPhoneField, setIsPhoneField] = useState(false);
   const [isLastVisitField, setIsLastVisitField] = useState(false);
   const [showOnCard, setShowOnCard] = useState(false);
+  const [displayPosition, setDisplayPosition] = useState<string>("__parent__");
   const [parentFieldId, setParentFieldId] = useState<string>("__none__");
   const [parentTriggerValues, setParentTriggerValues] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -71,6 +74,23 @@ export default function RenovacaoFormBuilderPage() {
 
   const fillOrderIndex = useMemo(() => buildFormFillOrderIndex(fields), [fields]);
 
+  const positionAnchorCandidates = useMemo(() => {
+    const excluded = new Set<string>();
+    if (editingField) {
+      excluded.add(editingField.id);
+      const collectDescendants = (parentId: string) => {
+        fields.filter((f) => f.parent_field_id === parentId).forEach((f) => {
+          excluded.add(f.id);
+          collectDescendants(f.id);
+        });
+      };
+      collectDescendants(editingField.id);
+    }
+    return fields
+      .filter((f) => !excluded.has(f.id))
+      .sort((a, b) => (fillOrderIndex.get(a.id)?.order ?? 0) - (fillOrderIndex.get(b.id)?.order ?? 0));
+  }, [fields, editingField, fillOrderIndex]);
+
   const resetForm = () => {
     setLabel("");
     setFieldType("text");
@@ -80,6 +100,7 @@ export default function RenovacaoFormBuilderPage() {
     setIsPhoneField(false);
     setIsLastVisitField(false);
     setShowOnCard(false);
+    setDisplayPosition("__parent__");
     setParentFieldId("__none__");
     setParentTriggerValues([]);
     setEditingField(null);
@@ -142,6 +163,13 @@ export default function RenovacaoFormBuilderPage() {
     setIsPhoneField(field.is_phone_field);
     setIsLastVisitField(field.is_last_visit_field);
     setShowOnCard(field.show_on_card);
+    if (field.show_at_end) {
+      setDisplayPosition("__end__");
+    } else if (field.appear_after_field_id) {
+      setDisplayPosition(field.appear_after_field_id);
+    } else {
+      setDisplayPosition("__parent__");
+    }
     setParentFieldId(field.parent_field_id || "__none__");
     setParentTriggerValues(parseTriggerValues(field.parent_trigger_value));
     setDialogOpen(true);
@@ -166,6 +194,11 @@ export default function RenovacaoFormBuilderPage() {
       is_phone_field: autoIsPhoneField,
       is_last_visit_field: isLastVisitField,
       show_on_card: showOnCard || isLastVisitField,
+      show_at_end: parentFieldId !== "__none__" && displayPosition === "__end__",
+      appear_after_field_id:
+        parentFieldId !== "__none__" && displayPosition !== "__parent__" && displayPosition !== "__end__"
+          ? displayPosition
+          : null,
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
       parent_trigger_value: parentFieldId === "__none__" ? null : (parentTriggerValues.length > 0 ? JSON.stringify(parentTriggerValues) : null),
     };
@@ -424,8 +457,8 @@ export default function RenovacaoFormBuilderPage() {
                 </p>
                 {parentFieldId !== "__none__" && (
                   <p>
-                    Subpergunta — aparece após a pergunta pai. Para ir ao final, use{" "}
-                    <strong className="text-foreground">Nenhuma (pergunta raiz)</strong> e arraste para o fim da lista principal.
+                    Subpergunta condicional — use <strong className="text-foreground">Exibir após qual pergunta</strong> para
+                    definir em que ponto do formulário ela aparece.
                   </p>
                 )}
               </div>
@@ -455,7 +488,19 @@ export default function RenovacaoFormBuilderPage() {
 
             <div className="flex items-center gap-2"><Switch checked={isRequired} onCheckedChange={setIsRequired} /><Label>Obrigatório</Label></div>
             <div className="flex items-center gap-2"><Switch checked={isNameField} onCheckedChange={(v) => { setIsNameField(v); if (v) { setIsPhoneField(false); setIsLastVisitField(false); } }} /><Label>Este campo é o nome do cliente</Label></div>
-            <div className="flex items-center gap-2"><Switch checked={isPhoneField} onCheckedChange={(v) => { setIsPhoneField(v); if (v) { setIsNameField(false); setIsLastVisitField(false); } }} /><Label>Este campo é o telefone</Label></div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={isPhoneField}
+                onCheckedChange={(v) => {
+                  setIsPhoneField(v);
+                  if (v) {
+                    setIsNameField(false);
+                    setIsLastVisitField(false);
+                  }
+                }}
+              />
+              <Label>Este campo é o telefone</Label>
+            </div>
             <div className="flex items-center gap-2">
               <Switch checked={isLastVisitField} onCheckedChange={(v) => { setIsLastVisitField(v); if (v) { setIsNameField(false); setIsPhoneField(false); setFieldType("date"); } }} />
               <Label>Este é o campo principal: <strong>Data da última receita</strong></Label>
@@ -474,6 +519,28 @@ export default function RenovacaoFormBuilderPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {parentFieldId !== "__none__" && (
+              <div className="space-y-2">
+                <Label>Exibir após qual pergunta no formulário</Label>
+                <Select value={displayPosition} onValueChange={setDisplayPosition}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__parent__">Logo após a pergunta condicional (padrão)</SelectItem>
+                    {positionAnchorCandidates.map((f) => {
+                      const seq = fillOrderIndex.get(f.id);
+                      return (
+                        <SelectItem key={f.id} value={f.id}>
+                          Após: {f.label}
+                          {seq ? ` (${seq.order}º no fluxo)` : ""}
+                        </SelectItem>
+                      );
+                    })}
+                    <SelectItem value="__end__">No final do formulário</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {parentFieldId !== "__none__" && (
               <div className="space-y-2">

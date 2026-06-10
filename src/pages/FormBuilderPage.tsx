@@ -29,6 +29,8 @@ type FormField = {
   is_name_field: boolean;
   is_phone_field: boolean;
   show_on_card: boolean;
+  show_at_end: boolean;
+  appear_after_field_id: string | null;
   status_mapping: Record<string, string> | null;
   date_status_ranges: DateStatusConfig | null;
 };
@@ -60,6 +62,7 @@ export default function FormBuilderPage() {
   const [isNameField, setIsNameField] = useState(false);
   const [isPhoneField, setIsPhoneField] = useState(false);
   const [showOnCard, setShowOnCard] = useState(false);
+  const [displayPosition, setDisplayPosition] = useState<string>("__parent__");
   const [parentFieldId, setParentFieldId] = useState<string>("__none__");
   const [parentTriggerValues, setParentTriggerValues] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -95,6 +98,23 @@ export default function FormBuilderPage() {
 
   const fillOrderIndex = useMemo(() => buildFormFillOrderIndex(fields), [fields]);
 
+  const positionAnchorCandidates = useMemo(() => {
+    const excluded = new Set<string>();
+    if (editingField) {
+      excluded.add(editingField.id);
+      const collectDescendants = (parentId: string) => {
+        fields.filter((f) => f.parent_field_id === parentId).forEach((f) => {
+          excluded.add(f.id);
+          collectDescendants(f.id);
+        });
+      };
+      collectDescendants(editingField.id);
+    }
+    return fields
+      .filter((f) => !excluded.has(f.id))
+      .sort((a, b) => (fillOrderIndex.get(a.id)?.order ?? 0) - (fillOrderIndex.get(b.id)?.order ?? 0));
+  }, [fields, editingField, fillOrderIndex]);
+
   const resetForm = () => {
     setLabel("");
     setFieldType("text");
@@ -103,6 +123,7 @@ export default function FormBuilderPage() {
     setIsNameField(false);
     setIsPhoneField(false);
     setShowOnCard(false);
+    setDisplayPosition("__parent__");
     setParentFieldId("__none__");
     setParentTriggerValues([]);
     setEditingField(null);
@@ -189,6 +210,13 @@ export default function FormBuilderPage() {
     setIsNameField(field.is_name_field);
     setIsPhoneField(field.is_phone_field);
     setShowOnCard(field.show_on_card);
+    if (field.show_at_end) {
+      setDisplayPosition("__end__");
+    } else if (field.appear_after_field_id) {
+      setDisplayPosition(field.appear_after_field_id);
+    } else {
+      setDisplayPosition("__parent__");
+    }
     setParentFieldId(field.parent_field_id || "__none__");
     setParentTriggerValues(parseTriggerValues(field.parent_trigger_value));
     const mapping = field.status_mapping || {};
@@ -235,6 +263,11 @@ export default function FormBuilderPage() {
       is_name_field: isNameField,
       is_phone_field: autoIsPhoneField,
       show_on_card: showOnCard,
+      show_at_end: parentFieldId !== "__none__" && displayPosition === "__end__",
+      appear_after_field_id:
+        parentFieldId !== "__none__" && displayPosition !== "__parent__" && displayPosition !== "__end__"
+          ? displayPosition
+          : null,
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
       parent_trigger_value: parentFieldId === "__none__" ? null : (parentTriggerValues.length > 0 ? JSON.stringify(parentTriggerValues) : null),
       status_mapping: Object.keys(combinedMapping).length > 0 ? combinedMapping : null,
@@ -544,9 +577,9 @@ export default function FormBuilderPage() {
                 </p>
                 {parentFieldId !== "__none__" && (
                   <p>
-                    Esta é uma <strong className="text-foreground">subpergunta</strong> — ela aparece logo após a pergunta
-                    pai, não no final do formulário. Para ir ao final, defina condicional como{" "}
-                    <strong className="text-foreground">Nenhuma (pergunta raiz)</strong> e arraste para o fim da lista principal.
+                    Esta é uma <strong className="text-foreground">subpergunta condicional</strong> — a visibilidade segue a
+                    pergunta pai e os gatilhos. Use <strong className="text-foreground">Exibir após qual pergunta</strong> para
+                    definir em que ponto do formulário ela aparece.
                   </p>
                 )}
               </div>
@@ -590,7 +623,13 @@ export default function FormBuilderPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Switch checked={isPhoneField} onCheckedChange={(v) => { setIsPhoneField(v); if (v) setIsNameField(false); }} />
+              <Switch
+                checked={isPhoneField}
+                onCheckedChange={(v) => {
+                  setIsPhoneField(v);
+                  if (v) setIsNameField(false);
+                }}
+              />
               <Label>Este campo é o telefone</Label>
             </div>
 
@@ -614,6 +653,31 @@ export default function FormBuilderPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {parentFieldId !== "__none__" && (
+              <div className="space-y-2">
+                <Label>Exibir após qual pergunta no formulário</Label>
+                <Select value={displayPosition} onValueChange={setDisplayPosition}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__parent__">Logo após a pergunta condicional (padrão)</SelectItem>
+                    {positionAnchorCandidates.map((f) => {
+                      const seq = fillOrderIndex.get(f.id);
+                      return (
+                        <SelectItem key={f.id} value={f.id}>
+                          Após: {f.label}
+                          {seq ? ` (${seq.order}º no fluxo)` : ""}
+                        </SelectItem>
+                      );
+                    })}
+                    <SelectItem value="__end__">No final do formulário</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  A condicional continua valendo — só muda o momento em que a pergunta aparece no fluxo.
+                </p>
+              </div>
+            )}
 
             {parentFieldId !== "__none__" && (
               <div className="space-y-2">

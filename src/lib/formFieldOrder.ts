@@ -4,6 +4,8 @@ export type FormFieldOrderNode = {
   parent_field_id: string | null;
   position: number;
   label?: string;
+  show_at_end?: boolean;
+  appear_after_field_id?: string | null;
 };
 
 export type FormFieldOrderInfo = {
@@ -17,20 +19,53 @@ function childrenOf(fields: FormFieldOrderNode[], parentId: string | null) {
     .sort((a, b) => a.position - b.position);
 }
 
-/** Índice global de sequência (pré-ordem: raiz → filhos), igual ao fluxo de preenchimento. */
+/** Campo reposicionado fora da árvore condicional (final ou após pergunta âncora). */
+function isRelocated(field: FormFieldOrderNode): boolean {
+  return !!field.show_at_end || !!field.appear_after_field_id;
+}
+
+function anchoredAfter(fields: FormFieldOrderNode[], anchorId: string) {
+  return fields
+    .filter((f) => f.appear_after_field_id === anchorId && !f.show_at_end)
+    .sort((a, b) => a.position - b.position);
+}
+
+/** Índice global de sequência (raiz → filhos; âncoras e final tratados à parte). */
 export function buildFormFillOrderIndex(
   fields: FormFieldOrderNode[],
 ): Map<string, FormFieldOrderInfo> {
   const map = new Map<string, FormFieldOrderInfo>();
   let order = 0;
+  const deferred: FormFieldOrderNode[] = [];
+
+  const insertAnchoredAfter = (anchorId: string) => {
+    anchoredAfter(fields, anchorId).forEach(visit);
+  };
 
   const visit = (field: FormFieldOrderNode) => {
+    if (isRelocated(field)) {
+      if (field.show_at_end) {
+        deferred.push(field);
+        childrenOf(fields, field.id)
+          .filter((c) => !isRelocated(c))
+          .forEach(visit);
+      }
+      return;
+    }
+
     order += 1;
     map.set(field.id, { order, total: 0 });
-    childrenOf(fields, field.id).forEach(visit);
+    childrenOf(fields, field.id)
+      .filter((c) => !isRelocated(c))
+      .forEach(visit);
+    insertAnchoredAfter(field.id);
   };
 
   childrenOf(fields, null).forEach(visit);
+  deferred.forEach((field) => {
+    order += 1;
+    map.set(field.id, { order, total: 0 });
+  });
 
   for (const info of map.values()) {
     info.total = order;
@@ -44,4 +79,47 @@ export function getFormFieldParent(
 ): FormFieldOrderNode | null {
   if (!field.parent_field_id) return null;
   return fields.find((f) => f.id === field.parent_field_id) ?? null;
+}
+
+/** Lista plana na ordem de preenchimento, respeitando visibilidade, âncoras e final. */
+export function buildVisibleFormFieldOrder<T extends FormFieldOrderNode>(
+  fields: T[],
+  isVisible: (field: T) => boolean,
+): T[] {
+  const result: T[] = [];
+  const deferred: T[] = [];
+
+  const insertAnchoredAfter = (anchorId: string) => {
+    anchoredAfter(fields, anchorId).forEach(addWithChildren);
+  };
+
+  const addWithChildren = (field: T) => {
+    if (!isVisible(field)) return;
+    if (isRelocated(field)) {
+      if (field.show_at_end) {
+        deferred.push(field);
+        fields
+          .filter((f) => f.parent_field_id === field.id)
+          .filter((c) => !isRelocated(c))
+          .sort((a, b) => a.position - b.position)
+          .forEach(addWithChildren);
+      }
+      return;
+    }
+
+    result.push(field);
+    fields
+      .filter((f) => f.parent_field_id === field.id)
+      .filter((c) => !isRelocated(c))
+      .sort((a, b) => a.position - b.position)
+      .forEach(addWithChildren);
+    insertAnchoredAfter(field.id);
+  };
+
+  fields
+    .filter((f) => !f.parent_field_id)
+    .sort((a, b) => a.position - b.position)
+    .forEach(addWithChildren);
+
+  return [...result, ...deferred];
 }

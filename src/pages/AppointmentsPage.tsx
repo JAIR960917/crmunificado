@@ -1000,7 +1000,7 @@ export default function AppointmentsPage() {
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3 min-w-0 max-w-full">
           {pageMode === "specialist-schedule" && isAdmin ? (
             <>
               {scheduleLegend.length > 0 && (

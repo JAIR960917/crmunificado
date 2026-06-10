@@ -47,6 +47,16 @@ type Props = {
   vendaOptions: string[];
 };
 
+function formatApptDateTime(datetime: string) {
+  try {
+    return format(new Date(datetime), "dd/MM/yyyy HH:mm", { locale: ptBR });
+  } catch {
+    return "—";
+  }
+}
+
+const TH = "text-left px-2 py-2 font-medium whitespace-nowrap";
+
 export default function AppointmentsListTable({
   appointments,
   isAdmin,
@@ -67,162 +77,186 @@ export default function AppointmentsListTable({
     return <p className="text-center text-muted-foreground py-8">Nenhum agendamento encontrado.</p>;
   }
 
-  return (
-    <div className="overflow-x-auto rounded-lg border w-full">
-      <table className="text-xs w-full table-fixed">
-        <thead>
-          <tr className="bg-muted/70 border-b">
-            <th className="text-left px-2 py-1.5 font-medium w-[12%]">Nome</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[9%]">Telefone</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[4%]">Idade</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[9%]">Horário</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[8%]">Agendado por</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[6%]">Valor</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[7%]">Consulta paga</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[8%]">Pag. Óculos</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[5%]">Canal</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[8%]">Confirmação</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[9%]">Comparecimento</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[8%]">Venda</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[10%]">Resumo</th>
-            <th className="text-left px-2 py-1.5 font-medium w-[7%]">Ações</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {appointments.map((appt) => {
-            let dtFormatted = "—";
-            try {
-              dtFormatted = format(new Date(appt.scheduled_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR });
-            } catch { /* ignore */ }
-            const cpaga = appt.consulta_paga;
-            const rowColor = getAppointmentRowColor(appt);
-            const consultaPagaLocked = cpaga === true && !isAdmin;
-            const rescheduleNote = formatRescheduleNote(appt);
-            const isSnapshot = !!appt.is_reschedule_snapshot;
-            const nameTitle = [
-              appt.nome,
-              isSnapshot ? "Reagendado" : null,
-              rescheduleNote,
-              isSnapshot && appt.rescheduled_to_datetime
-                ? `Nova data: ${format(new Date(appt.rescheduled_to_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR })}`
-                : null,
-            ]
-              .filter(Boolean)
-              .join(" — ");
+  const renderActions = (appt: AppointmentListRow, isSnapshot: boolean) => (
+    <div className="flex gap-0.5 shrink-0">
+      {!isSnapshot && appt.venda !== "Vendido" && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          title={appt.renovacao_id ? "Retornar para Renovações" : "Retornar para Leads"}
+          onClick={() => onReturn(appt.id)}
+        >
+          <Undo2 className="h-3.5 w-3.5 text-primary" />
+        </Button>
+      )}
+      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => onEdit(appt)}>
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+      {!isSnapshot && (
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => onDelete(appt.id)}>
+          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+        </Button>
+      )}
+    </div>
+  );
 
-            return (
-              <tr
-                key={appt.id}
-                className={cn(
-                  "h-9 transition-colors",
-                  rowColor,
-                  appt.deleted_at && isAdmin ? "opacity-60" : "",
-                  isSnapshot && "border-dashed",
-                )}
-              >
-                <td className="px-2 py-0 align-middle overflow-hidden" title={nameTitle}>
-                  <div className="flex items-center gap-1 min-w-0">
-                    {isSnapshot && <span className="text-violet-400 shrink-0">↪</span>}
-                    <span className="truncate">{appt.nome || "—"}</span>
-                  </div>
-                </td>
-                <td className="px-2 py-0 align-middle truncate max-w-0" title={appt.telefone || undefined}>{appt.telefone || "—"}</td>
-                <td className="px-2 py-0 align-middle">{appt.idade || "—"}</td>
-                <td className="px-2 py-0 align-middle whitespace-nowrap">{dtFormatted}</td>
-                <td className="px-2 py-0 align-middle truncate max-w-0" title={getProfileName(appt.scheduled_by)}>{getProfileName(appt.scheduled_by)}</td>
-                <td className="px-2 py-0 align-middle whitespace-nowrap">R$ {Number(appt.valor).toFixed(2)}</td>
-                <td className="px-2 py-0 align-middle">
-                  {isSnapshot ? (
-                    <span>{cpaga === true ? "Sim" : cpaga === false ? "Não" : "—"}</span>
-                  ) : (
-                    <Select
-                      value={cpaga === true ? "sim" : cpaga === false ? "nao" : ""}
-                      onValueChange={(v) => onUpdateField(appt.id, "consulta_paga", v)}
-                      disabled={consultaPagaLocked}
-                    >
-                      <SelectTrigger className="h-7 text-[11px] w-full min-w-0 px-2"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sim">Sim</SelectItem>
-                        <SelectItem value="nao">Não</SelectItem>
-                      </SelectContent>
-                    </Select>
+  return (
+    <div className="min-w-0 w-full">
+      <p className="sm:hidden text-[11px] text-muted-foreground mb-1.5">
+        Deslize para o lado para ver todas as colunas →
+      </p>
+      <div
+        className="overflow-x-auto overscroll-x-contain rounded-lg border w-full max-w-full [webkit-overflow-scrolling:touch]"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        <table className="text-xs w-max border-collapse">
+          <thead>
+            <tr className="bg-muted/70 border-b">
+              <th className={cn(TH, "min-w-[120px]")}>Nome</th>
+              <th className={cn(TH, "min-w-[105px]")}>Telefone</th>
+              <th className={cn(TH, "min-w-[44px]")}>Idade</th>
+              <th className={cn(TH, "min-w-[128px]")}>Horário</th>
+              <th className={cn(TH, "min-w-[130px]")}>Agendado por</th>
+              <th className={cn(TH, "min-w-[72px]")}>Valor</th>
+              <th className={cn(TH, "min-w-[108px]")}>Consulta paga</th>
+              <th className={cn(TH, "min-w-[96px]")}>Pag. Óculos</th>
+              <th className={cn(TH, "min-w-[88px]")}>Canal</th>
+              <th className={cn(TH, "min-w-[112px]")}>Confirmação</th>
+              <th className={cn(TH, "min-w-[120px]")}>Comparecimento</th>
+              <th className={cn(TH, "min-w-[96px]")}>Venda</th>
+              <th className={cn(TH, "min-w-[100px]")}>Resumo</th>
+              <th className={cn(TH, "min-w-[96px]")}>Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {appointments.map((appt) => {
+              const dtFormatted = formatApptDateTime(appt.scheduled_datetime);
+              const cpaga = appt.consulta_paga;
+              const rowColor = getAppointmentRowColor(appt);
+              const consultaPagaLocked = cpaga === true && !isAdmin;
+              const rescheduleNote = formatRescheduleNote(appt);
+              const isSnapshot = !!appt.is_reschedule_snapshot;
+              const scheduledByName = getProfileName(appt.scheduled_by);
+              const nameTitle = [
+                appt.nome,
+                isSnapshot ? "Reagendado" : null,
+                rescheduleNote,
+                isSnapshot && appt.rescheduled_to_datetime
+                  ? `Nova data: ${format(new Date(appt.rescheduled_to_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR })}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" — ");
+
+              return (
+                <tr
+                  key={appt.id}
+                  className={cn(
+                    "transition-colors",
+                    rowColor,
+                    appt.deleted_at && isAdmin ? "opacity-60" : "",
+                    isSnapshot && "border-dashed",
                   )}
-                </td>
-                <td className="px-2 py-0 align-middle truncate max-w-0" title={glassesPaymentLabel(appt)}>{glassesPaymentLabel(appt)}</td>
-                <td className="px-2 py-0 align-middle">{appt.canal_agendamento}</td>
-                <td className="px-2 py-0 align-middle">
-                  {isSnapshot ? appt.confirmacao : (
-                    <Select value={appt.confirmacao} onValueChange={(v) => onUpdateField(appt.id, "confirmacao", v)}>
-                      <SelectTrigger className="h-7 text-[11px] w-full min-w-0 px-2"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {confirmacaoOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </td>
-                <td className="px-2 py-0 align-middle">
-                  {isSnapshot ? appt.comparecimento : (
-                    <Select value={appt.comparecimento} onValueChange={(v) => onUpdateField(appt.id, "comparecimento", v)}>
-                      <SelectTrigger className="h-7 text-[11px] w-full min-w-0 px-2"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {comparecimentoOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </td>
-                <td className="px-2 py-0 align-middle">
-                  {isSnapshot ? appt.venda : (
-                    <Select value={appt.venda} onValueChange={(v) => onUpdateField(appt.id, "venda", v)}>
-                      <SelectTrigger className="h-7 text-[11px] w-full min-w-0 px-2"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {vendaOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </td>
-                <td className="px-2 py-0 align-middle">
-                  {isSnapshot ? (
-                    <span className="truncate block" title={appt.resumo || undefined}>{appt.resumo || "—"}</span>
-                  ) : (
-                    <input
-                      type="text"
-                      className="border rounded px-1.5 h-7 text-[11px] w-full min-w-0 bg-background"
-                      defaultValue={appt.resumo}
-                      onBlur={(e) => {
-                        if (e.target.value !== appt.resumo) onUpdateField(appt.id, "resumo", e.target.value);
-                      }}
-                      placeholder="Obs..."
-                    />
-                  )}
-                </td>
-                <td className="px-2 py-0 align-middle">
-                  <div className="flex gap-0.5">
-                    {!isSnapshot && appt.venda !== "Vendido" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        title={appt.renovacao_id ? "Retornar para Renovações" : "Retornar para Leads"}
-                        onClick={() => onReturn(appt.id)}
+                >
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap" title={nameTitle}>
+                    <div className="flex items-center gap-1">
+                      {isSnapshot && <span className="text-violet-400 shrink-0">↪</span>}
+                      <span>{appt.nome || "—"}</span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap" title={appt.telefone || undefined}>
+                    {appt.telefone || "—"}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">{appt.idade || "—"}</td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">{dtFormatted}</td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap" title={scheduledByName}>
+                    {scheduledByName}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">R$ {Number(appt.valor).toFixed(2)}</td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                    {isSnapshot ? (
+                      <span>{cpaga === true ? "Sim" : cpaga === false ? "Não" : "—"}</span>
+                    ) : (
+                      <Select
+                        value={cpaga === true ? "sim" : cpaga === false ? "nao" : ""}
+                        onValueChange={(v) => onUpdateField(appt.id, "consulta_paga", v)}
+                        disabled={consultaPagaLocked}
                       >
-                        <Undo2 className="h-3 w-3 text-primary" />
-                      </Button>
+                        <SelectTrigger className="h-7 text-[11px] w-[96px] shrink-0 px-2">
+                          <SelectValue placeholder="—" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="sim">Sim</SelectItem>
+                          <SelectItem value="nao">Não</SelectItem>
+                        </SelectContent>
+                      </Select>
                     )}
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEdit(appt)}>
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                    {!isSnapshot && (
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onDelete(appt.id)}>
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
+                  </td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap" title={glassesPaymentLabel(appt)}>
+                    {glassesPaymentLabel(appt)}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">{appt.canal_agendamento}</td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                    {isSnapshot ? appt.confirmacao : (
+                      <Select value={appt.confirmacao} onValueChange={(v) => onUpdateField(appt.id, "confirmacao", v)}>
+                        <SelectTrigger className="h-7 text-[11px] w-[104px] shrink-0 px-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {confirmacaoOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  </td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                    {isSnapshot ? appt.comparecimento : (
+                      <Select value={appt.comparecimento} onValueChange={(v) => onUpdateField(appt.id, "comparecimento", v)}>
+                        <SelectTrigger className="h-7 text-[11px] w-[112px] shrink-0 px-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {comparecimentoOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                    {isSnapshot ? appt.venda : (
+                      <Select value={appt.venda} onValueChange={(v) => onUpdateField(appt.id, "venda", v)}>
+                        <SelectTrigger className="h-7 text-[11px] w-[96px] shrink-0 px-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {vendaOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                    {isSnapshot ? (
+                      <span title={appt.resumo || undefined}>{appt.resumo || "—"}</span>
+                    ) : (
+                      <input
+                        type="text"
+                        className="border rounded px-1.5 h-7 text-[11px] w-[100px] shrink-0 bg-background"
+                        defaultValue={appt.resumo}
+                        onBlur={(e) => {
+                          if (e.target.value !== appt.resumo) onUpdateField(appt.id, "resumo", e.target.value);
+                        }}
+                        placeholder="Obs..."
+                      />
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                    {renderActions(appt, isSnapshot)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

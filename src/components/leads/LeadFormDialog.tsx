@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { buildVisibleFormFieldOrder } from "@/lib/formFieldOrder";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,8 @@ type FormField = {
   is_phone_field?: boolean;
   parent_field_id: string | null;
   parent_trigger_value: string | null;
+  show_at_end?: boolean;
+  appear_after_field_id?: string | null;
   status_mapping: Record<string, string> | null;
   date_status_ranges: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null;
 };
@@ -422,7 +425,7 @@ export default function LeadFormDialog({
     set(key, arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item]);
   };
 
-  const isFieldVisible = (field: FormField): boolean => {
+  const isFieldVisible = useCallback((field: FormField): boolean => {
     if (!field.parent_field_id) return true;
     const parent = fields.find((f) => f.id === field.parent_field_id);
     if (!parent) return false;
@@ -440,7 +443,12 @@ export default function LeadFormDialog({
       return parentValue.some((v: string) => triggerValues.includes(v));
     }
     return triggerValues.includes(parentValue);
-  };
+  }, [fields, formData]);
+
+  const visibleFields = useMemo(
+    () => buildVisibleFormFieldOrder(fields, isFieldVisible),
+    [fields, isFieldVisible],
+  );
 
   const renderFormField = (field: FormField) => {
     if (!isFieldVisible(field)) return null;
@@ -571,9 +579,7 @@ export default function LeadFormDialog({
   const hasMappingField = fields.some(f => (f.status_mapping && Object.keys(f.status_mapping).length > 0) || f.date_status_ranges);
 
   const getVisibleAnswers = () => {
-    const answers: { label: string; value: string }[] = [];
-    const processField = (field: FormField) => {
-      if (!isFieldVisible(field)) return;
+    return visibleFields.map((field) => {
       const fieldKey = `field_${field.id}`;
       const raw = formData[fieldKey];
       let display = "";
@@ -582,14 +588,8 @@ export default function LeadFormDialog({
       } else {
         display = raw ? String(raw) : "—";
       }
-      answers.push({ label: field.label, value: display });
-      fields
-        .filter((f) => f.parent_field_id === field.id)
-        .sort((a, b) => a.position - b.position)
-        .forEach(processField);
-    };
-    rootFields.forEach(processField);
-    return answers;
+      return { label: field.label, value: display };
+    });
   };
 
   const handlePreview = () => setShowPreview(true);
@@ -798,7 +798,7 @@ export default function LeadFormDialog({
                   ℹ️ A coluna será definida automaticamente com base nas respostas.
                 </p>
               )}
-              {rootFields.map((field) => renderFieldTree(field))}
+              {visibleFields.map((field) => renderFormField(field))}
               {fields.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Nenhuma pergunta configurada. Vá em "Formulário" no menu para criar perguntas.
@@ -875,7 +875,7 @@ export default function LeadFormDialog({
                 )}
 
                 <div className="border-t pt-3 mt-3" />
-                {rootFields.map((field) => renderFieldTree(field))}
+                {visibleFields.map((field) => renderFormField(field))}
 
                 <Button type="submit" className="w-full mt-4" disabled={saving}>
                   {saving ? "Salvando..." : "Atualizar"}
