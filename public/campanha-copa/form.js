@@ -7,11 +7,15 @@
   var btnSubmit = document.getElementById("btn-submit");
   var btnClear = document.getElementById("btn-clear");
   var cpfInput = document.getElementById("cpf");
+  var cpfErrorEl = document.getElementById("cpf-error");
+  var periodNoticeEl = document.getElementById("period-notice");
 
   var currentJogoKey = "";
   var pixelSuccessSnippet = "";
   var pixelFormInjected = false;
   var pixelSuccessInjected = false;
+  var periodoAberto = true;
+  var periodoMensagem = "";
 
   function injectPixelSnippet(html, slot) {
     var code = (html || "").trim();
@@ -137,6 +141,7 @@
     currentJogoKey = data.jogo_key || "";
     pixelSuccessSnippet = data.pixel_success || "";
     injectFormPixel(data.pixel_form || "");
+    setFormPeriodState(data.periodo_aberto, data.periodo_mensagem || "");
 
     document.title = CAMPAIGN_TITLE;
 
@@ -255,6 +260,93 @@
     return d.slice(0, 3) + "." + d.slice(3, 6) + "." + d.slice(6, 9) + "-" + d.slice(9);
   }
 
+  function cleanCpf(value) {
+    return (value || "").replace(/\D/g, "");
+  }
+
+  function isValidCpf(cpf) {
+    if (!cpf || cpf.length !== 11) return false;
+    if (/^(\d)\1+$/.test(cpf)) return false;
+    var sum = 0;
+    var i;
+    for (i = 0; i < 9; i++) sum += Number(cpf[i]) * (10 - i);
+    var d1 = (sum * 10) % 11;
+    if (d1 === 10) d1 = 0;
+    if (d1 !== Number(cpf[9])) return false;
+    sum = 0;
+    for (i = 0; i < 10; i++) sum += Number(cpf[i]) * (11 - i);
+    var d2 = (sum * 10) % 11;
+    if (d2 === 10) d2 = 0;
+    return d2 === Number(cpf[10]);
+  }
+
+  function showCpfError(msg) {
+    if (!cpfErrorEl || !cpfInput) return;
+    if (msg) {
+      cpfErrorEl.textContent = msg;
+      cpfErrorEl.hidden = false;
+      cpfInput.classList.add("input-invalid");
+      cpfInput.setCustomValidity(msg);
+    } else {
+      cpfErrorEl.hidden = true;
+      cpfErrorEl.textContent = "";
+      cpfInput.classList.remove("input-invalid");
+      cpfInput.setCustomValidity("");
+    }
+  }
+
+  function validateCpfField() {
+    if (!cpfInput) return true;
+    var cpf = cleanCpf(cpfInput.value);
+    if (!cpf) {
+      showCpfError("Informe seu CPF.");
+      return false;
+    }
+    if (cpf.length !== 11) {
+      showCpfError("O CPF deve ter 11 dígitos.");
+      return false;
+    }
+    if (!isValidCpf(cpf)) {
+      showCpfError("CPF inválido. Verifique os números digitados.");
+      return false;
+    }
+    showCpfError("");
+    return true;
+  }
+
+  function setFormPeriodState(aberto, mensagem) {
+    periodoAberto = aberto !== false;
+    periodoMensagem = mensagem || "";
+
+    if (periodNoticeEl) {
+      if (!periodoAberto && periodoMensagem) {
+        periodNoticeEl.textContent = periodoMensagem;
+        periodNoticeEl.hidden = false;
+        periodNoticeEl.classList.add("period-notice--closed");
+      } else if (periodoMensagem) {
+        periodNoticeEl.textContent = periodoMensagem;
+        periodNoticeEl.hidden = false;
+        periodNoticeEl.classList.remove("period-notice--closed");
+      } else {
+        periodNoticeEl.hidden = true;
+        periodNoticeEl.textContent = "";
+        periodNoticeEl.classList.remove("period-notice--closed");
+      }
+    }
+
+    var disabled = !periodoAberto;
+    if (form) {
+      Array.from(form.elements).forEach(function (el) {
+        if (el && "disabled" in el) el.disabled = disabled;
+      });
+    }
+    if (btnClear) btnClear.disabled = disabled;
+    if (btnSubmit) {
+      btnSubmit.disabled = disabled;
+      btnSubmit.textContent = disabled ? "Período encerrado" : "Enviar";
+    }
+  }
+
   function collectPayload() {
     return {
       jogo_key: currentJogoKey,
@@ -274,6 +366,16 @@
   async function submitForm(ev) {
     ev.preventDefault();
     hideError();
+
+    if (!periodoAberto) {
+      showError(periodoMensagem || "O período para envio de palpites está encerrado.");
+      return;
+    }
+
+    if (!validateCpfField()) {
+      cpfInput.focus();
+      return;
+    }
 
     if (!form.checkValidity()) {
       form.reportValidity();
@@ -333,8 +435,8 @@
       showError(err.message || "Erro ao enviar. Tente novamente.");
       trackEvent("Lead", { content_name: "Campanha Copa", status: "error" });
     } finally {
-      btnSubmit.disabled = false;
-      btnSubmit.textContent = "Enviar";
+      btnSubmit.disabled = !periodoAberto;
+      btnSubmit.textContent = periodoAberto ? "Enviar" : "Período encerrado";
     }
   }
 
@@ -347,7 +449,10 @@
   if (cpfInput) {
     cpfInput.addEventListener("input", function () {
       cpfInput.value = maskCpf(cpfInput.value);
+      if (cleanCpf(cpfInput.value).length === 11) validateCpfField();
+      else showCpfError("");
     });
+    cpfInput.addEventListener("blur", validateCpfField);
   }
 
   form.addEventListener("submit", submitForm);

@@ -20,6 +20,8 @@
       <button type="button" id="btn-regulamento" class="btn-regulamento">Consultar regulamento</button>
     </header>
 
+    <p id="period-notice" class="period-notice" hidden></p>
+
     <form id="copa-form" class="form-card" novalidate>
       <section class="field-block">
         <label class="field-label">Qual o seu palpite para <span id="palpite-jogo-label">Brasil x Marrocos</span>? <span class="req">*</span></label>
@@ -70,7 +72,8 @@
       <section class="field-block">
         <label class="field-label" for="cpf">Qual o seu CPF? <span class="req">*</span></label>
         <p class="field-hint">Somente números — usado para evitar palpites duplicados.</p>
-        <input type="text" id="cpf" name="cpf" class="text-input" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required />
+        <input type="text" id="cpf" name="cpf" class="text-input" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required autocomplete="off" />
+        <p id="cpf-error" class="field-error" hidden></p>
       </section>
 
       <section class="field-block">

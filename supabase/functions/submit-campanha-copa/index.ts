@@ -7,6 +7,10 @@ import {
   applyUltimoExameVistaToLeadData,
   loadLeadLastVisitFieldId,
 } from "../_shared/campanhaCopaExameVista.ts";
+import {
+  evaluateCampanhaCopaPeriodo,
+  loadCampanhaCopaPeriodoConfig,
+} from "../_shared/campanhaCopaPeriodo.ts";
 
 const corsHeaders = internalCorsHeaders;
 
@@ -46,6 +50,8 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 
 async function loadPublicConfig(supabase: ReturnType<typeof createClient>) {
   const jogo = await loadCampanhaCopaJogoConfig(supabase);
+  const periodoCfg = await loadCampanhaCopaPeriodoConfig(supabase);
+  const periodo = evaluateCampanhaCopaPeriodo(periodoCfg.inicio, periodoCfg.fim);
 
   const { data } = await supabase
     .from("system_settings")
@@ -66,6 +72,10 @@ async function loadPublicConfig(supabase: ReturnType<typeof createClient>) {
     banner_url: map.get("campanha_copa_banner_url") || "",
     pixel_form: map.get("campanha_copa_pixel_form") || "",
     pixel_success: map.get("campanha_copa_pixel_success") || "",
+    periodo_aberto: periodo.aberto,
+    periodo_mensagem: periodo.mensagem,
+    periodo_inicio: periodo.inicio,
+    periodo_fim: periodo.fim,
     jogo_key: jogo.jogo_key,
     jogo_label: jogo.jogo_label,
     team_home_name: jogo.team_home_name,
@@ -96,6 +106,13 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const jogoCfg = await loadCampanhaCopaJogoConfig(supabase);
+    const periodoCfg = await loadCampanhaCopaPeriodoConfig(supabase);
+    const periodo = evaluateCampanhaCopaPeriodo(periodoCfg.inicio, periodoCfg.fim);
+    if (!periodo.aberto) {
+      return jsonResponse({
+        error: periodo.mensagem || "O período para envio de palpites está encerrado.",
+      }, 403);
+    }
 
     const nome = String(body.nome || "").trim();
     const cpfRaw = String(body.cpf || "").trim();

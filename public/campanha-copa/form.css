@@ -430,6 +430,34 @@ select.text-input {
   background: #f8fafc;
 }
 
+.period-notice {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 10px;
+  color: #9a3412;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.period-notice--closed {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.field-error {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: #b91c1c;
+}
+
+.text-input.input-invalid {
+  border-color: #f87171;
+  box-shadow: 0 0 0 1px #fecaca;
+}
+
 .form-error {
   margin: 0 24px 12px;
   padding: 12px 14px;
