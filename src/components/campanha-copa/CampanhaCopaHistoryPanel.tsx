@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { History } from "lucide-react";
@@ -50,20 +50,43 @@ function jogoLabelOf(row: PalpiteRow): string {
   );
 }
 
+function cpfDigitsOnly(raw: string | null | undefined): string {
+  return (raw || "").replace(/\D/g, "");
+}
+
+function formatCpfDigits(digits: string): string {
+  if (digits.length !== 11) return digits;
+  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+}
+
+async function resolveCpfDigits(submission: CampanhaCopaSubmission): Promise<string> {
+  const fromSubmission = cpfDigitsOnly(submission.cpf);
+  if (fromSubmission.length === 11) return fromSubmission;
+
+  if (!submission.lead_id) return fromSubmission;
+
+  const { data: lead } = await supabase
+    .from("crm_leads")
+    .select("data")
+    .eq("id", submission.lead_id)
+    .maybeSingle();
+
+  const leadData = lead?.data as Record<string, unknown> | null | undefined;
+  const fromLead = cpfDigitsOnly(typeof leadData?.cpf === "string" ? leadData.cpf : null);
+  return fromLead.length === 11 ? fromLead : fromSubmission;
+}
+
 export default function CampanhaCopaHistoryPanel({ submission, profiles, refreshKey = 0 }: Props) {
   const [palpites, setPalpites] = useState<PalpiteRow[]>([]);
   const [events, setEvents] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const cpfDigits = useMemo(
-    () => (submission.cpf || "").replace(/\D/g, ""),
-    [submission.cpf],
-  );
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
+
+      const cpfDigits = await resolveCpfDigits(submission);
 
       let palpiteQuery = supabase
         .from("campanha_copa_submissions")
@@ -71,9 +94,8 @@ export default function CampanhaCopaHistoryPanel({ submission, profiles, refresh
         .order("created_at", { ascending: false });
 
       if (cpfDigits.length === 11) {
-        palpiteQuery = palpiteQuery.eq("cpf", cpfDigits);
-      } else if (submission.telefone?.trim()) {
-        palpiteQuery = palpiteQuery.eq("telefone", submission.telefone.trim());
+        const formatted = formatCpfDigits(cpfDigits);
+        palpiteQuery = palpiteQuery.or(`cpf.eq.${cpfDigits},cpf.eq.${formatted}`);
       } else {
         palpiteQuery = palpiteQuery.eq("id", submission.id);
       }
@@ -97,7 +119,7 @@ export default function CampanhaCopaHistoryPanel({ submission, profiles, refresh
     return () => {
       cancelled = true;
     };
-  }, [submission.id, submission.telefone, cpfDigits, refreshKey]);
+  }, [submission.id, submission.cpf, submission.lead_id, refreshKey]);
 
   const nameOf = (uid: string | null) => {
     if (!uid) return "Sistema";
