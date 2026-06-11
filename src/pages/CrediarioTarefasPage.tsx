@@ -1,6 +1,5 @@
 /**
- * Tarefas — Crediário (usuário financeiro).
- * Calendário mensal para agendar follow-ups com leads: nome, data, telefone, CPF e observação.
+ * Tarefas — calendário unificado (crediário, cobrança e atividades de lead).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
@@ -41,6 +40,7 @@ import {
   calendarRangeIso,
   isManualCobrancaActivity,
   mapCobrancaActivityToCalendarTask,
+  mapLeadActivityToCalendarTask,
   type CalendarTaskSource,
 } from "@/lib/cobrancaCalendarTasks";
 
@@ -52,6 +52,7 @@ type TaskRow = CrediarioTask & {
   activityId?: string;
   activityTitle?: string;
   clientName?: string;
+  leadId?: string;
   cobrancaId?: string;
   phone: string | null;
   cpf: string | null;
@@ -60,6 +61,16 @@ type TaskRow = CrediarioTask & {
   renegociacao_comentario: string | null;
   completed_at: string | null;
   parent_task_id: string | null;
+};
+
+type LeadActivityWithLead = {
+  id: string;
+  lead_id: string;
+  title: string;
+  description: string | null;
+  scheduled_date: string;
+  completed_at: string | null;
+  crm_leads: { data: Record<string, unknown> | null } | null;
 };
 
 function formatCpfBR(value: string): string {
@@ -111,7 +122,7 @@ export default function CrediarioTarefasPage() {
     const end = toDateString(queryEnd);
     const { startIso, endIso } = calendarRangeIso(queryStart, queryEnd);
 
-    const [crediarioRes, activitiesRes] = await Promise.all([
+    const [crediarioRes, activitiesRes, leadActivitiesRes] = await Promise.all([
       supabase
         .from("crediario_tasks")
         .select("id, lead_name, scheduled_date, scheduled_time, phone, cpf, observacao, renegociacao_status, renegociacao_comentario, completed_at, parent_task_id")
@@ -127,9 +138,16 @@ export default function CrediarioTarefasPage() {
         .gte("scheduled_date", startIso)
         .lte("scheduled_date", endIso)
         .order("scheduled_date", { ascending: true }),
+      supabase
+        .from("lead_activities")
+        .select("id, lead_id, title, description, scheduled_date, completed_at, crm_leads(data)")
+        .eq("created_by", user.id)
+        .gte("scheduled_date", startIso)
+        .lte("scheduled_date", endIso)
+        .order("scheduled_date", { ascending: true }),
     ]);
 
-    if (crediarioRes.error || activitiesRes.error) {
+    if (crediarioRes.error || activitiesRes.error || leadActivitiesRes.error) {
       toast.error("Erro ao carregar tarefas");
       setLoading(false);
       return;
@@ -162,7 +180,12 @@ export default function CrediarioTarefasPage() {
       ),
     );
 
-    const merged = [...crediarioTasks, ...cobrancaTasks].sort((a, b) => {
+    const leadTasks: TaskRow[] = ((leadActivitiesRes.data || []) as LeadActivityWithLead[]).map(
+      (activity) =>
+        mapLeadActivityToCalendarTask(activity, activity.crm_leads?.data ?? null),
+    );
+
+    const merged = [...crediarioTasks, ...cobrancaTasks, ...leadTasks].sort((a, b) => {
       const dateCmp = a.scheduled_date.localeCompare(b.scheduled_date);
       if (dateCmp !== 0) return dateCmp;
       return a.lead_name.localeCompare(b.lead_name, "pt-BR");
@@ -199,7 +222,7 @@ export default function CrediarioTarefasPage() {
 
   const openEdit = (task: TaskRow) => {
     setEditing(task);
-    if (task.source === "cobranca") {
+    if (task.source === "cobranca" || task.source === "lead") {
       setFormNome(task.clientName || task.lead_name);
       setFormTitulo(task.activityTitle || "");
     } else {
@@ -243,7 +266,10 @@ export default function CrediarioTarefasPage() {
 
     setSaving(true);
 
-    if (editing?.source === "cobranca" && editing.activityId) {
+    if (
+      (editing?.source === "cobranca" || editing?.source === "lead") &&
+      editing.activityId
+    ) {
       const titulo = formTitulo.trim();
       if (!titulo) {
         toast.error("Informe o título da tarefa");
@@ -254,8 +280,9 @@ export default function CrediarioTarefasPage() {
       const dt = new Date(formDate!);
       dt.setHours(h || 9, m || 0, 0, 0);
 
+      const table = editing.source === "lead" ? "lead_activities" : "cobranca_activities";
       const { error } = await supabase
-        .from("cobranca_activities")
+        .from(table)
         .update({
           title: titulo,
           description: formObservacao.trim() || null,
@@ -342,10 +369,14 @@ export default function CrediarioTarefasPage() {
   const handleDelete = async () => {
     if (!deleteId || !editing) return;
 
-    const error =
-      editing.source === "cobranca" && editing.activityId
-        ? (await supabase.from("cobranca_activities").delete().eq("id", editing.activityId)).error
-        : (await supabase.from("crediario_tasks").delete().eq("id", deleteId)).error;
+    let error = null as { message: string } | null;
+    if (editing.source === "cobranca" && editing.activityId) {
+      ({ error } = await supabase.from("cobranca_activities").delete().eq("id", editing.activityId));
+    } else if (editing.source === "lead" && editing.activityId) {
+      ({ error } = await supabase.from("lead_activities").delete().eq("id", editing.activityId));
+    } else {
+      ({ error } = await supabase.from("crediario_tasks").delete().eq("id", deleteId));
+    }
 
     if (error) toast.error("Erro ao excluir tarefa");
     else {
@@ -363,7 +394,7 @@ export default function CrediarioTarefasPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <CalendarClock className="h-6 w-6 text-primary" />
-            <h1 className="text-xl sm:text-2xl font-bold">Tarefas Cobrança</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">Tarefas</h1>
           </div>
           <p className="text-sm text-muted-foreground">{tasks.length} tarefa(s) no período</p>
         </div>
@@ -448,12 +479,16 @@ export default function CrediarioTarefasPage() {
                     value={formNome}
                     onChange={(e) => setFormNome(e.target.value)}
                     placeholder="Nome completo"
-                    readOnly={editing?.source === "cobranca"}
-                    className={editing?.source === "cobranca" ? "bg-muted" : undefined}
+                    readOnly={editing?.source === "cobranca" || editing?.source === "lead"}
+                    className={
+                      editing?.source === "cobranca" || editing?.source === "lead"
+                        ? "bg-muted"
+                        : undefined
+                    }
                   />
                 </div>
 
-                {editing?.source === "cobranca" && (
+                {(editing?.source === "cobranca" || editing?.source === "lead") && (
                   <div className="space-y-2">
                     <Label>Título da tarefa *</Label>
                     <Input
@@ -558,6 +593,16 @@ export default function CrediarioTarefasPage() {
                   }
                 >
                   <ExternalLink className="mr-1 h-4 w-4" /> Abrir cobrança
+                </Button>
+              )}
+              {editing?.source === "lead" && editing.leadId && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate(`/?edit=${editing.leadId}`)}
+                >
+                  <ExternalLink className="mr-1 h-4 w-4" /> Abrir lead
                 </Button>
               )}
               {editing && (
