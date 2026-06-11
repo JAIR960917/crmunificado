@@ -180,9 +180,11 @@ export default function CrediarioTarefasPage() {
       ),
     );
 
-    const leadTasks: TaskRow[] = ((leadActivitiesRes.data || []) as LeadActivityWithLead[]).map(
-      (activity) =>
-        mapLeadActivityToCalendarTask(activity, activity.crm_leads?.data ?? null),
+    const leadActivities = ((leadActivitiesRes.data || []) as LeadActivityWithLead[]).filter((a) =>
+      isManualCobrancaActivity(a.title),
+    );
+    const leadTasks: TaskRow[] = leadActivities.map((activity) =>
+      mapLeadActivityToCalendarTask(activity, activity.crm_leads?.data ?? null),
     );
 
     const merged = [...crediarioTasks, ...cobrancaTasks, ...leadTasks].sort((a, b) => {
