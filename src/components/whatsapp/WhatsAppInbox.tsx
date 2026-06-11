@@ -963,9 +963,8 @@ export default function WhatsAppInbox() {
                       type="button"
                       onClick={() => setSelectedId(c.id)}
                       className={cn(
-                        "flex w-full gap-3 rounded-lg border border-transparent p-3 text-left transition-colors",
+                        "flex w-full gap-3 rounded-lg p-3 text-left transition-colors",
                         active ? "bg-primary/10" : "hover:bg-muted",
-                        hasUnread && !active && "border-emerald-500/40 bg-emerald-500/10",
                       )}
                     >
                       <Avatar className="h-11 w-11 shrink-0">
@@ -980,34 +979,34 @@ export default function WhatsAppInbox() {
                           </span>
                           <span
                             className={cn(
-                              "shrink-0 text-[10px] leading-none",
-                              hasUnread ? "font-medium text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+                              "shrink-0 text-[11px] leading-none",
+                              hasUnread ? "font-medium text-[#25d366]" : "text-muted-foreground",
                             )}
                           >
                             {lastAt ? formatDistanceToNow(lastAt, { addSuffix: true, locale: ptBR }) : "—"}
                           </span>
                         </div>
-                        <p
-                          className={cn(
-                            "truncate text-xs",
-                            hasUnread ? "font-medium text-foreground" : "text-muted-foreground",
-                          )}
-                        >
-                          {c.last_preview || "—"}
-                        </p>
-                        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-sky-800 dark:text-sky-300">
-                          <Smartphone className="h-3 w-3 shrink-0 opacity-80" />
-                          <span className="min-w-0 truncate">
-                            {instanceName} · {customerPhone}
-                          </span>
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <p
+                            className={cn(
+                              "min-w-0 flex-1 truncate text-xs",
+                              hasUnread ? "font-medium text-foreground" : "text-muted-foreground",
+                            )}
+                          >
+                            {c.last_preview || "—"}
+                          </p>
                           {hasUnread && !active ? (
                             <span
-                              className="ml-auto flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 px-2 text-sm font-bold leading-none text-white shadow-lg ring-2 ring-emerald-400/50"
-                              title={`${unread} mensagem(ns) não lida(s) — aguardando resposta`}
+                              className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#25d366] px-1.5 text-[11px] font-semibold leading-none text-[#111b21]"
+                              title={`${unread} mensagem(ns) não lida(s)`}
                             >
                               {formatUnreadCount(unread)}
                             </span>
                           ) : null}
+                        </div>
+                        <p className="mt-0.5 truncate text-[10px] font-medium text-sky-800 dark:text-sky-300">
+                          <Smartphone className="mr-0.5 inline h-3 w-3 opacity-80" />
+                          {instanceName} · {customerPhone}
                         </p>
                         <div className="mt-1 flex items-center gap-1.5">
                           <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", m.className)}>
