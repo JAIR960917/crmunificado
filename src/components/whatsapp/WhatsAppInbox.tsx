@@ -319,7 +319,7 @@ export default function WhatsAppInbox() {
   const filteredList = useMemo(() => {
     const q = search.trim().toLowerCase();
     return conversations.filter((c) => {
-      if (filter === "unread" && (c.unread_count || 0) === 0) return false;
+      if (filter === "unread" && Math.max(0, Number(c.unread_count) || 0) === 0) return false;
       if (filter === "mine" && user?.id && c.assigned_to !== user.id) return false;
       if (!q) return true;
       const name = (c.contact_name || "").toLowerCase();
@@ -330,7 +330,7 @@ export default function WhatsAppInbox() {
   }, [conversations, filter, search, user?.id]);
 
   const unreadConversationsCount = useMemo(
-    () => conversations.filter((c) => (c.unread_count || 0) > 0).length,
+    () => conversations.filter((c) => Math.max(0, Number(c.unread_count) || 0) > 0).length,
     [conversations],
   );
 
@@ -410,8 +410,17 @@ export default function WhatsAppInbox() {
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(200);
     if (error) throw error;
-    const rows = sortConversations((data || []) as ConversationRow[]);
-    setConversations(rows);
+    setConversations((prev) => {
+      const prevById = new Map(prev.map((c) => [c.id, c]));
+      const merged = ((data || []) as ConversationRow[]).map((row) => {
+        const local = prevById.get(row.id);
+        const dbUnread = Math.max(0, Number(row.unread_count) || 0);
+        const localUnread = Math.max(0, Number(local?.unread_count) || 0);
+        if (localUnread > dbUnread) return { ...row, unread_count: localUnread };
+        return { ...row, unread_count: dbUnread };
+      });
+      return sortConversations(merged);
+    });
     // Não abre a primeira conversa automaticamente — assim o contador de não lidas permanece visível.
   }, []);
 
@@ -955,8 +964,8 @@ export default function WhatsAppInbox() {
                 const customerPhone = formatPhoneDisplay(c.phone_display || c.wa_id);
                 const lastAt = c.last_message_at ? new Date(c.last_message_at) : null;
                 const windowIsOpen = c.window_expires_at ? new Date(c.window_expires_at).getTime() > Date.now() : false;
-                const unread = c.unread_count || 0;
-                const hasUnread = unread > 0;
+                const unread = Math.max(0, Number(c.unread_count) || 0);
+                const hasUnread = unread > 0 && c.id !== selectedId;
                 return (
                   <li key={c.id}>
                     <button
@@ -973,37 +982,17 @@ export default function WhatsAppInbox() {
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <span className={cn("truncate", hasUnread ? "font-semibold" : "font-medium")}>
-                            {contact}
-                          </span>
-                          <span
-                            className={cn(
-                              "shrink-0 text-[11px] leading-none",
-                              hasUnread ? "font-medium text-[#25d366]" : "text-muted-foreground",
-                            )}
-                          >
-                            {lastAt ? formatDistanceToNow(lastAt, { addSuffix: true, locale: ptBR }) : "—"}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 flex items-center gap-2">
-                          <p
-                            className={cn(
-                              "min-w-0 flex-1 truncate text-xs",
-                              hasUnread ? "font-medium text-foreground" : "text-muted-foreground",
-                            )}
-                          >
-                            {c.last_preview || "—"}
-                          </p>
-                          {hasUnread && !active ? (
-                            <span
-                              className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#25d366] px-1.5 text-[11px] font-semibold leading-none text-[#111b21]"
-                              title={`${unread} mensagem(ns) não lida(s)`}
-                            >
-                              {formatUnreadCount(unread)}
-                            </span>
-                          ) : null}
-                        </div>
+                        <p className={cn("truncate", hasUnread ? "font-semibold text-foreground" : "font-medium")}>
+                          {contact}
+                        </p>
+                        <p
+                          className={cn(
+                            "mt-0.5 truncate text-xs",
+                            hasUnread ? "font-medium text-foreground" : "text-muted-foreground",
+                          )}
+                        >
+                          {c.last_preview || "—"}
+                        </p>
                         <p className="mt-0.5 truncate text-[10px] font-medium text-sky-800 dark:text-sky-300">
                           <Smartphone className="mr-0.5 inline h-3 w-3 opacity-80" />
                           {instanceName} · {customerPhone}
@@ -1018,6 +1007,24 @@ export default function WhatsAppInbox() {
                             </span>
                           )}
                         </div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5 self-start pt-0.5">
+                        <span
+                          className={cn(
+                            "text-[11px] leading-none",
+                            hasUnread ? "font-medium text-[#25d366]" : "text-muted-foreground",
+                          )}
+                        >
+                          {lastAt ? formatDistanceToNow(lastAt, { addSuffix: true, locale: ptBR }) : "—"}
+                        </span>
+                        {hasUnread ? (
+                          <span
+                            className="flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-[#25d366] px-1.5 text-xs font-semibold leading-none text-white"
+                            title={`${unread} mensagem(ns) não lida(s)`}
+                          >
+                            {formatUnreadCount(unread)}
+                          </span>
+                        ) : null}
                       </div>
                     </button>
                   </li>
