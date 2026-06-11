@@ -27,8 +27,17 @@ export default function ImageUploadField({ value, onChange, label = "Imagem (opc
 
     setUploading(true);
     try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error("Faça login para enviar imagens");
+      }
+
       const ext = file.name.split(".").pop() || "jpg";
-      const path = `${crypto.randomUUID()}.${ext}`;
+      // RLS do bucket whatsapp-media exige pasta = auth.uid()
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage.from("whatsapp-media").upload(path, file, {
         contentType: file.type,
         upsert: false,
