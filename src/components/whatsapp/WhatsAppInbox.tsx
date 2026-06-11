@@ -46,6 +46,7 @@ import {
   setWhatsAppInboxSession,
 } from "@/lib/whatsappInboxNotifications";
 import { isWhatsAppInboxRealtimeEnabled } from "@/lib/runtime-config";
+import { needsWhatsAppAudioConversion, prepareAudioFileForWhatsApp } from "@/lib/convertAudioForWhatsApp";
 
 type ModuleKey = "leads" | "cobrancas" | "renovacoes";
 
@@ -743,15 +744,19 @@ export default function WhatsAppInbox() {
     }
     setUploading(true);
     try {
-      const base64 = await fileToBase64(file);
-      const mediaType = mapFileToMediaType(file);
+      let uploadFile = file;
+      if (mapFileToMediaType(file) === "audio" && needsWhatsAppAudioConversion(file.type || "")) {
+        uploadFile = await prepareAudioFileForWhatsApp(file);
+      }
+      const base64 = await fileToBase64(uploadFile);
+      const mediaType = mapFileToMediaType(uploadFile);
       const { data, error } = await supabase.functions.invoke("whatsapp-chat", {
         body: {
           action: "send-media",
           conversation_id: conversation.id,
           media_type: mediaType,
-          mime_type: file.type || "application/octet-stream",
-          filename: file.name || "upload",
+          mime_type: uploadFile.type || "application/octet-stream",
+          filename: uploadFile.name || "upload",
           base64,
           caption: draft.trim() || undefined,
         },
@@ -811,12 +816,35 @@ export default function WhatsAppInbox() {
       rec.onstop = async () => {
         setRecording(false);
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(recorderChunksRef.current, { type: rec.mimeType || "audio/webm" });
+        const rawBlob = new Blob(recorderChunksRef.current, { type: rec.mimeType || "audio/webm" });
         recorderChunksRef.current = [];
-        if (blob.size === 0) return;
-        const mime = blob.type || "audio/ogg";
-        const ext = mime.includes("ogg") ? "ogg" : mime.includes("webm") ? "webm" : "audio";
-        const filename = `audio-${Date.now()}.${ext}`;
+        if (rawBlob.size === 0) return;
+
+        let blob: Blob = rawBlob;
+        let mime = rawBlob.type || "audio/ogg";
+        let filename = `audio-${Date.now()}.${mime.includes("ogg") ? "ogg" : mime.includes("webm") ? "webm" : "audio"}`;
+
+        if (needsWhatsAppAudioConversion(mime)) {
+          setUploading(true);
+          try {
+            const converted = await prepareAudioFileForWhatsApp(
+              new File([rawBlob], filename, { type: mime }),
+            );
+            blob = converted;
+            mime = converted.type;
+            filename = converted.name;
+          } catch (e: unknown) {
+            toast.error(
+              e instanceof Error
+                ? e.message
+                : "Não foi possível converter o áudio gravado. Tente outro navegador ou envie um .mp3/.ogg.",
+            );
+            return;
+          } finally {
+            setUploading(false);
+          }
+        }
+
         const url = URL.createObjectURL(blob);
         setAudioDraft({ url, blob, mime, filename });
       };
