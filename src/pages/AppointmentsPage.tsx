@@ -112,7 +112,7 @@ type ProfileFull = { user_id: string; full_name: string; company_id: string | nu
 type PageMode = "appointments" | "specialist-schedule";
 
 export default function AppointmentsPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isGerente } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [profilesFull, setProfilesFull] = useState<ProfileFull[]>([]);
@@ -506,6 +506,37 @@ export default function AppointmentsPage() {
         }
         return;
       }
+      return;
+    }
+
+    if (field === "valor") {
+      const num = parseFloat(value.replace(",", "."));
+      if (Number.isNaN(num) || num < 0) {
+        toast.error("Informe um valor válido para a consulta");
+        return;
+      }
+      const valorStr = String(num);
+      const payload = { valor: num };
+      const { error } = usesTeamAppointmentRpc(apptBefore)
+        ? await supabase.rpc("update_crm_appointment_field", {
+            p_appointment_id: id,
+            p_field: "valor",
+            p_value: valorStr,
+          })
+        : await supabase.from("crm_appointments").update(payload).eq("id", id);
+      if (error) {
+        toast.error(error.message || "Erro ao atualizar valor");
+        return;
+      }
+      setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, ...payload } : a)));
+      const { leadName, vendedorPart } = appointmentActionContext(apptBefore, user.id);
+      await logAppointmentHistory(
+        id,
+        user.id,
+        "field_update",
+        `${getProfileName(user.id)} alterou o valor da consulta para R$ ${num.toFixed(2)} no agendamento de ${leadName}${vendedorPart}`,
+        { field: "valor", value: valorStr, lead_nome: leadName, scheduled_by: apptBefore.scheduled_by },
+      );
       return;
     }
 
@@ -1127,6 +1158,7 @@ export default function AppointmentsPage() {
               <AppointmentsListTable
                 appointments={listDayAppointments}
                 isAdmin={isAdmin}
+                canEditValor={isAdmin || isGerente}
                 loading={loading}
                 getProfileName={getProfileName}
                 onUpdateField={updateField}

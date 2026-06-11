@@ -834,13 +834,9 @@ async function syncContasReceber(
           isEmAberto || isEmAtraso || isVencido || isAVencer ||
           isNegativadoSerasa || isAjuizado;
 
-        const renegociacaoObj = parcela.renegociacao ?? parcela.renegociacao_info ?? null;
-        const temObjetoRenegociacao =
-          !!renegociacaoObj &&
-          typeof renegociacaoObj === "object" &&
-          !Array.isArray(renegociacaoObj) &&
-          (renegociacaoObj.id != null || renegociacaoObj.valor_renegociacao != null);
-        const foiRenegociada = situacao.startsWith("renegoc") || temObjetoRenegociacao;
+        // Objeto `renegociacao` no JSON não significa parcela quitada — crediários
+        // em aberto no SSótica costumam carregar esse metadado no título.
+        const foiRenegociada = situacao.startsWith("renegoc");
 
         // Negativado SERASA / Ajuizado(a) Saniely / Návde = dívida AINDA ATIVA.
         // A SSótica pode marcar cancelado_em/baixado_em/estornado_em quando
@@ -1053,10 +1049,11 @@ async function syncContasReceber(
       if (parcelaCompany && parcelaCompany !== currentCompany) return true;
       // Fora da janela atual → preserva (não temos evidência atualizada).
       if (!isParcelaInWindow(p?.vencimento)) return true;
-      // Dentro da janela: se a API retornou status pago/cancelado/etc para essa
-      // parcela, removemos. Se não foi vista de jeito nenhum, também removemos
-      // (estava na janela revisada e sumiu).
-      return false;
+      // Dentro da janela: só removemos com evidência direta de quitação.
+      // Ausência na fatia atual não prova pagamento (paginação, filtros, etc.).
+      const pid = p?.parcela_id != null ? Number(p.parcela_id) : null;
+      if (pid && parcelasInativasIds.has(pid)) return false;
+      return true;
     });
     // Marca as parcelas novas com a loja atual para que futuras sincronizações
     // de OUTRAS lojas não as removam por engano.

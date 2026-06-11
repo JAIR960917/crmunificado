@@ -97,6 +97,39 @@ function formatSafeDate(value: string | null | undefined): string {
   return parsed ? format(parsed, "dd/MM/yyyy", { locale: ptBR }) : "—";
 }
 
+function mapRawParcelasToInfo(
+  lista: any[],
+  opts: {
+    cobrancaId?: string | null;
+    currentParcelaId?: string | number | null;
+    cardCompanyId?: string | null;
+    companiesById: Map<string, string>;
+  },
+): ParcelaInfo[] {
+  const parcelasInfo: ParcelaInfo[] = lista.map((p: any, idx: number) => {
+    const parcelaCompanyId = p?.ssotica_company_id != null
+      ? String(p.ssotica_company_id)
+      : opts.cardCompanyId ?? null;
+    return {
+      id: String(p?.parcela_id ?? `${p?.titulo_id ?? "tit"}-${p?.numero_parcela ?? idx}-${parcelaCompanyId ?? "x"}`),
+      numero_parcela: p?.numero_parcela != null ? Number(p.numero_parcela) : null,
+      vencimento: p?.vencimento ?? null,
+      valor: Number(p?.valor || 0),
+      dias_atraso: p?.dias_atraso ?? null,
+      status: null as any,
+      is_current:
+        !!opts.cobrancaId &&
+        opts.currentParcelaId != null &&
+        String(p?.parcela_id) === String(opts.currentParcelaId),
+      loja_nome: parcelaCompanyId ? (opts.companiesById.get(parcelaCompanyId) ?? null) : null,
+    };
+  });
+  parcelasInfo.sort((a, b) =>
+    (a.vencimento ?? "") < (b.vencimento ?? "") ? -1 : (a.vencimento ?? "") > (b.vencimento ?? "") ? 1 : 0,
+  );
+  return parcelasInfo;
+}
+
 export default function CobrancaEditSheet(props: Props) {
   const {
     open, onOpenChange, cobrancaId, ssoticaClienteId, ssoticaCompanyId,
@@ -155,6 +188,60 @@ export default function CobrancaEditSheet(props: Props) {
     const nome = (formData.nome || "").trim();
 
     const companiesById = new Map((companies ?? []).map((c: any) => [String(c.id), c.name as string]));
+    const dedup = new Map<string, ParcelaInfo>();
+
+    // Consulta ao vivo no SSótica para não depender só do último sync incremental.
+    if (ssoticaClienteId && ssoticaCompanyId && cobrancaId) {
+      try {
+        let { data: sessionData } = await supabase.auth.getSession();
+        let token = sessionData?.session?.access_token;
+        const expiresAt = sessionData?.session?.expires_at;
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (!token || (expiresAt && expiresAt - nowSec < 60)) {
+          const { data: refreshed } = await supabase.auth.refreshSession();
+          token = refreshed?.session?.access_token ?? token;
+        }
+        if (token) {
+          const { data: live, error: liveErr } = await supabase.functions.invoke("ssotica-cliente-debitos", {
+            body: { ssoticaClienteId, ssoticaCompanyId },
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!liveErr && Array.isArray(live?.parcelas) && live.parcelas.length > 0) {
+            const { data: cur } = await supabase
+              .from("crm_cobrancas")
+              .select("data, ssotica_parcela_id")
+              .eq("id", cobrancaId)
+              .maybeSingle();
+            const prevData = ((cur as any)?.data ?? formData) as Record<string, any>;
+            const totalAtraso = Number(live.total_atraso ?? 0);
+            await supabase
+              .from("crm_cobrancas")
+              .update({
+                data: {
+                  ...prevData,
+                  parcelas_atrasadas: live.parcelas,
+                  qtd_parcelas_atrasadas: live.parcelas.length,
+                  total_atraso: totalAtraso,
+                },
+                valor: totalAtraso,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", cobrancaId);
+            onCardUpdated?.();
+            for (const p of mapRawParcelasToInfo(live.parcelas, {
+              cobrancaId,
+              currentParcelaId: (cur as any)?.ssotica_parcela_id,
+              cardCompanyId: String(ssoticaCompanyId),
+              companiesById,
+            })) {
+              dedup.set(p.id, p);
+            }
+          }
+        }
+      } catch {
+        // segue com dados do banco
+      }
+    }
 
     // Estratégia 1 (preferida): se houver CPF, busca TODOS os cards de cobrança
     // do mesmo cliente (em qualquer loja) e une as listas `data.parcelas_atrasadas`
@@ -167,37 +254,22 @@ export default function CobrancaEditSheet(props: Props) {
         .or(`data->>documento.eq.${cpfDigits},data->>cpf.eq.${cpfDigits}`);
 
       if (!error && Array.isArray(cards) && cards.length > 0) {
-        const dedup = new Map<string, ParcelaInfo>();
         for (const card of cards as any[]) {
           const lista = card?.data?.parcelas_atrasadas as any[] | undefined;
           if (!Array.isArray(lista) || lista.length === 0) continue;
           const cardCompanyId = card?.ssotica_company_id != null ? String(card.ssotica_company_id) : null;
-          const currentParcelaId = card?.ssotica_parcela_id;
-          for (let idx = 0; idx < lista.length; idx++) {
-            const p = lista[idx];
-            const parcelaCompanyId = p?.ssotica_company_id != null ? String(p.ssotica_company_id) : cardCompanyId;
-            const id = String(p?.parcela_id ?? `${p?.titulo_id ?? "tit"}-${p?.numero_parcela ?? idx}-${parcelaCompanyId ?? "x"}`);
-            if (dedup.has(id)) continue;
-            dedup.set(id, {
-              id,
-              numero_parcela: p?.numero_parcela != null ? Number(p.numero_parcela) : null,
-              vencimento: p?.vencimento ?? null,
-              valor: Number(p?.valor || 0),
-              dias_atraso: p?.dias_atraso ?? null,
-              status: null as any,
-              is_current:
-                String(card.id) === String(cobrancaId) &&
-                currentParcelaId != null &&
-                String(p?.parcela_id) === String(currentParcelaId),
-              loja_nome: parcelaCompanyId ? (companiesById.get(parcelaCompanyId) ?? null) : null,
-            });
+          for (const p of mapRawParcelasToInfo(lista, {
+            cobrancaId,
+            currentParcelaId:
+              String(card.id) === String(cobrancaId) ? card?.ssotica_parcela_id : null,
+            cardCompanyId,
+            companiesById,
+          })) {
+            if (!dedup.has(p.id)) dedup.set(p.id, p);
           }
         }
         if (dedup.size > 0) {
-          const parcelasInfo = Array.from(dedup.values()).sort((a, b) =>
-            (a.vencimento ?? "") < (b.vencimento ?? "") ? -1 : (a.vencimento ?? "") > (b.vencimento ?? "") ? 1 : 0,
-          );
-          setParcelas(parcelasInfo);
+          setParcelas(Array.from(dedup.values()));
           setLoadingParcelas(false);
           return;
         }
@@ -215,22 +287,19 @@ export default function CobrancaEditSheet(props: Props) {
       const lista = (card as any)?.data?.parcelas_atrasadas as any[] | undefined;
       const currentParcelaId = (card as any)?.ssotica_parcela_id;
       if (!error && Array.isArray(lista) && lista.length > 0) {
-        const parcelasInfo: ParcelaInfo[] = lista.map((p: any, idx: number) => ({
-          id: String(p.parcela_id ?? `${p.titulo_id ?? "tit"}-${p.numero_parcela ?? idx}`),
-          numero_parcela: p.numero_parcela != null ? Number(p.numero_parcela) : null,
-          vencimento: p.vencimento,
-          valor: Number(p.valor || 0),
-          dias_atraso: p.dias_atraso ?? null,
-          status: null as any,
-          is_current: currentParcelaId != null && String(p.parcela_id) === String(currentParcelaId),
-          loja_nome: p.ssotica_company_id ? (companiesById.get(String(p.ssotica_company_id)) ?? null) : (companiesById.get(String(ssoticaCompanyId)) ?? null),
-        }));
-        parcelasInfo.sort((a, b) =>
-          (a.vencimento ?? "") < (b.vencimento ?? "") ? -1 : (a.vencimento ?? "") > (b.vencimento ?? "") ? 1 : 0
-        );
-        setParcelas(parcelasInfo);
-        setLoadingParcelas(false);
-        return;
+        for (const p of mapRawParcelasToInfo(lista, {
+          cobrancaId,
+          currentParcelaId,
+          cardCompanyId: String(ssoticaCompanyId),
+          companiesById,
+        })) {
+          if (!dedup.has(p.id)) dedup.set(p.id, p);
+        }
+        if (dedup.size > 0) {
+          setParcelas(Array.from(dedup.values()));
+          setLoadingParcelas(false);
+          return;
+        }
       }
     }
 

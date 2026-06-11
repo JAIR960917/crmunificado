@@ -38,6 +38,7 @@ export type AppointmentListRow = {
 type Props = {
   appointments: AppointmentListRow[];
   isAdmin: boolean;
+  canEditValor?: boolean;
   loading?: boolean;
   getProfileName: (userId: string) => string;
   onUpdateField: (id: string, field: string, value: string) => void;
@@ -62,6 +63,7 @@ const TH = "text-left px-2 py-2 font-medium whitespace-nowrap";
 export default function AppointmentsListTable({
   appointments,
   isAdmin,
+  canEditValor,
   loading,
   getProfileName,
   onUpdateField,
@@ -176,7 +178,27 @@ export default function AppointmentsListTable({
                   <td className="px-2 py-1.5 align-middle whitespace-nowrap" title={scheduledByName}>
                     {scheduledByName}
                   </td>
-                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">R$ {Number(appt.valor).toFixed(2)}</td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                    {canEditValor && !isSnapshot ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="border rounded px-1.5 h-7 text-[11px] w-[72px] shrink-0 bg-background"
+                        defaultValue={Number(appt.valor).toFixed(2)}
+                        onBlur={(e) => {
+                          const next = parseFloat(e.target.value.replace(",", "."));
+                          const current = Number(appt.valor);
+                          if (!Number.isNaN(next) && next !== current) {
+                            onUpdateField(appt.id, "valor", String(next));
+                          }
+                        }}
+                        title="Valor da consulta"
+                      />
+                    ) : (
+                      <>R$ {Number(appt.valor).toFixed(2)}</>
+                    )}
+                  </td>
                   <td className="px-2 py-1.5 align-middle whitespace-nowrap" title={consultaPaymentLabel(appt)}>
                     {consultaPaymentLabel(appt)}
                   </td>
