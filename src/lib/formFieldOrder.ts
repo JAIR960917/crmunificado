@@ -58,6 +58,7 @@ export function buildFormFillOrderIndex(
         childrenOf(fields, field.id)
           .filter((c) => !isRelocated(c))
           .forEach(visit);
+        insertAnchoredAfter(field.id);
       }
       return;
     }
@@ -122,6 +123,7 @@ export function buildVisibleFormFieldOrder<T extends FormFieldOrderNode>(
           .filter((c) => !isRelocated(c))
           .sort((a, b) => a.position - b.position)
           .forEach(addWithChildren);
+        insertAnchoredAfter(field.id);
       }
       return;
     }

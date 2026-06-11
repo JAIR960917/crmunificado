@@ -35,6 +35,16 @@ export function formatVisualAcuityDisplay(raw: unknown): string {
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
+/** Uma medida por linha — ideal para a tela de revisão. */
+export function formatVisualAcuityReview(raw: unknown): string {
+  const v = parseVisualAcuity(raw);
+  const lines = VISUAL_ACUITY_FIELDS.map(({ key, label }) => {
+    const pct = v[key]?.trim();
+    return `${label}: ${pct ? `${pct}%` : "—"}`;
+  });
+  return lines.join("\n");
+}
+
 export function isVisualAcuityEmpty(raw: unknown): boolean {
   const v = parseVisualAcuity(raw);
   return VISUAL_ACUITY_FIELDS.every(({ key }) => !v[key]?.trim());

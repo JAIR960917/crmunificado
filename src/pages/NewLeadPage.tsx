@@ -28,7 +28,7 @@ import {
 } from "@/lib/appointmentUtils";
 import { buildVisibleFormFieldOrder } from "@/lib/formFieldOrder";
 import { isFormFieldValueMissing } from "@/lib/formFieldValidation";
-import { formatVisualAcuityDisplay } from "@/lib/visualAcuity";
+import { formatVisualAcuityReview } from "@/lib/visualAcuity";
 import VisualAcuityInput from "@/components/forms/VisualAcuityInput";
 
 type DateStatusRange = { max_years: number; status_key: string };
@@ -229,7 +229,7 @@ export default function NewLeadPage() {
       const raw = formData[fieldKey];
       let display = "";
       if (field.field_type === "visual_acuity") {
-        display = formatVisualAcuityDisplay(raw);
+        display = formatVisualAcuityReview(raw);
       } else if (Array.isArray(raw)) {
         display = raw.length > 0 ? raw.join(", ") : "—";
       } else {
@@ -759,7 +759,7 @@ export default function NewLeadPage() {
               {getVisibleAnswers().map((item, i) => (
                 <div key={i} className="flex justify-between items-start px-4 py-2.5 gap-4">
                   <span className="text-sm font-medium text-muted-foreground shrink-0">{item.label}</span>
-                  <span className="text-sm text-foreground font-medium text-right">{item.value}</span>
+                  <span className="text-sm text-foreground font-medium text-right whitespace-pre-line">{item.value}</span>
                 </div>
               ))}
             </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { buildVisibleFormFieldOrder } from "@/lib/formFieldOrder";
-import { formatVisualAcuityDisplay, parseVisualAcuity } from "@/lib/visualAcuity";
+import { formatVisualAcuityDisplay, formatVisualAcuityReview, parseVisualAcuity } from "@/lib/visualAcuity";
 import VisualAcuityInput from "@/components/forms/VisualAcuityInput";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -598,7 +598,7 @@ export default function LeadFormDialog({
       const raw = formData[fieldKey];
       let display = "";
       if (field.field_type === "visual_acuity") {
-        display = formatVisualAcuityDisplay(raw);
+        display = formatVisualAcuityReview(raw);
       } else if (Array.isArray(raw)) {
         display = raw.length > 0 ? raw.join(", ") : "—";
       } else {
@@ -773,7 +773,7 @@ export default function LeadFormDialog({
                 {getVisibleAnswers().map((item, i) => (
                   <div key={i} className="flex justify-between items-start px-4 py-2.5 gap-4">
                     <span className="text-sm font-medium text-muted-foreground shrink-0">{item.label}</span>
-                    <span className="text-sm text-foreground font-medium text-right">{item.value}</span>
+                    <span className="text-sm text-foreground font-medium text-right whitespace-pre-line">{item.value}</span>
                   </div>
                 ))}
               </div>
