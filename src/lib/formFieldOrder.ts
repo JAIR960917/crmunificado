@@ -49,6 +49,15 @@ export function buildFormFillOrderIndex(
         childrenOf(fields, field.id)
           .filter((c) => !isRelocated(c))
           .forEach(visit);
+        return;
+      }
+      // Inserido via insertAnchoredAfter — registra ordem aqui.
+      if (field.appear_after_field_id) {
+        order += 1;
+        map.set(field.id, { order, total: 0 });
+        childrenOf(fields, field.id)
+          .filter((c) => !isRelocated(c))
+          .forEach(visit);
       }
       return;
     }
@@ -98,6 +107,16 @@ export function buildVisibleFormFieldOrder<T extends FormFieldOrderNode>(
     if (isRelocated(field)) {
       if (field.show_at_end) {
         deferred.push(field);
+        fields
+          .filter((f) => f.parent_field_id === field.id)
+          .filter((c) => !isRelocated(c))
+          .sort((a, b) => a.position - b.position)
+          .forEach(addWithChildren);
+        return;
+      }
+      // Inserido via insertAnchoredAfter após a pergunta âncora.
+      if (field.appear_after_field_id) {
+        result.push(field);
         fields
           .filter((f) => f.parent_field_id === field.id)
           .filter((c) => !isRelocated(c))
