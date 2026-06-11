@@ -188,6 +188,7 @@ async function dispatchSend(
     metaMessageId: result.metaMessageId ?? null,
     usedTemplate: result.usedTemplate ?? false,
     instanceId: target.instanceId ?? null,
+    templateDebug: result.templateDebug,
   };
 }
 
@@ -1107,7 +1108,11 @@ serve(async (req) => {
                       error_code: is463 ? 463 : undefined,
                       api_response: summarizeApiPayload(result.raw),
                       template: step.meta_template_name || null,
-                      template_params: templateParams.map((p) => ({ name: p.name, text: p.text?.slice(0, 80) })),
+                      template_params: (result.templateDebug?.bodyParams
+                        || templateParams.map((p) => ({ name: p.name, text: p.text?.slice(0, 80) }))),
+                      template_params_source: result.templateDebug?.source || "message",
+                      template_waba_id: result.templateDebug?.wabaId || null,
+                      template_language: result.templateDebug?.language || step.meta_template_language,
                     },
                   });
                 }

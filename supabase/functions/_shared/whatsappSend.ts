@@ -1,7 +1,7 @@
 /**
  * Envio WhatsApp unificado: API Full (legado) ou Cloud API (Meta).
  */
-import { resolveMetaTemplateParams } from "./metaTemplateVars.ts";
+import { normalizeMetaLanguage, resolveMetaTemplateParams } from "./metaTemplateVars.ts";
 export type WhatsAppProvider = "apifull" | "meta";
 
 export type InstanceRow = {
@@ -32,6 +32,21 @@ export type SendResult = {
   httpStatus?: number;
   metaMessageId?: string;
   usedTemplate?: boolean;
+  templateDebug?: {
+    source: string;
+    wabaId: string | null;
+    language: string;
+    bodyCount: number;
+    headerCount: number;
+    buttonCount: number;
+    bodyParams?: Array<{ name?: string; text: string }>;
+  };
+};
+
+export type MetaTemplateButtonSlot = {
+  index: number;
+  subType: string;
+  params: MetaTemplateBodyParam[];
 };
 
 const APIFULL_BASE = "https://api.apifull.com.br/whatsapp";
@@ -373,6 +388,44 @@ export type MetaTemplateBodyParam = {
   text: string;
 };
 
+function buildMetaTemplateComponents(
+  useNamedParams: boolean,
+  headerParams: MetaTemplateBodyParam[],
+  bodyParams: MetaTemplateBodyParam[],
+  buttonSlots: MetaTemplateButtonSlot[],
+): { type: string; sub_type?: string; index?: string; parameters: Record<string, string>[] }[] {
+  const components: { type: string; sub_type?: string; index?: string; parameters: Record<string, string>[] }[] = [];
+
+  const mapParams = (params: MetaTemplateBodyParam[]) =>
+    params.map((param) => {
+      const item: Record<string, string> = {
+        type: "text",
+        text: (param.text ?? "").trim() || "-",
+      };
+      if (useNamedParams && param.name?.trim() && !/^\d+$/.test(param.name.trim())) {
+        item.parameter_name = param.name.trim();
+      }
+      return item;
+    });
+
+  if (headerParams.length > 0) {
+    components.push({ type: "header", parameters: mapParams(headerParams) });
+  }
+  if (bodyParams.length > 0) {
+    components.push({ type: "body", parameters: mapParams(bodyParams) });
+  }
+  for (const slot of buttonSlots) {
+    if (!slot.params.length) continue;
+    components.push({
+      type: "button",
+      sub_type: slot.subType === "url" ? "url" : slot.subType,
+      index: String(slot.index),
+      parameters: mapParams(slot.params),
+    });
+  }
+  return components;
+}
+
 async function sendMetaTemplate(
   accessToken: string,
   phoneNumberId: string,
@@ -381,39 +434,16 @@ async function sendMetaTemplate(
   languageCode: string,
   bodyParams: MetaTemplateBodyParam[],
   headerParams: MetaTemplateBodyParam[] = [],
+  buttonSlots: MetaTemplateButtonSlot[] = [],
 ): Promise<SendResult> {
-  const postTemplate = async (useNamedParams: boolean): Promise<SendResult> => {
-    const components: { type: string; parameters: Record<string, string>[] }[] = [];
-    if (headerParams.length > 0) {
-      components.push({
-        type: "header",
-        parameters: headerParams.map((param) => {
-          const item: Record<string, string> = {
-            type: "text",
-            text: (param.text ?? "").trim() || "-",
-          };
-          if (useNamedParams && param.name?.trim() && !/^\d+$/.test(param.name.trim())) {
-            item.parameter_name = param.name.trim();
-          }
-          return item;
-        }),
-      });
-    }
-    if (bodyParams.length > 0) {
-      components.push({
-        type: "body",
-        parameters: bodyParams.map((param) => {
-          const item: Record<string, string> = {
-            type: "text",
-            text: (param.text ?? "").trim() || "-",
-          };
-          if (useNamedParams && param.name?.trim() && !/^\d+$/.test(param.name.trim())) {
-            item.parameter_name = param.name.trim();
-          }
-          return item;
-        }),
-      });
-    }
+  const postTemplate = async (
+    useNamedParams: boolean,
+    opts?: { header?: MetaTemplateBodyParam[]; body?: MetaTemplateBodyParam[]; buttons?: MetaTemplateButtonSlot[] },
+  ): Promise<SendResult> => {
+    const h = opts?.header ?? headerParams;
+    const b = opts?.body ?? bodyParams;
+    const btns = opts?.buttons ?? buttonSlots;
+    const components = buildMetaTemplateComponents(useNamedParams, h, b, btns);
     const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`;
     const response = await fetch(url, {
       method: "POST",
@@ -446,19 +476,31 @@ async function sendMetaTemplate(
     return { ok: true, errorMessage: null, raw: json, metaMessageId: messageId, usedTemplate: true };
   };
 
-  const allParams = [...headerParams, ...bodyParams];
+  const allParams = [
+    ...headerParams,
+    ...bodyParams,
+    ...buttonSlots.flatMap((s) => s.params),
+  ];
   const preferPositional = allParams.length > 0 && allParams.every((p) => /^\d+$/.test(String(p.name || "")));
 
   let result = await postTemplate(preferPositional ? false : true);
-  if (
-    !result.ok
-    && allParams.length > 0
-    && isMetaTemplateParamError(result.errorMessage || "")
-  ) {
-    const positionalRetry = await postTemplate(false);
-    if (positionalRetry.ok) return positionalRetry;
-    const namedRetry = await postTemplate(true);
-    if (namedRetry.ok) return namedRetry;
+  if (!result.ok && isMetaTemplateParamError(result.errorMessage || "")) {
+    if (allParams.length > 0) {
+      const positionalRetry = await postTemplate(false);
+      if (positionalRetry.ok) return positionalRetry;
+      const namedRetry = await postTemplate(true);
+      if (namedRetry.ok) return namedRetry;
+      // Header/botão dinâmico ausente costuma causar #132018 — tenta só o corpo.
+      if (headerParams.length > 0 || buttonSlots.length > 0) {
+        const bodyOnly = await postTemplate(false, { header: [], body: bodyParams, buttons: [] });
+        if (bodyOnly.ok) return bodyOnly;
+        const bodyOnlyNamed = await postTemplate(true, { header: [], body: bodyParams, buttons: [] });
+        if (bodyOnlyNamed.ok) return bodyOnlyNamed;
+      }
+    }
+    // Template estático (sem variáveis) — envia só nome + idioma.
+    const staticRetry = await postTemplate(false, { header: [], body: [], buttons: [] });
+    if (staticRetry.ok) return staticRetry;
   }
   return result;
 }
@@ -517,7 +559,7 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<S
 
   const templateName =
     metaTemplateName || target.metaDefaultTemplate || null;
-  const lang = metaTemplateLanguage || target.metaTemplateLanguage || "pt_BR";
+  let lang = normalizeMetaLanguage(metaTemplateLanguage || target.metaTemplateLanguage || "pt_BR");
 
   let windowOpen = skipWindowCheck;
   if (!windowOpen && supabase && target.instanceId) {
@@ -542,19 +584,36 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<S
 
   let bodyParams = metaTemplateBodyParams.length > 0 ? metaTemplateBodyParams : [];
   let headerParams: MetaTemplateBodyParam[] = [];
+  let buttonSlots: MetaTemplateButtonSlot[] = [];
+  let templateDebug: SendResult["templateDebug"];
 
   if (metaTemplateMessageSource || Object.keys(metaTemplateVars).length > 0) {
-    const wabaId = target.wabaId || Deno.env.get("WHATSAPP_WABA_ID") || null;
-    const resolved = await resolveMetaTemplateParams(
-      metaAccessToken,
-      wabaId,
+    const resolved = await resolveMetaTemplateParams(metaAccessToken, {
+      wabaId: target.wabaId,
+      phoneNumberId: target.phoneNumberId,
       templateName,
-      lang,
-      metaTemplateMessageSource || "",
-      metaTemplateVars,
-    );
+      languageCode: lang,
+      messageTemplate: metaTemplateMessageSource || "",
+      vars: metaTemplateVars,
+    });
     bodyParams = resolved.bodyParams;
     headerParams = resolved.headerParams;
+    buttonSlots = resolved.buttonSlots;
+    lang = resolved.language || lang;
+    templateDebug = {
+      source: resolved.source,
+      wabaId: resolved.wabaId,
+      language: lang,
+      bodyCount: bodyParams.length,
+      headerCount: headerParams.length,
+      buttonCount: buttonSlots.reduce((n, s) => n + s.params.length, 0),
+      bodyParams: bodyParams.map((p) => ({ name: p.name, text: (p.text ?? "").slice(0, 80) })),
+    };
+    if (resolved.source === "message") {
+      console.warn(
+        `[whatsapp] template params from CRM message (schema miss) template=${templateName} waba=${resolved.wabaId || "?"}`,
+      );
+    }
   }
 
   const tplResult = await sendMetaTemplate(
@@ -565,7 +624,9 @@ export async function sendWhatsAppMessage(params: SendWhatsAppParams): Promise<S
     lang,
     bodyParams,
     headerParams,
+    buttonSlots,
   );
+  tplResult.templateDebug = templateDebug;
 
   if (!tplResult.ok && imageUrl) {
     return {

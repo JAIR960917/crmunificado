@@ -681,9 +681,13 @@ export default function TransitionLogsPage() {
                                 ? [
                                     e.details?.error,
                                     e.details?.template ? `template: ${e.details.template}` : null,
+                                    e.details?.template_params_source
+                                      ? `fonte: ${e.details.template_params_source}`
+                                      : null,
                                     Array.isArray(e.details?.template_params)
                                       ? `params: ${JSON.stringify(e.details.template_params)}`
                                       : null,
+                                    e.details?.template_waba_id ? `waba: ${e.details.template_waba_id}` : null,
                                     e.details?.api_response,
                                   ].filter(Boolean).join(" | ")
                                 : String(detalhe)

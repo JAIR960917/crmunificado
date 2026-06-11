@@ -106,7 +106,7 @@ async function sendMessage(
     supabase,
   });
   const errMsg = result.errorMessage ? translateWhatsAppError(result.errorMessage) : null;
-  return { ok: result.ok, error: errMsg, raw: result.raw };
+  return { ok: result.ok, error: errMsg, raw: result.raw, templateDebug: result.templateDebug };
 }
 
 async function resolveSession(supabase: any, instanceId: string | null, companyId: string | null): Promise<string | null> {
@@ -331,7 +331,10 @@ serve(async (req) => {
                     phone,
                     instance_name: instRow?.name || session,
                     template: step.meta_template_name || null,
-                    template_params: templateParams.map((p) => ({ name: p.name, text: p.text?.slice(0, 80) })),
+                    template_params: ((result as { templateDebug?: { bodyParams?: Array<{ name?: string; text: string }> } }).templateDebug?.bodyParams
+                      || templateParams.map((p) => ({ name: p.name, text: p.text?.slice(0, 80) }))),
+                    template_params_source: (result as { templateDebug?: { source?: string } }).templateDebug?.source || "message",
+                    template_waba_id: (result as { templateDebug?: { wabaId?: string | null } }).templateDebug?.wabaId || null,
                   },
                 });
                 stats.gatilhos_falhos++;

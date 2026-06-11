@@ -68,10 +68,49 @@ export function sanitizeMetaTemplateParam(value: string): string {
   let v = String(value ?? "").trim();
   if (!v) return "-";
   v = v.replace(/\0/g, "").replace(/\t/g, " ");
-  v = v.replace(/\n{3,}/g, "\n\n");
-  // Limite da Meta por parâmetro de corpo
+  // Quebras de linha costumam causar #132018 em templates de cobrança.
+  v = v.replace(/\r?\n+/g, " • ").replace(/\s+/g, " ").trim();
   if (v.length > 1024) v = `${v.slice(0, 1021)}...`;
   return v || "-";
+}
+
+export function normalizeMetaLanguage(code: string): string {
+  const c = (code || "pt_BR").trim().replace(/-/g, "_");
+  if (!c) return "pt_BR";
+  const [lang, region] = c.split("_");
+  if (region) return `${lang.toLowerCase()}_${region.toUpperCase()}`;
+  return c.toLowerCase();
+}
+
+const wabaIdCache = new Map<string, { expires: number; wabaId: string | null }>();
+
+/** WABA da instância → consulta pelo phone_number_id → WHATSAPP_WABA_ID do .env */
+export async function resolveMetaWabaId(
+  accessToken: string,
+  phoneNumberId: string | null | undefined,
+  instanceWabaId: string | null | undefined,
+): Promise<string | null> {
+  if (instanceWabaId?.trim()) return instanceWabaId.trim();
+  const envWaba = Deno.env.get("WHATSAPP_WABA_ID")?.trim() || null;
+  const pid = phoneNumberId?.trim();
+  if (!accessToken || !pid) return envWaba;
+
+  const cached = wabaIdCache.get(pid);
+  if (cached && cached.expires > Date.now()) return cached.wabaId || envWaba;
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${pid}?fields=whatsapp_business_account`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    const json = await res.json().catch(() => ({}));
+    const waba = (json as { whatsapp_business_account?: { id?: string } })?.whatsapp_business_account?.id?.trim()
+      || null;
+    wabaIdCache.set(pid, { expires: Date.now() + 10 * 60 * 1000, wabaId: waba });
+    return waba || envWaba;
+  } catch {
+    return envWaba;
+  }
 }
 
 function resolveVarValue(key: string, varsLower: Record<string, string>): string {
@@ -216,9 +255,26 @@ export function parseMetaTemplateVariableNames(text: string): string[] {
   return names;
 }
 
+export type MetaTemplateButtonSlot = {
+  index: number;
+  subType: "url" | "quick_reply" | "phone_number";
+  varNames: string[];
+};
+
 export type MetaTemplateSchema = {
   bodyVarNames: string[];
   headerVarNames: string[];
+  buttonSlots: MetaTemplateButtonSlot[];
+  language: string;
+};
+
+export type ResolvedMetaTemplateParams = {
+  bodyParams: MetaTemplateBodyParam[];
+  headerParams: MetaTemplateBodyParam[];
+  buttonSlots: Array<{ index: number; subType: string; params: MetaTemplateBodyParam[] }>;
+  source: "meta" | "message";
+  wabaId: string | null;
+  language: string;
 };
 
 const templateSchemaCache = new Map<string, { expires: number; schema: MetaTemplateSchema | null }>();
@@ -252,11 +308,17 @@ export async function fetchMetaTemplateSchema(
   const templates = ((json as { data?: unknown[] }).data || []) as Array<{
     name?: string;
     language?: string;
-    components?: Array<{ type?: string; format?: string; text?: string }>;
+    components?: Array<{
+      type?: string;
+      format?: string;
+      text?: string;
+      buttons?: Array<{ type?: string; url?: string; text?: string }>;
+    }>;
   }>;
-  const lang = languageCode || "pt_BR";
-  const tpl = templates.find((t) => t.name === templateName && t.language === lang)
-    || templates.find((t) => t.name === templateName)
+  const lang = normalizeMetaLanguage(languageCode);
+  const sameName = templates.filter((t) => t.name === templateName);
+  const tpl = sameName.find((t) => normalizeMetaLanguage(t.language || "") === lang)
+    || sameName[0]
     || null;
   if (!tpl) {
     templateSchemaCache.set(cacheKey, { expires: Date.now() + 60_000, schema: null });
@@ -265,6 +327,7 @@ export async function fetchMetaTemplateSchema(
 
   let headerVarNames: string[] = [];
   let bodyVarNames: string[] = [];
+  const buttonSlots: MetaTemplateButtonSlot[] = [];
   for (const comp of tpl.components || []) {
     const type = String(comp.type || "").toUpperCase();
     if (type === "HEADER" && String(comp.format || "TEXT").toUpperCase() === "TEXT" && comp.text) {
@@ -273,9 +336,25 @@ export async function fetchMetaTemplateSchema(
     if (type === "BODY" && comp.text) {
       bodyVarNames = parseMetaTemplateVariableNames(comp.text);
     }
+    if (type === "BUTTONS" && Array.isArray(comp.buttons)) {
+      comp.buttons.forEach((btn, index) => {
+        const btnType = String(btn.type || "").toUpperCase();
+        if (btnType === "URL" && btn.url) {
+          const vars = parseMetaTemplateVariableNames(btn.url);
+          if (vars.length > 0) {
+            buttonSlots.push({ index, subType: "url", varNames: vars });
+          }
+        }
+      });
+    }
   }
 
-  const schema: MetaTemplateSchema = { bodyVarNames, headerVarNames };
+  const schema: MetaTemplateSchema = {
+    bodyVarNames,
+    headerVarNames,
+    buttonSlots,
+    language: normalizeMetaLanguage(tpl.language || lang),
+  };
   templateSchemaCache.set(cacheKey, { expires: Date.now() + TEMPLATE_SCHEMA_CACHE_TTL_MS, schema });
   return schema;
 }
@@ -315,24 +394,55 @@ export function buildMetaTemplateBodyParamsFromSchema(
  */
 export async function resolveMetaTemplateParams(
   accessToken: string,
-  wabaId: string | null | undefined,
-  templateName: string,
-  languageCode: string,
-  messageTemplate: string,
-  vars: Record<string, string>,
-): Promise<{ bodyParams: MetaTemplateBodyParam[]; headerParams: MetaTemplateBodyParam[]; source: "meta" | "message" }> {
+  opts: {
+    wabaId?: string | null;
+    phoneNumberId?: string | null;
+    templateName: string;
+    languageCode: string;
+    messageTemplate: string;
+    vars: Record<string, string>;
+  },
+): Promise<ResolvedMetaTemplateParams> {
+  const {
+    templateName,
+    messageTemplate,
+    vars,
+    phoneNumberId,
+  } = opts;
+  const lang = normalizeMetaLanguage(opts.languageCode);
   const fallback = buildMetaTemplateBodyParams(messageTemplate, vars);
-  if (!accessToken || !wabaId?.trim() || !templateName?.trim()) {
-    return { bodyParams: fallback, headerParams: [], source: "message" };
-  }
-  const schema = await fetchMetaTemplateSchema(accessToken, wabaId.trim(), templateName.trim(), languageCode || "pt_BR");
+  const empty: ResolvedMetaTemplateParams = {
+    bodyParams: fallback,
+    headerParams: [],
+    buttonSlots: [],
+    source: "message",
+    wabaId: null,
+    language: lang,
+  };
+
+  if (!accessToken || !templateName?.trim()) return empty;
+
+  const wabaId = await resolveMetaWabaId(accessToken, phoneNumberId, opts.wabaId);
+  if (!wabaId) return empty;
+
+  const schema = await fetchMetaTemplateSchema(accessToken, wabaId, templateName.trim(), lang);
   if (!schema) {
-    return { bodyParams: fallback, headerParams: [], source: "message" };
+    return { ...empty, wabaId };
   }
+
+  const buttonSlots = schema.buttonSlots.map((slot) => ({
+    index: slot.index,
+    subType: slot.subType,
+    params: buildMetaTemplateBodyParamsFromSchema(slot.varNames, vars, messageTemplate),
+  }));
+
   return {
     bodyParams: buildMetaTemplateBodyParamsFromSchema(schema.bodyVarNames, vars, messageTemplate),
     headerParams: buildMetaTemplateBodyParamsFromSchema(schema.headerVarNames, vars, messageTemplate),
+    buttonSlots,
     source: "meta",
+    wabaId,
+    language: schema.language || lang,
   };
 }
 
