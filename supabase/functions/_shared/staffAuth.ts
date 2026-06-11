@@ -43,12 +43,41 @@ export async function getUserRoles(
   return (data ?? []).map((r: { role: string }) => r.role);
 }
 
+/** Usuário dedicado à cobrança (enum financeiro ou função customizada só com Cobranças). */
+export async function userHasCobrancaStaffAccess(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<boolean> {
+  const roles = await getUserRoles(admin, userId);
+  if (roles.includes("financeiro")) return true;
+
+  const { data: ur } = await admin
+    .from("user_roles")
+    .select("role_key, role")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const roleKey = (ur?.role_key ?? ur?.role) as string | undefined;
+  if (!roleKey) return false;
+
+  const { data: pages } = await admin
+    .from("role_page_permissions")
+    .select("page_key, allowed")
+    .eq("role_key", roleKey);
+  const perm = new Map((pages ?? []).map((p: { page_key: string; allowed: boolean }) => [p.page_key, p.allowed]));
+  return perm.get("cobrancas") === true
+    && perm.get("leads") !== true
+    && perm.get("clientes_ativos") !== true;
+}
+
 export async function getAllowedCompanyIds(
   admin: SupabaseClient,
   userId: string,
 ): Promise<Set<string> | "all"> {
   const roles = await getUserRoles(admin, userId);
   if (roles.includes("admin")) return "all";
+
+  // Cobrança enxerga cards de todas as lojas (RLS crm_cobrancas) — SSótica segue o mesmo escopo.
+  if (await userHasCobrancaStaffAccess(admin, userId)) return "all";
 
   const allowed = new Set<string>();
   const { data: prof } = await admin

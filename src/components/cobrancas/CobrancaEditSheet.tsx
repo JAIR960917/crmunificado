@@ -190,9 +190,94 @@ export default function CobrancaEditSheet(props: Props) {
     const companiesById = new Map((companies ?? []).map((c: any) => [String(c.id), c.name as string]));
     const dedup = new Map<string, ParcelaInfo>();
 
-    // Consulta ao vivo no SSótica para não depender só do último sync incremental.
-    if (ssoticaClienteId && ssoticaCompanyId && cobrancaId) {
-      try {
+    const mergeParcelas = (list: ParcelaInfo[]) => {
+      for (const p of list) {
+        if (!dedup.has(p.id)) dedup.set(p.id, p);
+      }
+    };
+
+    try {
+      // 1) Dados do banco primeiro — resposta imediata enquanto SSótica atualiza em segundo plano.
+      if (cpfDigits.length >= 11) {
+        const { data: cards, error } = await supabase
+          .from("crm_cobrancas")
+          .select("id, ssotica_company_id, ssotica_parcela_id, data")
+          .or(`data->>documento.eq.${cpfDigits},data->>cpf.eq.${cpfDigits}`);
+
+        if (!error && Array.isArray(cards) && cards.length > 0) {
+          for (const card of cards as any[]) {
+            const lista = card?.data?.parcelas_atrasadas as any[] | undefined;
+            if (!Array.isArray(lista) || lista.length === 0) continue;
+            const cardCompanyId = card?.ssotica_company_id != null ? String(card.ssotica_company_id) : null;
+            mergeParcelas(mapRawParcelasToInfo(lista, {
+              cobrancaId,
+              currentParcelaId:
+                String(card.id) === String(cobrancaId) ? card?.ssotica_parcela_id : null,
+              cardCompanyId,
+              companiesById,
+            }));
+          }
+        }
+      }
+
+      if (dedup.size === 0 && ssoticaClienteId && ssoticaCompanyId && cobrancaId) {
+        const { data: card, error } = await supabase
+          .from("crm_cobrancas")
+          .select("data, ssotica_parcela_id")
+          .eq("id", cobrancaId)
+          .maybeSingle();
+
+        const lista = (card as any)?.data?.parcelas_atrasadas as any[] | undefined;
+        const currentParcelaId = (card as any)?.ssotica_parcela_id;
+        if (!error && Array.isArray(lista) && lista.length > 0) {
+          mergeParcelas(mapRawParcelasToInfo(lista, {
+            cobrancaId,
+            currentParcelaId,
+            cardCompanyId: String(ssoticaCompanyId),
+            companiesById,
+          }));
+        }
+      }
+
+      if (dedup.size === 0) {
+        let query = supabase
+          .from("crm_cobrancas")
+          .select("id, valor, vencimento, dias_atraso, status, data, ssotica_cliente_id, company_id")
+          .order("vencimento", { ascending: true });
+
+        if (ssoticaClienteId && ssoticaCompanyId) {
+          query = query.eq("ssotica_cliente_id", ssoticaClienteId).eq("ssotica_company_id", ssoticaCompanyId);
+        } else if (cpfDigits.length >= 11) {
+          query = query.or(`data->>documento.eq.${cpfDigits},data->>cpf.eq.${cpfDigits}`);
+        } else if (nome) {
+          query = query.eq("data->>nome", nome);
+        }
+
+        const { data, error } = await query;
+        if (!error && data) {
+          for (const p of data as any[]) {
+            mergeParcelas([{
+              id: p.id,
+              numero_parcela: p.data?.numero_parcela ? Number(p.data.numero_parcela) : null,
+              vencimento: p.vencimento,
+              valor: Number(p.valor || 0),
+              dias_atraso: p.dias_atraso ?? null,
+              status: p.status,
+              is_current: p.id === cobrancaId,
+              loja_nome: p.company_id ? (companiesById.get(String(p.company_id)) ?? null) : null,
+            }]);
+          }
+        }
+      }
+
+      setParcelas(Array.from(dedup.values()));
+      setLoadingParcelas(false);
+
+      // 2) Atualização ao vivo no SSótica (não bloqueia a UI; timeout de 45s).
+      if (!ssoticaClienteId || !ssoticaCompanyId || !cobrancaId) return;
+
+      const liveTimeoutMs = 45_000;
+      const livePromise = (async () => {
         let { data: sessionData } = await supabase.auth.getSession();
         let token = sessionData?.session?.access_token;
         const expiresAt = sessionData?.session?.expires_at;
@@ -201,147 +286,63 @@ export default function CobrancaEditSheet(props: Props) {
           const { data: refreshed } = await supabase.auth.refreshSession();
           token = refreshed?.session?.access_token ?? token;
         }
-        if (token) {
-          const { data: live, error: liveErr } = await supabase.functions.invoke("ssotica-cliente-debitos", {
-            body: { ssoticaClienteId, ssoticaCompanyId, cpf: cpfDigits },
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!liveErr && Array.isArray(live?.parcelas)) {
-            const { data: cur } = await supabase
-              .from("crm_cobrancas")
-              .select("data, ssotica_parcela_id")
-              .eq("id", cobrancaId)
-              .maybeSingle();
-            const prevData = ((cur as any)?.data ?? formData) as Record<string, any>;
-            const totalAtraso = Number(live.total_atraso ?? 0);
-            await supabase
-              .from("crm_cobrancas")
-              .update({
-                data: {
-                  ...prevData,
-                  parcelas_atrasadas: live.parcelas,
-                  qtd_parcelas_atrasadas: live.parcelas.length,
-                  total_atraso: totalAtraso,
-                },
-                valor: totalAtraso,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", cobrancaId);
-            onCardUpdated?.();
-            if (totalAtraso > 0) setFormValor(String(totalAtraso.toFixed(2)));
-            for (const p of mapRawParcelasToInfo(live.parcelas, {
-              cobrancaId,
-              currentParcelaId: (cur as any)?.ssotica_parcela_id,
-              cardCompanyId: String(ssoticaCompanyId),
-              companiesById,
-            })) {
-              dedup.set(p.id, p);
-            }
-            setParcelas(Array.from(dedup.values()));
-            setLoadingParcelas(false);
-            return;
-          }
-        }
-      } catch {
-        // segue com dados do banco
-      }
-    }
+        if (!token) return null;
 
-    // Estratégia 1 (preferida): se houver CPF, busca TODOS os cards de cobrança
-    // do mesmo cliente (em qualquer loja) e une as listas `data.parcelas_atrasadas`
-    // de cada um, marcando a loja em cada parcela. Assim, um card unificado
-    // mostra de uma vez as parcelas de todas as lojas.
-    if (cpfDigits.length >= 11) {
-      const { data: cards, error } = await supabase
-        .from("crm_cobrancas")
-        .select("id, ssotica_company_id, ssotica_parcela_id, data")
-        .or(`data->>documento.eq.${cpfDigits},data->>cpf.eq.${cpfDigits}`);
+        const { data: live, error: liveErr } = await supabase.functions.invoke("ssotica-cliente-debitos", {
+          body: { ssoticaClienteId, ssoticaCompanyId, cpf: cpfDigits, monthsBack: 24 },
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (liveErr || !Array.isArray(live?.parcelas)) return null;
+        return live;
+      })();
 
-      if (!error && Array.isArray(cards) && cards.length > 0) {
-        for (const card of cards as any[]) {
-          const lista = card?.data?.parcelas_atrasadas as any[] | undefined;
-          if (!Array.isArray(lista) || lista.length === 0) continue;
-          const cardCompanyId = card?.ssotica_company_id != null ? String(card.ssotica_company_id) : null;
-          for (const p of mapRawParcelasToInfo(lista, {
-            cobrancaId,
-            currentParcelaId:
-              String(card.id) === String(cobrancaId) ? card?.ssotica_parcela_id : null,
-            cardCompanyId,
-            companiesById,
-          })) {
-            if (!dedup.has(p.id)) dedup.set(p.id, p);
-          }
-        }
-        if (dedup.size > 0) {
-          setParcelas(Array.from(dedup.values()));
-          setLoadingParcelas(false);
-          return;
-        }
-      }
-    }
+      const live = await Promise.race([
+        livePromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), liveTimeoutMs)),
+      ]);
 
-    // Estratégia 2: card específico (SSótica) sem CPF — lê só do próprio card.
-    if (ssoticaClienteId && ssoticaCompanyId && cobrancaId) {
-      const { data: card, error } = await supabase
+      if (!live) return;
+
+      const { data: cur } = await supabase
         .from("crm_cobrancas")
         .select("data, ssotica_parcela_id")
         .eq("id", cobrancaId)
         .maybeSingle();
+      const prevData = ((cur as any)?.data ?? formData) as Record<string, any>;
+      const totalAtraso = Number(live.total_atraso ?? 0);
 
-      const lista = (card as any)?.data?.parcelas_atrasadas as any[] | undefined;
-      const currentParcelaId = (card as any)?.ssotica_parcela_id;
-      if (!error && Array.isArray(lista) && lista.length > 0) {
-        for (const p of mapRawParcelasToInfo(lista, {
-          cobrancaId,
-          currentParcelaId,
-          cardCompanyId: String(ssoticaCompanyId),
-          companiesById,
-        })) {
-          if (!dedup.has(p.id)) dedup.set(p.id, p);
-        }
-        if (dedup.size > 0) {
-          setParcelas(Array.from(dedup.values()));
-          setLoadingParcelas(false);
-          return;
-        }
+      await supabase
+        .from("crm_cobrancas")
+        .update({
+          data: {
+            ...prevData,
+            parcelas_atrasadas: live.parcelas,
+            qtd_parcelas_atrasadas: live.parcelas.length,
+            total_atraso: totalAtraso,
+          },
+          valor: totalAtraso,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", cobrancaId);
+
+      onCardUpdated?.();
+      if (totalAtraso > 0) setFormValor(String(totalAtraso.toFixed(2)));
+
+      const liveDedup = new Map<string, ParcelaInfo>();
+      for (const p of mapRawParcelasToInfo(live.parcelas, {
+        cobrancaId,
+        currentParcelaId: (cur as any)?.ssotica_parcela_id,
+        cardCompanyId: String(ssoticaCompanyId),
+        companiesById,
+      })) {
+        liveDedup.set(p.id, p);
       }
-    }
-
-    // Fallback: agrupa cards do mesmo cliente (manual / sem SSótica)
-    let query = supabase
-      .from("crm_cobrancas")
-      .select("id, valor, vencimento, dias_atraso, status, data, ssotica_cliente_id, company_id")
-      .order("vencimento", { ascending: true });
-
-    if (ssoticaClienteId && ssoticaCompanyId) {
-      query = query.eq("ssotica_cliente_id", ssoticaClienteId).eq("ssotica_company_id", ssoticaCompanyId);
-    } else if (cpfDigits.length >= 11) {
-      query = query.or(`data->>documento.eq.${cpfDigits},data->>cpf.eq.${cpfDigits}`);
-    } else if (nome) {
-      query = query.eq("data->>nome", nome);
-    } else {
-      setParcelas([]);
+      setParcelas(Array.from(liveDedup.values()));
+    } catch {
+      setParcelas(Array.from(dedup.values()));
+    } finally {
       setLoadingParcelas(false);
-      return;
     }
-
-    const { data, error } = await query;
-    if (!error && data) {
-      const list: ParcelaInfo[] = (data as any[]).map((p: any) => ({
-        id: p.id,
-        numero_parcela: p.data?.numero_parcela ? Number(p.data.numero_parcela) : null,
-        vencimento: p.vencimento,
-        valor: Number(p.valor || 0),
-        dias_atraso: p.dias_atraso ?? null,
-        status: p.status,
-        is_current: p.id === cobrancaId,
-        loja_nome: p.company_id ? (companiesById.get(String(p.company_id)) ?? null) : null,
-      }));
-      setParcelas(list);
-    } else {
-      setParcelas([]);
-    }
-    setLoadingParcelas(false);
   };
 
   useEffect(() => {
