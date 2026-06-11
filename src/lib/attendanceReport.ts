@@ -138,6 +138,7 @@ export async function fetchAttendanceReport(startStr: string, endStr: string): P
     { data: leadNotes },
     { data: renovNotes },
     { data: leadActivities },
+    { data: renovacaoActivities },
     { data: appointments },
   ] = await Promise.all([
     supabase
@@ -161,6 +162,11 @@ export async function fetchAttendanceReport(startStr: string, endStr: string): P
       .gte("updated_at", startISO)
       .lte("updated_at", endISO),
     supabase
+      .from("renovacao_activities")
+      .select("renovacao_id, created_by, created_at, updated_at, title")
+      .gte("updated_at", startISO)
+      .lte("updated_at", endISO),
+    supabase
       .from("crm_appointments")
       .select("id, scheduled_by, created_at")
       .gte("created_at", startISO)
@@ -179,18 +185,23 @@ export async function fetchAttendanceReport(startStr: string, endStr: string): P
     globalAdicionados.add(l.id);
   });
 
-  /** Tratados = leads únicos com tentativa de contato ou tarefa manual no card (sem renovações nem mudança automática de coluna) */
+  /** Tratados = cards únicos (lead ou renovação) com tentativa de contato ou tarefa manual */
   const tratadosMap = new Map<string, Set<string>>();
   const globalTratados = new Set<string>();
 
-  const markLeadTratado = (uid: string, leadId: string) => {
-    addToSetMap(tratadosMap, uid, leadId);
-    globalTratados.add(leadId);
+  const markCardTratado = (uid: string, cardKey: string) => {
+    addToSetMap(tratadosMap, uid, cardKey);
+    globalTratados.add(cardKey);
   };
 
   (leadNotes || []).forEach((n: { user_id: string; lead_id: string; content: string }) => {
     if (adminSet.has(n.user_id) || !isContactAttemptNote(n.content || "")) return;
-    markLeadTratado(n.user_id, n.lead_id);
+    markCardTratado(n.user_id, `lead:${n.lead_id}`);
+  });
+
+  renovNotesInRange.forEach((n) => {
+    if (adminSet.has(n.user_id) || !isContactAttemptNote(n.content || "")) return;
+    markCardTratado(n.user_id, `renovacao:${n.renovacao_id}`);
   });
 
   (
@@ -204,7 +215,21 @@ export async function fetchAttendanceReport(startStr: string, endStr: string): P
   ).forEach((a) => {
     if (adminSet.has(a.created_by)) return;
     if (!activityCountsAsTratado(a, startISO, endISO)) return;
-    markLeadTratado(a.created_by, a.lead_id);
+    markCardTratado(a.created_by, `lead:${a.lead_id}`);
+  });
+
+  (
+    (renovacaoActivities || []) as {
+      renovacao_id: string;
+      created_by: string;
+      created_at: string;
+      updated_at: string;
+      title?: string | null;
+    }[]
+  ).forEach((a) => {
+    if (adminSet.has(a.created_by)) return;
+    if (!activityCountsAsTratado(a, startISO, endISO)) return;
+    markCardTratado(a.created_by, `renovacao:${a.renovacao_id}`);
   });
 
   type LastEntry = { ts: number; cat: ContactCat };
@@ -240,7 +265,7 @@ export async function fetchAttendanceReport(startStr: string, endStr: string): P
   latestPerCardDay.forEach((entry, key) => {
     const parts = key.split("|");
     const cardKey = parts[2] || "";
-    if (!cardKey.startsWith("lead:")) return;
+    if (!cardKey.startsWith("lead:") && !cardKey.startsWith("renovacao:")) return;
     const uid = parts[0];
     const target =
       entry.cat === "agendou" ? agendou : entry.cat === "naoAtendeu" ? naoAtendeu : atendeuSemAgendar;
@@ -269,15 +294,14 @@ export async function fetchAttendanceReport(startStr: string, endStr: string): P
   latestPerCardDay.forEach((entry, key) => {
     const parts = key.split("|");
     const cardKey = parts[2] || "";
-    if (!cardKey.startsWith("lead:")) return;
-    const leadId = cardKey.slice("lead:".length);
-    if (entry.cat === "naoAtendeu") globalNaoAtendeu.add(leadId);
+    if (!cardKey.startsWith("lead:") && !cardKey.startsWith("renovacao:")) return;
+    if (entry.cat === "naoAtendeu") globalNaoAtendeu.add(cardKey);
     else if (entry.cat === "agendou") {
-      globalAgendou.add(leadId);
-      globalAtendeu.add(leadId);
+      globalAgendou.add(cardKey);
+      globalAtendeu.add(cardKey);
     } else if (entry.cat === "atendeuSemAgendar") {
-      globalSemAgendar.add(leadId);
-      globalAtendeu.add(leadId);
+      globalSemAgendar.add(cardKey);
+      globalAtendeu.add(cardKey);
     }
   });
 
