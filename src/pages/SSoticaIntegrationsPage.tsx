@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -181,23 +182,6 @@ export default function SSoticaIntegrationsPage() {
   const [resyncingAll, setResyncingAll] = useState(false);
   const [licenseLoading, setLicenseLoading] = useState(false);
 
-  async function parseEdgeFunctionError(
-    data: unknown,
-    error: { message?: string; context?: { json?: () => Promise<unknown> } } | null,
-  ): Promise<string> {
-    const fromData = (data as { error?: string } | null)?.error;
-    if (fromData) return fromData;
-    if (error?.context?.json) {
-      try {
-        const body = (await error.context.json()) as { error?: string };
-        if (body?.error) return body.error;
-      } catch {
-        /* ignore */
-      }
-    }
-    return error?.message || "Erro desconhecido";
-  }
-
   async function handleResyncAll() {
     const active = integrations.filter((i) => i.is_active);
     if (active.length === 0) {
@@ -231,7 +215,7 @@ export default function SSoticaIntegrationsPage() {
 
       // Dispara a 1ª loja imediatamente
       const first = active[0];
-      const { error } = await supabase.functions.invoke("ssotica-sync", {
+      const { error } = await invokeEdgeFunction("ssotica-sync", {
         body: { mode: "start_backfill", integration_id: first.id },
       });
       if (error) throw error;
@@ -309,7 +293,7 @@ export default function SSoticaIntegrationsPage() {
   async function handleResumeBackfill(integ: Integration) {
     setSyncingId(integ.id);
     try {
-      const { data, error } = await supabase.functions.invoke("ssotica-sync", {
+      const { data, error } = await invokeEdgeFunction("ssotica-sync", {
         body: { mode: "resume_backfill", integration_id: integ.id },
       });
       if (data && (data as { error?: string }).error === "another_store_busy") {
@@ -377,7 +361,7 @@ export default function SSoticaIntegrationsPage() {
     const tick = async () => {
       if (cancelled || document.visibilityState !== "visible") return;
       const integ = waiting[0];
-      await supabase.functions.invoke("ssotica-sync", {
+      await invokeEdgeFunction("ssotica-sync", {
         body: { mode: "resume_backfill", integration_id: integ.id },
       });
       if (!cancelled) await fetchAll();
@@ -417,12 +401,10 @@ export default function SSoticaIntegrationsPage() {
 
     setLicenseLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("ssotica-decrypt-license", {
+      const { data, error } = await invokeEdgeFunction("ssotica-decrypt-license", {
         body: { integration_id: integration.id },
       });
-      if (error) {
-        throw new Error(await parseEdgeFunctionError(data, error));
-      }
+      if (error) throw error;
       if (data?.error) {
         throw new Error(String(data.error));
       }
@@ -507,7 +489,7 @@ export default function SSoticaIntegrationsPage() {
       const body = forceFull
         ? { mode: "start_backfill", integration_id: integ.id, scope }
         : { integration_id: integ.id, manual_recent: true };
-      const { data, error } = await supabase.functions.invoke("ssotica-sync", { body });
+      const { data, error } = await invokeEdgeFunction("ssotica-sync", { body });
       // Trata o lock global: outra loja já está sincronizando.
       if (data && (data as any).error === "another_store_busy") {
         toast({
@@ -579,7 +561,7 @@ export default function SSoticaIntegrationsPage() {
 
     setSyncingId(integ.id);
     try {
-      const { data, error } = await supabase.functions.invoke("ssotica-sync", {
+      const { data, error } = await invokeEdgeFunction("ssotica-sync", {
         body: { mode: "full_sweep", integration_id: integ.id },
       });
       if (error) throw error;
@@ -603,7 +585,7 @@ export default function SSoticaIntegrationsPage() {
     setTestingId(integ.id);
     setTestResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke("ssotica-test-connection", {
+      const { data, error } = await invokeEdgeFunction("ssotica-test-connection", {
         body: { integration_id: integ.id },
       });
       if (error) throw error;

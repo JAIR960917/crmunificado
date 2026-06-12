@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -192,7 +193,7 @@ export default function SSoticaStatusPage() {
 
   async function unlock(id: string) {
     setActionId(id);
-    const { data, error } = await supabase.functions.invoke("ssotica-sync", {
+    const { data, error } = await invokeEdgeFunction("ssotica-sync", {
       body: {
         mode: "force_unlock",
         integration_id: id,
@@ -222,7 +223,7 @@ export default function SSoticaStatusPage() {
       current.backfill_status !== "done" &&
       ((current.backfill_total_chunks ?? 0) === 0 || (current.backfill_chunk_index ?? 0) < (current.backfill_total_chunks ?? 32));
 
-    const { data, error } = await supabase.functions.invoke("ssotica-sync", {
+    const { data, error } = await invokeEdgeFunction("ssotica-sync", {
       body: {
         mode: hasPendingBackfill ? "resume_backfill" : "incremental",
         integration_id: id,
@@ -304,7 +305,7 @@ export default function SSoticaStatusPage() {
     setBulkLoading(true);
     const results = await Promise.all(
       stuckItems.map((item) =>
-        supabase.functions.invoke("ssotica-sync", {
+        invokeEdgeFunction("ssotica-sync", {
           body: {
             mode: "force_unlock",
             integration_id: item.id,
