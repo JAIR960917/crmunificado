@@ -111,7 +111,7 @@ export default function CampanhaCopaRelatorioPage() {
     pct_prospect: 0,
     pct_outra_loja: 0,
     consentimento_marketing: 0,
-    por_cidade: [] as Array<{ cidade: string; total: number }>,
+    por_empresa: [] as Array<{ empresa: string; total: number }>,
     por_exame: [] as Array<{ exame: string; total: number }>,
   });
 
@@ -191,9 +191,9 @@ export default function CampanhaCopaRelatorioPage() {
     [profiles],
   );
 
-  const maxCidade = useMemo(
-    () => Math.max(1, ...metrics.por_cidade.map((x) => x.total)),
-    [metrics.por_cidade],
+  const maxEmpresa = useMemo(
+    () => Math.max(1, ...metrics.por_empresa.map((x) => x.total)),
+    [metrics.por_empresa],
   );
   const maxExame = useMemo(
     () => Math.max(1, ...metrics.por_exame.map((x) => x.total)),
@@ -397,20 +397,20 @@ export default function CampanhaCopaRelatorioPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                Distribuição por cidade
+                <Building2 className="h-4 w-4" />
+                Distribuição por empresa
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {metrics.por_cidade.length === 0 ? (
+              {metrics.por_empresa.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nenhum dado com os filtros atuais.</p>
               ) : (
-                metrics.por_cidade.map((item) => (
+                metrics.por_empresa.map((item) => (
                   <DistributionBar
-                    key={item.cidade}
-                    label={item.cidade}
+                    key={item.empresa}
+                    label={item.empresa}
                     total={item.total}
-                    max={maxCidade}
+                    max={maxEmpresa}
                   />
                 ))
               )}

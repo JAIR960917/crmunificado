@@ -33,7 +33,7 @@ export type CampanhaCopaRelatorioMetrics = {
   pct_prospect: number;
   pct_outra_loja: number;
   consentimento_marketing: number;
-  por_cidade: Array<{ cidade: string; total: number }>;
+  por_empresa: Array<{ empresa: string; total: number }>;
   por_exame: Array<{ exame: string; total: number }>;
 };
 
@@ -221,19 +221,18 @@ function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRelatorioMe
   const outra_loja = rows.filter((r) => r.renovacao_match === "outra_loja").length;
   const consentimento_marketing = rows.filter((r) => r.consentimento_marketing).length;
 
-  const cidadeMap = new Map<string, number>();
+  const empresaMap = new Map<string, number>();
   const exameMap = new Map<string, number>();
   for (const row of rows) {
-    const cidade = row.cidade?.trim() || "Sem cidade";
+    const empresa = row.company_name?.trim() || "Sem empresa mapeada";
     const exame = row.ultimo_exame_vista?.trim() || "Não informado";
-    cidadeMap.set(cidade, (cidadeMap.get(cidade) ?? 0) + 1);
+    empresaMap.set(empresa, (empresaMap.get(empresa) ?? 0) + 1);
     exameMap.set(exame, (exameMap.get(exame) ?? 0) + 1);
   }
 
-  const por_cidade = Array.from(cidadeMap.entries())
-    .map(([cidade, n]) => ({ cidade, total: n }))
-    .sort((a, b) => b.total - a.total || a.cidade.localeCompare(b.cidade, "pt-BR"))
-    .slice(0, 20);
+  const por_empresa = Array.from(empresaMap.entries())
+    .map(([empresa, n]) => ({ empresa, total: n }))
+    .sort((a, b) => b.total - a.total || a.empresa.localeCompare(b.empresa, "pt-BR"));
 
   const por_exame = Array.from(exameMap.entries())
     .map(([exame, n]) => ({ exame, total: n }))
@@ -248,7 +247,7 @@ function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRelatorioMe
     pct_prospect: total > 0 ? Math.round((prospect / total) * 1000) / 10 : 0,
     pct_outra_loja: total > 0 ? Math.round((outra_loja / total) * 1000) / 10 : 0,
     consentimento_marketing,
-    por_cidade,
+    por_empresa,
     por_exame,
   };
 }
