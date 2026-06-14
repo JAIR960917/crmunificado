@@ -41,8 +41,8 @@ export function getMunicipios(uf: string): string[] {
 /** Monta o valor armazenado no formato "Cidade/UF". */
 export function formatCidadeUf(cidade: string, uf: string): string {
   if (!cidade && !uf) return "";
-  if (cidade && uf) return `${cidade}/${uf}`;
-  return cidade || uf;
+  if (!uf) return cidade;
+  return `${cidade}/${uf}`;
 }
 
 /** Extrai { cidade, uf } a partir do valor armazenado "Cidade/UF". */
