@@ -21,7 +21,9 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
 import {
+  FORMAS_PAGAMENTO_CONSULTA,
   FORMAS_PAGAMENTO_OCULOS,
+  formaConsultaSemValor,
   logAppointmentHistory,
   mapToCanalAgendamento,
   resolveCanalFromForm,
@@ -75,7 +77,8 @@ export default function NewLeadPage() {
   const [agDate, setAgDate] = useState(""); // yyyy-MM-dd
   const [agTime, setAgTime] = useState("09:00");
   const [agFormaPagamento, setAgFormaPagamento] = useState("");
-  const [agConsultaPaga, setAgConsultaPaga] = useState<"sim" | "nao" | "cortesia" | "">("");
+  const [agConsultaPaga, setAgConsultaPaga] = useState<"sim" | "nao" | "">("");
+  const [agFormaPagamentoConsulta, setAgFormaPagamentoConsulta] = useState("");
   const [agValorConsulta, setAgValorConsulta] = useState("");
 
   // Duplicate phone detection
@@ -346,11 +349,17 @@ export default function NewLeadPage() {
         toast.error("Informe se a consulta foi paga no momento do agendamento.");
         return;
       }
-      if (agConsultaPaga !== "cortesia") {
-        const valorNum = parseFloat(agValorConsulta.replace(",", "."));
-        if (!agValorConsulta.trim() || Number.isNaN(valorNum) || valorNum < 0) {
-          toast.error("Informe o valor da consulta.");
+      if (agConsultaPaga === "sim") {
+        if (!agFormaPagamentoConsulta) {
+          toast.error("Informe a forma de pagamento da consulta.");
           return;
+        }
+        if (!formaConsultaSemValor(agFormaPagamentoConsulta)) {
+          const valorNum = parseFloat(agValorConsulta.replace(",", "."));
+          if (!agValorConsulta.trim() || Number.isNaN(valorNum) || valorNum < 0) {
+            toast.error("Informe o valor da consulta.");
+            return;
+          }
         }
       }
     }
@@ -394,11 +403,10 @@ export default function NewLeadPage() {
     const { nome: leadName, telefone: leadPhone, idade: leadIdade } = resolveLeadIdentity(finalData, fields);
 
     const canalAgendamento = agendou === "sim" ? resolveCanalAgendamento() : "";
-    const consultaPagaNoAgendamento =
-      agendou === "sim" && (agConsultaPaga === "sim" || agConsultaPaga === "cortesia");
+    const consultaPagaNoAgendamento = agendou === "sim" && agConsultaPaga === "sim";
     const valorConsulta =
       agendou === "sim"
-        ? agConsultaPaga === "cortesia"
+        ? (agConsultaPaga === "sim" && formaConsultaSemValor(agFormaPagamentoConsulta))
           ? 0
           : parseFloat(agValorConsulta.replace(",", ".")) || 0
         : 0;
@@ -416,6 +424,7 @@ export default function NewLeadPage() {
       valor: valorConsulta,
       forma_pagamento: agFormaPagamento,
       forma_pagamento_oculos: agFormaPagamento,
+      forma_pagamento_consulta: agConsultaPaga === "sim" ? agFormaPagamentoConsulta : "",
       canal_agendamento: canalAgendamento,
       consulta_paga: consultaPagaNoAgendamento,
       consulta_paga_no_agendamento: consultaPagaNoAgendamento,
@@ -445,7 +454,7 @@ export default function NewLeadPage() {
       setFormData({});
       setObservacao("");
       setAgendou("");
-      setAgDate(""); setAgTime("09:00"); setAgFormaPagamento(""); setAgConsultaPaga(""); setAgValorConsulta("");
+      setAgDate(""); setAgTime("09:00"); setAgFormaPagamento(""); setAgConsultaPaga(""); setAgFormaPagamentoConsulta(""); setAgValorConsulta("");
       setStep(0);
       navigate(apptPayload ? "/agendamentos" : "/");
       return;
@@ -522,6 +531,7 @@ export default function NewLeadPage() {
         valor: apptPayload.valor,
         forma_pagamento: apptPayload.forma_pagamento,
         forma_pagamento_oculos: apptPayload.forma_pagamento_oculos,
+        forma_pagamento_consulta: apptPayload.forma_pagamento_consulta || "",
         canal_agendamento: apptPayload.canal_agendamento,
         consulta_paga: apptPayload.consulta_paga ?? false,
         consulta_paga_no_agendamento: apptPayload.consulta_paga_no_agendamento ?? false,
@@ -842,23 +852,56 @@ export default function NewLeadPage() {
                   <Select
                     value={agConsultaPaga}
                     onValueChange={(v) => {
-                      const opt = v as "sim" | "nao" | "cortesia";
+                      const opt = v as "sim" | "nao";
                       setAgConsultaPaga(opt);
-                      if (opt === "cortesia") setAgValorConsulta("");
+                      if (opt === "nao") setAgFormaPagamentoConsulta("");
                     }}
                   >
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="sim">Sim</SelectItem>
                       <SelectItem value="nao">Não</SelectItem>
-                      <SelectItem value="cortesia">Cortesia</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                {agConsultaPaga && agConsultaPaga !== "cortesia" && (
+                {agConsultaPaga === "sim" && (
+                  <div className="space-y-2">
+                    <Label>Forma de pagamento da consulta <span className="text-destructive">*</span></Label>
+                    <Select
+                      value={agFormaPagamentoConsulta}
+                      onValueChange={(v) => {
+                        setAgFormaPagamentoConsulta(v);
+                        if (formaConsultaSemValor(v)) setAgValorConsulta("0");
+                      }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        {FORMAS_PAGAMENTO_CONSULTA.map((fp) => (
+                          <SelectItem key={fp} value={fp}>{fp}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {agConsultaPaga === "sim" && agFormaPagamentoConsulta && !formaConsultaSemValor(agFormaPagamentoConsulta) && (
                   <div className="space-y-2">
                     <Label>Valor da consulta (R$) <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={agValorConsulta}
+                      onChange={(e) => setAgValorConsulta(e.target.value)}
+                      placeholder="0,00"
+                    />
+                  </div>
+                )}
+
+                {agConsultaPaga === "nao" && (
+                  <div className="space-y-2">
+                    <Label>Valor da consulta (R$)</Label>
                     <Input
                       type="number"
                       step="0.01"

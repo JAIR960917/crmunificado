@@ -24,6 +24,7 @@ export type OfflineAppointmentPayload = {
   valor: number;
   forma_pagamento: string;
   forma_pagamento_oculos?: string;
+  forma_pagamento_consulta?: string;
   canal_agendamento: string;
   consulta_paga?: boolean;
   consulta_paga_no_agendamento?: boolean;
@@ -112,6 +113,7 @@ export async function syncOfflineQueue(): Promise<string[]> {
           valor: ap.valor,
           forma_pagamento: ap.forma_pagamento,
           forma_pagamento_oculos: ap.forma_pagamento_oculos || ap.forma_pagamento,
+          forma_pagamento_consulta: ap.forma_pagamento_consulta || "",
           canal_agendamento: ap.canal_agendamento,
           consulta_paga: ap.consulta_paga ?? false,
           consulta_paga_no_agendamento: ap.consulta_paga_no_agendamento ?? false,
@@ -135,6 +137,7 @@ export async function syncOfflineQueue(): Promise<string[]> {
           valor: a.valor,
           forma_pagamento: a.forma_pagamento,
           forma_pagamento_oculos: a.forma_pagamento_oculos || a.forma_pagamento,
+          forma_pagamento_consulta: a.forma_pagamento_consulta || "",
           canal_agendamento: a.canal_agendamento,
           consulta_paga: a.consulta_paga ?? false,
           consulta_paga_no_agendamento: a.consulta_paga_no_agendamento ?? false,
@@ -166,6 +169,7 @@ export async function syncOfflineQueue(): Promise<string[]> {
       valor: a.valor,
       forma_pagamento: a.forma_pagamento,
       forma_pagamento_oculos: a.forma_pagamento_oculos || a.forma_pagamento,
+      forma_pagamento_consulta: a.forma_pagamento_consulta || "",
       canal_agendamento: a.canal_agendamento,
       consulta_paga: a.consulta_paga ?? false,
       consulta_paga_no_agendamento: a.consulta_paga_no_agendamento ?? false,
