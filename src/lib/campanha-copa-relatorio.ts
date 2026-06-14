@@ -1,4 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  resolveCompanyForCity,
+  type CidadeLojaRoute,
+} from "@/lib/campanha-copa-cidade";
 
 export const EXAME_VISTA_OPTIONS = [
   "Menos de 6 meses",
@@ -69,18 +73,37 @@ export type CampanhaCopaRelatorioResult = {
   rows: CampanhaCopaRelatorioRow[];
 };
 
-const EMPTY_METRICS: CampanhaCopaRelatorioMetrics = {
-  total: 0,
-  em_renovacao: 0,
-  prospect: 0,
-  outra_loja: 0,
-  pct_renovacao: 0,
-  pct_prospect: 0,
-  pct_outra_loja: 0,
-  consentimento_marketing: 0,
-  por_empresa: [],
-  por_exame: [],
+type SubmissionRaw = {
+  id: string;
+  lead_id: string | null;
+  nome: string;
+  cpf: string | null;
+  idade: string | null;
+  cidade: string | null;
+  telefone: string;
+  usa_oculos: string | null;
+  ultimo_exame_vista: string | null;
+  jogo: string | null;
+  jogo_label: string | null;
+  palpite_brasil: number | null;
+  palpite_marrocos: number | null;
+  palpite_texto: string | null;
+  consentimento_marketing: boolean;
+  assigned_to: string | null;
+  created_at: string;
 };
+
+type RenovacaoLite = {
+  id: string;
+  status: string;
+  data_ultima_compra: string | null;
+  ssotica_company_id: string;
+  cpf_digits: string;
+  phone_digits: string;
+  updated_at: string;
+};
+
+const MAX_SUBMISSIONS = 5000;
 
 function toIsoStart(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
@@ -90,6 +113,17 @@ function toIsoStart(dateStr: string | null | undefined): string | null {
 function toIsoEnd(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
   return `${dateStr}T23:59:59.999Z`;
+}
+
+function cpfDigits(value: string | null | undefined): string {
+  return (value ?? "").replace(/\D/g, "");
+}
+
+function normalizePhoneDigits(raw: string | null | undefined): string {
+  let d = (raw ?? "").replace(/\D/g, "");
+  if (d.length >= 12 && d.startsWith("55")) d = d.slice(2);
+  if (d.length === 10 && d[2] !== "9") d = `${d.slice(0, 2)}9${d.slice(2)}`;
+  return d;
 }
 
 export function normalizePlacarInput(
@@ -112,90 +146,283 @@ export function parsePlacarText(value: string | null | undefined): string | null
   return normalizePlacarInput(match[1], match[2]);
 }
 
-function parseMetrics(raw: unknown): CampanhaCopaRelatorioMetrics {
-  if (!raw || typeof raw !== "object") return { ...EMPTY_METRICS };
-  const m = raw as Record<string, unknown>;
+function parsePlacarScores(placar: string | null | undefined): { home: number; away: number } | null {
+  const normalized = parsePlacarText(placar);
+  if (!normalized) return null;
+  const [home, away] = normalized.split(" x ").map(Number);
+  if (!Number.isInteger(home) || !Number.isInteger(away)) return null;
+  return { home, away };
+}
+
+function isBetterRenovacao(a: RenovacaoLite, b: RenovacaoLite, preferCpf: boolean): boolean {
+  const aCpf = preferCpf && a.cpf_digits.length >= 11;
+  const bCpf = preferCpf && b.cpf_digits.length >= 11;
+  if (aCpf !== bCpf) return bCpf;
+  return b.updated_at > a.updated_at;
+}
+
+function findSameStoreRenovacao(
+  companyId: string,
+  cpf: string,
+  phone: string,
+  byCompanyCpf: Map<string, RenovacaoLite>,
+  byCompanyPhone: Map<string, RenovacaoLite>,
+): { ren: RenovacaoLite | null; matchType: string | null } {
+  if (cpf.length >= 11) {
+    const hit = byCompanyCpf.get(`${companyId}|${cpf}`);
+    if (hit) return { ren: hit, matchType: "cpf" };
+  }
+  if (phone.length >= 10) {
+    const hit = byCompanyPhone.get(`${companyId}|${phone}`);
+    if (hit) return { ren: hit, matchType: "telefone" };
+  }
+  return { ren: null, matchType: null };
+}
+
+function findOtherStoreRenovacao(
+  companyId: string | null,
+  cpf: string,
+  phone: string,
+  all: RenovacaoLite[],
+): { ren: RenovacaoLite | null; matchType: string | null } {
+  let best: RenovacaoLite | null = null;
+  let matchType: string | null = null;
+
+  for (const ren of all) {
+    if (companyId && ren.ssotica_company_id === companyId) continue;
+
+    const cpfHit = cpf.length >= 11 && ren.cpf_digits === cpf;
+    const phoneHit = phone.length >= 10 && ren.phone_digits === phone;
+    if (!cpfHit && !phoneHit) continue;
+
+    const type = cpfHit ? "cpf" : "telefone";
+    if (!best) {
+      best = ren;
+      matchType = type;
+      continue;
+    }
+    const preferCpf = type === "cpf";
+    if (isBetterRenovacao(best, ren, preferCpf) || (type === "cpf" && matchType !== "cpf")) {
+      best = ren;
+      matchType = type;
+    }
+  }
+
+  return { ren: best, matchType };
+}
+
+function buildRenovacaoIndexes(renovacoes: RenovacaoLite[]) {
+  const byCompanyCpf = new Map<string, RenovacaoLite>();
+  const byCompanyPhone = new Map<string, RenovacaoLite>();
+
+  for (const ren of renovacoes) {
+    if (ren.cpf_digits.length >= 11) {
+      const key = `${ren.ssotica_company_id}|${ren.cpf_digits}`;
+      const cur = byCompanyCpf.get(key);
+      if (!cur || ren.updated_at > cur.updated_at) byCompanyCpf.set(key, ren);
+    }
+    if (ren.phone_digits.length >= 10) {
+      const key = `${ren.ssotica_company_id}|${ren.phone_digits}`;
+      const cur = byCompanyPhone.get(key);
+      if (!cur || ren.updated_at > cur.updated_at) byCompanyPhone.set(key, ren);
+    }
+  }
+
+  return { byCompanyCpf, byCompanyPhone };
+}
+
+function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRelatorioMetrics {
+  const total = rows.length;
+  const em_renovacao = rows.filter((r) => r.renovacao_match === "sim").length;
+  const prospect = rows.filter((r) => r.renovacao_match === "nao").length;
+  const outra_loja = rows.filter((r) => r.renovacao_match === "outra_loja").length;
+  const consentimento_marketing = rows.filter((r) => r.consentimento_marketing).length;
+
+  const empresaMap = new Map<string, number>();
+  const exameMap = new Map<string, number>();
+  for (const row of rows) {
+    const empresa = row.company_name?.trim() || "Sem empresa mapeada";
+    const exame = row.ultimo_exame_vista?.trim() || "Não informado";
+    empresaMap.set(empresa, (empresaMap.get(empresa) ?? 0) + 1);
+    exameMap.set(exame, (exameMap.get(exame) ?? 0) + 1);
+  }
+
+  const por_empresa = Array.from(empresaMap.entries())
+    .map(([empresa, n]) => ({ empresa, total: n }))
+    .sort((a, b) => b.total - a.total || a.empresa.localeCompare(b.empresa, "pt-BR"));
+
+  const por_exame = Array.from(exameMap.entries())
+    .map(([exame, n]) => ({ exame, total: n }))
+    .sort((a, b) => b.total - a.total || a.exame.localeCompare(b.exame, "pt-BR"));
+
   return {
-    total: Number(m.total) || 0,
-    em_renovacao: Number(m.em_renovacao) || 0,
-    prospect: Number(m.prospect) || 0,
-    outra_loja: Number(m.outra_loja) || 0,
-    pct_renovacao: Number(m.pct_renovacao) || 0,
-    pct_prospect: Number(m.pct_prospect) || 0,
-    pct_outra_loja: Number(m.pct_outra_loja) || 0,
-    consentimento_marketing: Number(m.consentimento_marketing) || 0,
-    por_empresa: Array.isArray(m.por_empresa)
-      ? (m.por_empresa as Array<{ empresa: string; total: number }>)
-      : [],
-    por_exame: Array.isArray(m.por_exame)
-      ? (m.por_exame as Array<{ exame: string; total: number }>)
-      : [],
+    total,
+    em_renovacao,
+    prospect,
+    outra_loja,
+    pct_renovacao: total > 0 ? Math.round((em_renovacao / total) * 1000) / 10 : 0,
+    pct_prospect: total > 0 ? Math.round((prospect / total) * 1000) / 10 : 0,
+    pct_outra_loja: total > 0 ? Math.round((outra_loja / total) * 1000) / 10 : 0,
+    consentimento_marketing,
+    por_empresa,
+    por_exame,
   };
 }
 
-function parseRows(raw: unknown): CampanhaCopaRelatorioRow[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((row) => {
-    const r = row as Record<string, unknown>;
-    const match = r.renovacao_match;
-    const renovacao_match: RenovacaoMatch =
-      match === "sim" || match === "outra_loja" ? match : "nao";
-    return {
-      id: String(r.id ?? ""),
-      lead_id: (r.lead_id as string | null) ?? null,
-      nome: String(r.nome ?? ""),
-      cpf: (r.cpf as string | null) ?? null,
-      idade: (r.idade as string | null) ?? null,
-      cidade: (r.cidade as string | null) ?? null,
-      telefone: String(r.telefone ?? ""),
-      usa_oculos: (r.usa_oculos as string | null) ?? null,
-      ultimo_exame_vista: (r.ultimo_exame_vista as string | null) ?? null,
-      jogo: (r.jogo as string | null) ?? null,
-      jogo_label: (r.jogo_label as string | null) ?? null,
-      palpite_brasil: r.palpite_brasil == null ? null : Number(r.palpite_brasil),
-      palpite_marrocos: r.palpite_marrocos == null ? null : Number(r.palpite_marrocos),
-      palpite_texto: (r.palpite_texto as string | null) ?? null,
-      consentimento_marketing: r.consentimento_marketing === true,
-      assigned_to: (r.assigned_to as string | null) ?? null,
-      created_at: String(r.created_at ?? ""),
-      company_id: (r.company_id as string | null) ?? null,
-      company_name: (r.company_name as string | null) ?? null,
-      renovacao_match,
-      renovacao_match_type: (r.renovacao_match_type as string | null) ?? null,
-      renovacao_match_id: (r.renovacao_match_id as string | null) ?? null,
-      renovacao_match_status: (r.renovacao_match_status as string | null) ?? null,
-      renovacao_status_label: (r.renovacao_status_label as string | null) ?? null,
-      renovacao_match_data_compra: (r.renovacao_match_data_compra as string | null) ?? null,
-      renovacao_match_company_id: (r.renovacao_match_company_id as string | null) ?? null,
-      renovacao_company_name: (r.renovacao_company_name as string | null) ?? null,
-    };
-  });
+async function fetchSubmissions(filters: CampanhaCopaRelatorioFilters): Promise<SubmissionRaw[]> {
+  let query = supabase
+    .from("campanha_copa_submissions")
+    .select(
+      "id, lead_id, nome, cpf, idade, cidade, telefone, usa_oculos, ultimo_exame_vista, jogo, jogo_label, palpite_brasil, palpite_marrocos, palpite_texto, consentimento_marketing, assigned_to, created_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(MAX_SUBMISSIONS);
+
+  if (filters.ultimo_exame) query = query.eq("ultimo_exame_vista", filters.ultimo_exame);
+  if (filters.cidade?.trim()) query = query.ilike("cidade", `%${filters.cidade.trim()}%`);
+  if (filters.jogo) query = query.eq("jogo", filters.jogo);
+  if (filters.data_inicio) query = query.gte("created_at", toIsoStart(filters.data_inicio)!);
+  if (filters.data_fim) query = query.lte("created_at", toIsoEnd(filters.data_fim)!);
+  if (filters.assigned_to) query = query.eq("assigned_to", filters.assigned_to);
+
+  const placarScores = parsePlacarScores(filters.placar);
+  if (placarScores) {
+    query = query
+      .eq("palpite_brasil", placarScores.home)
+      .eq("palpite_marrocos", placarScores.away);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as SubmissionRaw[];
+}
+
+async function lookupRenovacoes(cpfs: string[], phones: string[]): Promise<RenovacaoLite[]> {
+  if (cpfs.length === 0 && phones.length === 0) return [];
+
+  const { data, error } = await supabase.rpc("campanha_copa_lookup_renovacoes" as never, {
+    p_cpfs: cpfs,
+    p_phones: phones,
+  } as never);
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as RenovacaoLite[]).filter((r) => r.ssotica_company_id);
 }
 
 export async function fetchCampanhaCopaRelatorio(
   filters: CampanhaCopaRelatorioFilters,
 ): Promise<CampanhaCopaRelatorioResult> {
-  const { data, error } = await supabase.rpc("campanha_copa_relatorio" as never, {
-    p_ultimo_exame: filters.ultimo_exame || null,
-    p_cidade: filters.cidade?.trim() || null,
-    p_jogo: filters.jogo || null,
-    p_data_inicio: filters.data_inicio ? toIsoStart(filters.data_inicio) : null,
-    p_data_fim: filters.data_fim ? toIsoEnd(filters.data_fim) : null,
-    p_renovacao_filtro: filters.renovacao_filtro || null,
-    p_assigned_to: filters.assigned_to || null,
-    p_placar: filters.placar || null,
-  } as never);
+  const [submissions, routesRes, statusesRes] = await Promise.all([
+    fetchSubmissions(filters),
+    supabase.from("campanha_copa_cidade_lojas" as never).select("id, cidade_label, company_id"),
+    supabase.from("crm_renovacao_statuses").select("key, label"),
+  ]);
 
-  if (error) throw new Error(error.message);
+  if (routesRes.error) throw new Error(routesRes.error.message);
 
-  const payload = (data ?? { metrics: {}, rows: [] }) as {
-    metrics?: unknown;
-    rows?: unknown;
-  };
+  const routes = (routesRes.data ?? []) as CidadeLojaRoute[];
+  const statusLabelByKey = new Map<string, string>(
+    (statusesRes.data ?? []).map((s) => [s.key as string, s.label as string]),
+  );
+
+  const cpfSet = new Set<string>();
+  const phoneSet = new Set<string>();
+  for (const sub of submissions) {
+    const cpf = cpfDigits(sub.cpf);
+    const phone = normalizePhoneDigits(sub.telefone);
+    if (cpf.length >= 11) cpfSet.add(cpf);
+    if (phone.length >= 10) phoneSet.add(phone);
+  }
+
+  const renovacoes = await lookupRenovacoes([...cpfSet], [...phoneSet]);
+  const { byCompanyCpf, byCompanyPhone } = buildRenovacaoIndexes(renovacoes);
+
+  const companyIds = new Set<string>();
+  for (const route of routes) companyIds.add(route.company_id);
+  for (const ren of renovacoes) companyIds.add(ren.ssotica_company_id);
+
+  const { data: companiesData, error: companiesErr } = companyIds.size
+    ? await supabase.from("companies").select("id, name").in("id", [...companyIds])
+    : { data: [], error: null };
+  if (companiesErr) throw new Error(companiesErr.message);
+
+  const companyNameById = new Map<string, string>(
+    (companiesData ?? []).map((c) => [c.id as string, c.name as string]),
+  );
+
+  let rows: CampanhaCopaRelatorioRow[] = submissions.map((sub) => {
+    const route = resolveCompanyForCity(sub.cidade, routes);
+    const companyId = route?.company_id ?? null;
+    const cpf = cpfDigits(sub.cpf);
+    const phone = normalizePhoneDigits(sub.telefone);
+
+    let renovacao_match: RenovacaoMatch = "nao";
+    let renovacao_match_type: string | null = null;
+    let matched: RenovacaoLite | null = null;
+
+    if (companyId) {
+      const same = findSameStoreRenovacao(companyId, cpf, phone, byCompanyCpf, byCompanyPhone);
+      if (same.ren) {
+        renovacao_match = "sim";
+        renovacao_match_type = same.matchType;
+        matched = same.ren;
+      }
+    }
+
+    if (!matched) {
+      const other = findOtherStoreRenovacao(companyId, cpf, phone, renovacoes);
+      if (other.ren) {
+        renovacao_match = "outra_loja";
+        renovacao_match_type = other.matchType;
+        matched = other.ren;
+      }
+    }
+
+    const renovacaoCompanyId = matched?.ssotica_company_id ?? null;
+
+    return {
+      id: sub.id,
+      lead_id: sub.lead_id,
+      nome: sub.nome,
+      cpf: sub.cpf,
+      idade: sub.idade,
+      cidade: sub.cidade,
+      telefone: sub.telefone,
+      usa_oculos: sub.usa_oculos,
+      ultimo_exame_vista: sub.ultimo_exame_vista,
+      jogo: sub.jogo,
+      jogo_label: sub.jogo_label,
+      palpite_brasil: sub.palpite_brasil,
+      palpite_marrocos: sub.palpite_marrocos,
+      palpite_texto: sub.palpite_texto,
+      consentimento_marketing: sub.consentimento_marketing,
+      assigned_to: sub.assigned_to,
+      created_at: sub.created_at,
+      company_id: companyId,
+      company_name: companyId ? companyNameById.get(companyId) ?? null : null,
+      renovacao_match,
+      renovacao_match_type,
+      renovacao_match_id: matched?.id ?? null,
+      renovacao_match_status: matched?.status ?? null,
+      renovacao_status_label: matched?.status
+        ? statusLabelByKey.get(matched.status) ?? matched.status
+        : null,
+      renovacao_match_data_compra: matched?.data_ultima_compra ?? null,
+      renovacao_match_company_id: renovacaoCompanyId,
+      renovacao_company_name: renovacaoCompanyId
+        ? companyNameById.get(renovacaoCompanyId) ?? null
+        : null,
+    };
+  });
+
+  if (filters.renovacao_filtro) {
+    rows = rows.filter((r) => r.renovacao_match === filters.renovacao_filtro);
+  }
 
   return {
-    metrics: parseMetrics(payload.metrics),
-    rows: parseRows(payload.rows),
+    metrics: buildMetrics(rows),
+    rows,
   };
 }
 
