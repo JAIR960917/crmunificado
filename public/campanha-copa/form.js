@@ -8,6 +8,7 @@
   var btnClear = document.getElementById("btn-clear");
   var cpfInput = document.getElementById("cpf");
   var cpfErrorEl = document.getElementById("cpf-error");
+  var telefoneInput = document.getElementById("telefone");
   var periodNoticeEl = document.getElementById("period-notice");
   var estadoSelect = document.getElementById("estado");
   var cidadeSelect = document.getElementById("cidade_municipio");
@@ -394,6 +395,15 @@
     return (value || "").replace(/\D/g, "");
   }
 
+  function maskTelefone(value) {
+    var d = (value || "").replace(/\D/g, "").slice(0, 11);
+    if (d.length === 0) return "";
+    if (d.length <= 2) return "(" + d;
+    if (d.length <= 6) return "(" + d.slice(0, 2) + ") " + d.slice(2);
+    if (d.length <= 10) return "(" + d.slice(0, 2) + ") " + d.slice(2, 6) + "-" + d.slice(6);
+    return "(" + d.slice(0, 2) + ") " + d.slice(2, 7) + "-" + d.slice(7);
+  }
+
   function isValidCpf(cpf) {
     if (!cpf || cpf.length !== 11) return false;
     if (/^(\d)\1+$/.test(cpf)) return false;
@@ -592,6 +602,12 @@
       else showCpfError("");
     });
     cpfInput.addEventListener("blur", validateCpfField);
+  }
+
+  if (telefoneInput) {
+    telefoneInput.addEventListener("input", function () {
+      telefoneInput.value = maskTelefone(telefoneInput.value);
+    });
   }
 
   form.addEventListener("submit", submitForm);

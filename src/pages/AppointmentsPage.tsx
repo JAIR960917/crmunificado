@@ -1366,7 +1366,6 @@ export default function AppointmentsPage() {
                     setFormConsultaPaga(v);
                     if (v === "nao") {
                       setFormPagamentoConsulta("");
-                      setFormValor("");
                     }
                   }}
                 >
@@ -1397,6 +1396,12 @@ export default function AppointmentsPage() {
               <div className="space-y-1.5">
                 <Label>Valor (R$) <span className="text-destructive">*</span></Label>
                 <Input type="number" step="0.01" min="0" value={formValor} onChange={e => setFormValor(e.target.value)} required />
+              </div>
+            )}
+            {!editingAppt && formConsultaPaga === "nao" && (
+              <div className="space-y-1.5">
+                <Label>Valor (R$)</Label>
+                <Input type="number" step="0.01" min="0" value={formValor} onChange={e => setFormValor(e.target.value)} placeholder="0.00" />
               </div>
             )}
 
