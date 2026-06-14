@@ -9,6 +9,9 @@
   var cpfInput = document.getElementById("cpf");
   var cpfErrorEl = document.getElementById("cpf-error");
   var periodNoticeEl = document.getElementById("period-notice");
+  var estadoSelect = document.getElementById("estado");
+  var cidadeSelect = document.getElementById("cidade_municipio");
+  var cidadeErrorEl = document.getElementById("cidade-error");
 
   var currentJogoKey = "";
   var pixelSuccessSnippet = "";
@@ -291,6 +294,82 @@
     }
   }
 
+  var cidadesPorEstado = {};
+
+  function setCidadeSelectState(message, disabled) {
+    if (!cidadeSelect) return;
+    cidadeSelect.innerHTML = "";
+    var opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = message;
+    cidadeSelect.appendChild(opt);
+    cidadeSelect.disabled = disabled;
+  }
+
+  function showCidadeError(msg) {
+    if (!cidadeErrorEl) return;
+    if (msg) {
+      cidadeErrorEl.textContent = msg;
+      cidadeErrorEl.hidden = false;
+    } else {
+      cidadeErrorEl.hidden = true;
+      cidadeErrorEl.textContent = "";
+    }
+  }
+
+  function loadCidadesForEstado(uf) {
+    if (!cidadeSelect) return;
+    showCidadeError("");
+
+    if (!uf) {
+      setCidadeSelectState("Selecione o estado", true);
+      return;
+    }
+
+    if (cidadesPorEstado[uf]) {
+      populateCidadeSelect(cidadesPorEstado[uf]);
+      return;
+    }
+
+    setCidadeSelectState("Carregando cidades...", true);
+
+    fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados/" + uf + "/municipios?orderBy=nome")
+      .then(function (res) {
+        if (!res.ok) throw new Error("Falha ao carregar cidades");
+        return res.json();
+      })
+      .then(function (data) {
+        var nomes = (data || []).map(function (m) { return m.nome; });
+        cidadesPorEstado[uf] = nomes;
+        populateCidadeSelect(nomes);
+      })
+      .catch(function () {
+        setCidadeSelectState("Erro ao carregar cidades", true);
+        showCidadeError("Não foi possível carregar as cidades. Verifique sua conexão e tente novamente.");
+      });
+  }
+
+  function populateCidadeSelect(nomes) {
+    cidadeSelect.innerHTML = "";
+    var placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Cidade";
+    cidadeSelect.appendChild(placeholder);
+    nomes.forEach(function (nome) {
+      var opt = document.createElement("option");
+      opt.value = nome;
+      opt.textContent = nome;
+      cidadeSelect.appendChild(opt);
+    });
+    cidadeSelect.disabled = false;
+  }
+
+  if (estadoSelect) {
+    estadoSelect.addEventListener("change", function () {
+      loadCidadesForEstado(estadoSelect.value);
+    });
+  }
+
   function getRadioValue(name) {
     var checked = form.querySelector('input[name="' + name + '"]:checked');
     return checked ? checked.value : "";
@@ -384,6 +463,9 @@
         if (el && "disabled" in el) el.disabled = disabled;
       });
     }
+    if (cidadeSelect && !(estadoSelect && estadoSelect.value)) {
+      cidadeSelect.disabled = true;
+    }
     if (btnClear) btnClear.disabled = disabled;
     if (btnSubmit) {
       btnSubmit.disabled = disabled;
@@ -392,12 +474,14 @@
   }
 
   function collectPayload() {
+    var uf = (estadoSelect && estadoSelect.value) || "";
+    var municipio = (cidadeSelect && cidadeSelect.value) || "";
     return {
       jogo_key: currentJogoKey,
       nome: document.getElementById("nome").value.trim(),
       cpf: document.getElementById("cpf").value.trim(),
       idade: document.getElementById("idade").value.trim(),
-      cidade: document.getElementById("cidade").value.trim(),
+      cidade: municipio && uf ? municipio + "/" + uf : municipio || uf,
       telefone: document.getElementById("telefone").value.trim(),
       usa_oculos: getRadioValue("usa_oculos"),
       ultimo_exame_vista: document.getElementById("ultimo_exame_vista").value,
@@ -486,6 +570,8 @@
 
   function clearForm() {
     form.reset();
+    setCidadeSelectState("Selecione o estado", true);
+    showCidadeError("");
     hideError();
     trackEvent("CustomizeProduct", { content_name: "Campanha Copa", action: "clear" });
   }

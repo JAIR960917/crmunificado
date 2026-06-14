@@ -295,6 +295,35 @@ select.text-input {
   padding-right: 24px;
 }
 
+select.text-input:disabled {
+  cursor: not-allowed;
+  color: #94a3b8;
+}
+
+.cidade-uf-row {
+  display: flex;
+  gap: 16px;
+}
+
+.cidade-uf-row select#estado {
+  flex: 0 0 120px;
+}
+
+.cidade-uf-row select#cidade_municipio {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 519px) {
+  .cidade-uf-row {
+    gap: 10px;
+  }
+
+  .cidade-uf-row select#estado {
+    flex: 0 0 96px;
+  }
+}
+
 .match-meta[hidden] {
   display: none;
 }
