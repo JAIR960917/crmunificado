@@ -24,6 +24,7 @@ import { recordCardOpen } from "@/lib/cardOpens";
 import RenovacaoContactAttemptForm from "./RenovacaoContactAttemptForm";
 import RenovacaoOutraOticaFields from "./RenovacaoOutraOticaFields";
 import VisualAcuityInput from "@/components/forms/VisualAcuityInput";
+import CidadeEstadoInput from "@/components/forms/CidadeEstadoInput";
 import { isOpenCobrancaStatus } from "@/lib/cobrancaStatus";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
@@ -340,6 +341,9 @@ export default function RenovacaoEditSheet(props: Props) {
         )}
         {field.field_type === "visual_acuity" && (
           <VisualAcuityInput compact value={formData[fieldKey]} onChange={(v) => set(fieldKey, v)} />
+        )}
+        {field.field_type === "cidade_estado" && (
+          <CidadeEstadoInput compact value={value} onChange={(v) => set(fieldKey, v)} />
         )}
         {field.field_type === "select" && field.options && (
           <Select value={value} onValueChange={(v) => set(fieldKey, v)}>

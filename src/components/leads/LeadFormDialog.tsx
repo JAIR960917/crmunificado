@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { buildVisibleFormFieldOrder } from "@/lib/formFieldOrder";
 import { formatVisualAcuityDisplay, formatVisualAcuityReview, parseVisualAcuity } from "@/lib/visualAcuity";
 import VisualAcuityInput from "@/components/forms/VisualAcuityInput";
+import CidadeEstadoInput from "@/components/forms/CidadeEstadoInput";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -533,6 +534,10 @@ export default function LeadFormDialog({
           />
         )}
 
+        {field.field_type === "cidade_estado" && (
+          <CidadeEstadoInput compact value={value} onChange={(v) => set(fieldKey, v)} />
+        )}
+
         {field.field_type === "date" && (
           <Popover>
             <PopoverTrigger asChild>
@@ -563,7 +568,7 @@ export default function LeadFormDialog({
           />
         )}
 
-        {!['select', 'checkbox_group', 'textarea', 'phone', 'text', 'number', 'date', 'email', 'visual_acuity'].includes(field.field_type) && !field.is_phone_field && (
+        {!['select', 'checkbox_group', 'textarea', 'phone', 'text', 'number', 'date', 'email', 'visual_acuity', 'cidade_estado'].includes(field.field_type) && !field.is_phone_field && (
           <Input
             type="text"
             value={value}

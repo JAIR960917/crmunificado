@@ -30,6 +30,7 @@ import { buildVisibleFormFieldOrder } from "@/lib/formFieldOrder";
 import { isFormFieldValueMissing } from "@/lib/formFieldValidation";
 import { formatVisualAcuityReview } from "@/lib/visualAcuity";
 import VisualAcuityInput from "@/components/forms/VisualAcuityInput";
+import CidadeEstadoInput from "@/components/forms/CidadeEstadoInput";
 
 type DateStatusRange = { max_years: number; status_key: string };
 type DateStatusConfig = { ranges: DateStatusRange[]; above_all: string; no_answer: string };
@@ -622,6 +623,10 @@ export default function NewLeadPage() {
           />
         )}
 
+        {field.field_type === "cidade_estado" && (
+          <CidadeEstadoInput value={value} onChange={(v) => set(fieldKey, v)} />
+        )}
+
         {field.field_type === "date" && (
           <Popover>
             <PopoverTrigger asChild>
@@ -652,7 +657,7 @@ export default function NewLeadPage() {
         )}
 
         {/* Fallback for unknown field types (e.g. cached PWA with old bundle) */}
-        {!["select", "checkbox_group", "textarea", "phone", "text", "number", "date", "email", "visual_acuity"].includes(field.field_type) && (
+        {!["select", "checkbox_group", "textarea", "phone", "text", "number", "date", "email", "visual_acuity", "cidade_estado"].includes(field.field_type) && (
           <Input
             type="text"
             value={value}

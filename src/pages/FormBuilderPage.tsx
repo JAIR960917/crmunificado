@@ -48,6 +48,7 @@ const FIELD_TYPES = [
   { value: "checkbox_group", label: "Múltipla escolha" },
   { value: "textarea", label: "Texto longo" },
   { value: "visual_acuity", label: "Acuidade visual (4 medidas %)" },
+  { value: "cidade_estado", label: "Cidade/Estado (Brasil)" },
 ];
 
 export default function FormBuilderPage() {
