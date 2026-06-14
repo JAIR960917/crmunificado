@@ -107,11 +107,11 @@ export default function CampanhaCopaCidadeLojaConfigCard({ onSaved }: Props) {
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <MapPin className="h-4 w-4" />
-          Cidades e lojas (distribuição automática)
+          Cidades e lojas
         </CardTitle>
         <CardDescription>
-          Vincule cada cidade do formulário a uma loja (empresa). Novas inscrições são atribuídas
-          automaticamente, em rodízio, entre vendedores e gerentes da loja correspondente.
+          Vincule cada cidade do formulário a uma loja (empresa). A atribuição a vendedores e gerentes
+          só ocorre quando você usar o botão &quot;Distribuir sem responsável&quot; na lista de inscrições.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

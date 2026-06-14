@@ -440,7 +440,7 @@ export default function CampanhasCopaPage() {
               Campanhas Copa
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Inscrições do formulário público — distribuídas por cidade e loja.
+              Inscrições do formulário público — vincule cidades a lojas e distribua manualmente.
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">

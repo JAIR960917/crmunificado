@@ -71,13 +71,18 @@ function RenovacaoBadge({ match }: { match: RenovacaoMatch }) {
 function DistributionBar({
   label,
   total,
-  max,
+  base,
+  decimalPlaces = 0,
 }: {
   label: string;
   total: number;
-  max: number;
+  base: number;
+  decimalPlaces?: number;
 }) {
-  const pct = max > 0 ? Math.round((total / max) * 100) : 0;
+  const multiplier = 10 ** decimalPlaces;
+  const pct = base > 0 ? Math.round((total / base) * 100 * multiplier) / multiplier : 0;
+  const pctLabel =
+    decimalPlaces > 0 ? pct.toFixed(decimalPlaces) : String(Math.round(pct));
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-sm gap-2">
@@ -85,7 +90,7 @@ function DistributionBar({
           {label}
         </span>
         <span className="text-muted-foreground shrink-0">
-          {total} ({pct}%)
+          {total} ({pctLabel}%)
         </span>
       </div>
       <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -190,14 +195,8 @@ export default function CampanhaCopaRelatorioPage() {
     [profiles],
   );
 
-  const maxEmpresa = useMemo(
-    () => Math.max(1, ...metrics.por_empresa.map((x) => x.total)),
-    [metrics.por_empresa],
-  );
-  const maxExame = useMemo(
-    () => Math.max(1, ...metrics.por_exame.map((x) => x.total)),
-    [metrics.por_exame],
-  );
+  const empresaBase = Math.max(1, metrics.prospect);
+  const exameBase = Math.max(1, metrics.prospect);
 
   if (!isAdmin) {
     return <Navigate to="/campanhas-copa" replace />;
@@ -409,7 +408,8 @@ export default function CampanhaCopaRelatorioPage() {
                     key={item.empresa}
                     label={item.empresa}
                     total={item.total}
-                    max={maxEmpresa}
+                    base={empresaBase}
+                    decimalPlaces={2}
                   />
                 ))
               )}
@@ -432,7 +432,8 @@ export default function CampanhaCopaRelatorioPage() {
                     key={item.exame}
                     label={item.exame}
                     total={item.total}
-                    max={maxExame}
+                    base={exameBase}
+                    decimalPlaces={2}
                   />
                 ))
               )}

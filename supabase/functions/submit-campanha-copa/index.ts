@@ -2,7 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { internalCorsHeaders } from "../_shared/internalAuth.ts";
 import { loadCampanhaCopaJogoConfig } from "../_shared/campanhaCopaJogo.ts";
-import { loadCidadeLojaRoutes, pickAssigneeForCity } from "../_shared/campanhaCopaAssign.ts";
 import {
   applyUltimoExameVistaToLeadData,
   loadLeadLastVisitFieldId,
@@ -188,8 +187,6 @@ serve(async (req) => {
     const palpiteTexto = `${palpiteHome} x ${palpiteAway}`;
     const usaOculosNorm = usaOculos.toLowerCase().startsWith("s") ? "sim" : "nao";
 
-    const cityRoutes = await loadCidadeLojaRoutes(supabase);
-    const assignedUserId = await pickAssigneeForCity(supabase, cidade, cityRoutes);
     const lastVisitFieldId = await loadLeadLastVisitFieldId(supabase);
 
     const leadData: Record<string, unknown> = {
@@ -219,8 +216,8 @@ serve(async (req) => {
       .insert({
         data: leadData,
         status: "campanha_copa",
-        assigned_to: assignedUserId,
-        created_by: assignedUserId,
+        assigned_to: null,
+        created_by: null,
       })
       .select("id")
       .single();
@@ -247,7 +244,7 @@ serve(async (req) => {
         jogo: jogoKey,
         jogo_label: jogoCfg.jogo_label,
         consentimento_marketing: true,
-        assigned_to: assignedUserId,
+        assigned_to: null,
       })
       .select("id")
       .single();
