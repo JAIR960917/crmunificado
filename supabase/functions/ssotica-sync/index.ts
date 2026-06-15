@@ -853,12 +853,20 @@ async function syncContasReceber(
   // mapeamentos configuráveis na tela de Fluxo de Cobrança.
   // Prioridade:
   //   idx 0           → 1_dia_antes_vencimento
+  //   idx 1 (dias=0)  → vence_hoje (se mapeado), senão coluna por position (NÃO usa ate_30_dias_atraso)
   //   idx 1, 2        → ate_30_dias_atraso
   //   idx 3..14       → mais_30_dias_sem_negativacao (se mapeado, sobrepõe a coluna por dias)
   // Observação: a coluna mapeada como "1_dia_atraso" agora representa
   // "exatamente 5 dias de atraso" e é tratada diretamente em colunaKeyForDiasAtraso.
-  function resolveColunaKeyByLogicalIndex(idx: number): string | null {
+  function resolveColunaKeyByLogicalIndex(idx: number, dias?: number): string | null {
     if (idx === 0 && situacaoMapping["1_dia_antes_vencimento"]) return situacaoMapping["1_dia_antes_vencimento"];
+    // Parcela que vence HOJE (0 dias de atraso) não deve herdar o mapeamento
+    // "ate_30_dias_atraso", que representa especificamente 1 a 30 dias de atraso.
+    if (idx === 1 && dias === 0) {
+      if (situacaoMapping["vence_hoje"]) return situacaoMapping["vence_hoje"];
+      const col = cobStatusList[idx];
+      return col?.key ?? cobStatusList[cobStatusList.length - 1]?.key ?? null;
+    }
     if ((idx === 1 || idx === 2) && situacaoMapping["ate_30_dias_atraso"]) return situacaoMapping["ate_30_dias_atraso"];
     if (idx >= 3 && situacaoMapping["mais_30_dias_sem_negativacao"]) return situacaoMapping["mais_30_dias_sem_negativacao"];
     const col = cobStatusList[idx];
@@ -884,7 +892,7 @@ async function syncContasReceber(
     // mapeada como "1_dia_atraso" (que agora representa "5 dias de atraso").
     if (dias === 5 && situacaoMapping["1_dia_atraso"]) return situacaoMapping["1_dia_atraso"];
     const idx = diasParaIndiceLogico(dias);
-    return resolveColunaKeyByLogicalIndex(idx) ?? "";
+    return resolveColunaKeyByLogicalIndex(idx, dias) ?? "";
   }
 
   // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.

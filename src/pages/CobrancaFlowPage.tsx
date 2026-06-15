@@ -25,6 +25,7 @@ type FlowRow = {
 
 type SituacaoKey =
   | "1_dia_antes_vencimento"
+  | "vence_hoje"
   | "1_dia_atraso"
   | "ate_30_dias_atraso"
   | "mais_30_dias_sem_negativacao"
@@ -33,6 +34,7 @@ type SituacaoKey =
   | "ajuizado_navde";
 const SITUACOES: { key: SituacaoKey; label: string; help: string }[] = [
   { key: "1_dia_antes_vencimento", label: "1 dia antes do vencimento", help: "Parcelas que vencem amanhã (entram nesta coluna)" },
+  { key: "vence_hoje", label: "Vence hoje", help: "Parcelas que vencem hoje (0 dias de atraso). Se vazio, não usa 'Até 30 dias de atraso' — vai para a coluna padrão" },
   { key: "1_dia_atraso", label: "5 dias de atraso", help: "Parcelas com exatamente 5 dias de atraso" },
   { key: "ate_30_dias_atraso", label: "Até 30 dias de atraso", help: "Parcelas com 1 a 30 dias de atraso (sobrepõe '5 dias de atraso' se preenchido)" },
   { key: "mais_30_dias_sem_negativacao", label: "Mais de 30 dias sem negativação", help: "Parcelas com mais de 30 dias de atraso e que ainda NÃO estão negativadas no Serasa" },
