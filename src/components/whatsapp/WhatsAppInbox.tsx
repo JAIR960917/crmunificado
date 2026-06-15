@@ -360,7 +360,7 @@ export default function WhatsAppInbox() {
     [localUnreadBoost, selectedId],
   );
 
-  const isPrivileged = isAdmin || isGerente || isFinanceiro;
+  const isPrivileged = isAdmin;
 
   const filteredList = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1157,7 +1157,7 @@ export default function WhatsAppInbox() {
                 </Button>
               ) : null}
             </div>
-            {!isAdmin && !isGerente ? (
+            {!isAdmin ? (
               <p className="text-[10px] text-muted-foreground">
                 Exibindo apenas números atribuídos a você (WhatsApp → API Meta).
               </p>
