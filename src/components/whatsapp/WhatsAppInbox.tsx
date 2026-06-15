@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
   inboxDisplayModuleForConversation,
@@ -39,6 +40,9 @@ import {
   Square,
   Bell,
   BellOff,
+  UserCheck,
+  UserX,
+  ArrowRightLeft,
 } from "lucide-react";
 import {
   getNotificationPermission,
@@ -65,6 +69,8 @@ type ConversationRow = {
   last_message_direction: "in" | "out" | null;
   last_read_at: string | null;
   assigned_to: string | null;
+  assigned_to_name: string | null;
+  status: "pending" | "open" | "closed";
 };
 
 type MessageRow = {
@@ -221,7 +227,7 @@ export default function WhatsAppInbox() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "unread" | "mine">("all");
+  const [view, setView] = useState<"pending" | "mine" | "all">("pending");
   const [localUnreadBoost, setLocalUnreadBoost] = useState<Record<string, number>>({});
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -246,6 +252,12 @@ export default function WhatsAppInbox() {
   const [notifyPermission, setNotifyPermission] = useState(() => getNotificationPermission());
   /** Onde o painel lateral encontrou o card (cobrança / renovação / lead). */
   const [panelResolvedModule, setPanelResolvedModule] = useState<ModuleKey | null>(null);
+
+  const [conversationActionLoading, setConversationActionLoading] = useState<"accept" | "close" | "transfer" | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferUsers, setTransferUsers] = useState<{ user_id: string; full_name: string | null; email: string | null }[]>([]);
+  const [transferUsersLoading, setTransferUsersLoading] = useState(false);
+  const [transferTarget, setTransferTarget] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -338,30 +350,49 @@ export default function WhatsAppInbox() {
     return new Date(conversation.window_expires_at).getTime() > Date.now();
   }, [conversation?.window_expires_at]);
 
+  const canReplyConversation = useMemo(
+    () => !!conversation && conversation.status === "open" && conversation.assigned_to === user?.id,
+    [conversation, user?.id],
+  );
+
   const resolveUnreadState = useCallback(
     (c: ConversationRow) => getConversationUnreadState(c, selectedId, localUnreadBoost[c.id] || 0),
     [localUnreadBoost, selectedId],
   );
 
+  const isPrivileged = isAdmin || isGerente || isFinanceiro;
+
   const filteredList = useMemo(() => {
     const q = search.trim().toLowerCase();
     return conversations.filter((c) => {
-      if (filter === "unread" && !getConversationUnreadState(c, null, localUnreadBoost[c.id] || 0).show) {
-        return false;
-      }
-      if (filter === "mine" && user?.id && c.assigned_to !== user.id) return false;
+      if (view === "pending" && !(c.status === "pending" && c.last_message_direction === "in")) return false;
+      if (view === "mine" && !(c.status === "open" && c.assigned_to === user?.id)) return false;
       if (!q) return true;
       const name = (c.contact_name || "").toLowerCase();
       const wa = (c.wa_id || "").toLowerCase();
       const preview = (c.last_preview || "").toLowerCase();
       return name.includes(q) || wa.includes(q) || preview.includes(q);
     });
-  }, [conversations, filter, localUnreadBoost, search, user?.id]);
+  }, [conversations, view, search, user?.id]);
 
-  const unreadConversationsCount = useMemo(
-    () => conversations.filter((c) => getConversationUnreadState(c, null, localUnreadBoost[c.id] || 0).show).length,
-    [conversations, localUnreadBoost],
+  const pendingConversationsCount = useMemo(
+    () => conversations.filter((c) => c.status === "pending" && c.last_message_direction === "in").length,
+    [conversations],
   );
+
+  const mineConversationsCount = useMemo(
+    () => conversations.filter((c) => c.status === "open" && c.assigned_to === user?.id).length,
+    [conversations, user?.id],
+  );
+
+  const inboxTabs = useMemo((): { key: "pending" | "mine" | "all"; label: string }[] => {
+    const tabs: { key: "pending" | "mine" | "all"; label: string }[] = [
+      { key: "pending", label: pendingConversationsCount > 0 ? `Pendentes (${pendingConversationsCount})` : "Pendentes" },
+      { key: "mine", label: mineConversationsCount > 0 ? `Ativos (${mineConversationsCount})` : "Ativos" },
+    ];
+    if (isPrivileged) tabs.push({ key: "all", label: "Todas" });
+    return tabs;
+  }, [pendingConversationsCount, mineConversationsCount, isPrivileged]);
 
   const loadInstances = useCallback(async () => {
     const { data, error } = await supabase.rpc("list_whatsapp_instances_for_inbox");
@@ -434,9 +465,9 @@ export default function WhatsAppInbox() {
 
   const loadConversations = useCallback(async () => {
     const extendedCols =
-      "id, instance_id, wa_id, contact_name, phone_display, module, card_id, window_expires_at, last_message_at, last_preview, unread_count, last_message_direction, last_read_at, assigned_to";
+      "id, instance_id, wa_id, contact_name, phone_display, module, card_id, window_expires_at, last_message_at, last_preview, unread_count, last_message_direction, last_read_at, assigned_to, status";
     const basicCols =
-      "id, instance_id, wa_id, contact_name, phone_display, module, card_id, window_expires_at, last_message_at, last_preview, unread_count, assigned_to";
+      "id, instance_id, wa_id, contact_name, phone_display, module, card_id, window_expires_at, last_message_at, last_preview, unread_count, assigned_to, status";
 
     let rows: ConversationRow[] | null = null;
 
@@ -465,7 +496,11 @@ export default function WhatsAppInbox() {
           last_read_at: null,
         }));
       }
-      rows = (data || []) as ConversationRow[];
+      rows = (data || []).map((row) => ({
+        ...row,
+        status: (row as { status?: ConversationRow["status"] }).status ?? "pending",
+        assigned_to_name: null,
+      })) as ConversationRow[];
     }
 
     setConversations((prev) => {
@@ -551,6 +586,13 @@ export default function WhatsAppInbox() {
         merged.last_message_direction = prevRow.last_message_direction;
       }
 
+      // `assigned_to_name` não existe na tabela (vem só da RPC de listagem) — payloads de
+      // realtime não trazem esse campo. Preserva o nome anterior se o responsável não mudou,
+      // senão limpa (a reconciliação periódica busca o nome correto).
+      if (row.assigned_to_name === undefined) {
+        merged.assigned_to_name = prevRow?.assigned_to === row.assigned_to ? prevRow?.assigned_to_name ?? null : null;
+      }
+
       // Mantém contador local se o payload realtime vier sem unread_count (replica parcial).
       if (
         (row.unread_count === undefined || row.unread_count === null) &&
@@ -566,6 +608,109 @@ export default function WhatsAppInbox() {
       return sortConversations(next);
     });
   }, []);
+
+  const currentUserName = useMemo(() => {
+    const meta = user?.user_metadata as { full_name?: string; name?: string } | undefined;
+    return meta?.full_name || meta?.name || user?.email || null;
+  }, [user]);
+
+  const handleAcceptConversation = useCallback(async () => {
+    if (!conversation) return;
+    setConversationActionLoading("accept");
+    try {
+      const { error } = await supabase.rpc("accept_whatsapp_conversation", {
+        p_conversation_id: conversation.id,
+      });
+      if (error) throw error;
+      applyConversationPatch({
+        ...conversation,
+        status: "open",
+        assigned_to: user?.id ?? null,
+        assigned_to_name: currentUserName,
+      });
+      setView("mine");
+      toast.success("Atendimento aceito");
+      void loadConversations();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao aceitar conversa");
+      void loadConversations();
+    } finally {
+      setConversationActionLoading(null);
+    }
+  }, [conversation, applyConversationPatch, user?.id, currentUserName, loadConversations]);
+
+  const handleCloseConversation = useCallback(async () => {
+    if (!conversation) return;
+    setConversationActionLoading("close");
+    try {
+      const { error } = await supabase.rpc("close_whatsapp_conversation", {
+        p_conversation_id: conversation.id,
+      });
+      if (error) throw error;
+      applyConversationPatch({ ...conversation, status: "closed" });
+      toast.success("Atendimento encerrado");
+      void loadConversations();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao encerrar conversa");
+      void loadConversations();
+    } finally {
+      setConversationActionLoading(null);
+    }
+  }, [conversation, applyConversationPatch, loadConversations]);
+
+  const loadTransferUsers = useCallback(async (instanceId: string | null) => {
+    if (!instanceId) {
+      setTransferUsers([]);
+      return;
+    }
+    setTransferUsersLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("list_whatsapp_inbox_assignable_users", {
+        p_instance_id: instanceId,
+      });
+      if (error) throw error;
+      setTransferUsers((data || []) as { user_id: string; full_name: string | null; email: string | null }[]);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao listar usuários para transferência");
+      setTransferUsers([]);
+    } finally {
+      setTransferUsersLoading(false);
+    }
+  }, []);
+
+  const handleOpenTransfer = useCallback(() => {
+    if (!conversation) return;
+    setTransferTarget("");
+    setTransferOpen(true);
+    void loadTransferUsers(conversation.instance_id);
+  }, [conversation, loadTransferUsers]);
+
+  const handleTransferConversation = useCallback(async () => {
+    if (!conversation || !transferTarget) return;
+    setConversationActionLoading("transfer");
+    try {
+      const { error } = await supabase.rpc("transfer_whatsapp_conversation", {
+        p_conversation_id: conversation.id,
+        p_to_user_id: transferTarget,
+      });
+      if (error) throw error;
+      const target = transferUsers.find((u) => u.user_id === transferTarget);
+      applyConversationPatch({
+        ...conversation,
+        status: "open",
+        assigned_to: transferTarget,
+        assigned_to_name: target?.full_name || target?.email || null,
+      });
+      setTransferOpen(false);
+      toast.success("Conversa transferida");
+      void loadConversations();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao transferir conversa");
+      void loadConversations();
+    } finally {
+      setConversationActionLoading(null);
+    }
+  }, [conversation, transferTarget, transferUsers, applyConversationPatch, loadConversations]);
 
   const loadMessages = useCallback(async (conversationId: string) => {
     const extendedCols =
@@ -769,6 +914,15 @@ export default function WhatsAppInbox() {
       void supabase.removeChannel(channel);
     };
   }, [applyConversationPatch, loadConversations, localUnreadBoost, markAsRead]);
+
+  // Reconciliação periódica: RLS não envia DELETE quando uma conversa some por ter sido
+  // aceita/transferida por outro atendente, então recarregamos a lista para refletir isso.
+  useEffect(() => {
+    const reconcile = setInterval(() => {
+      void loadConversations();
+    }, 30_000);
+    return () => clearInterval(reconcile);
+  }, [loadConversations]);
 
   const handleSendText = async () => {
     if (!conversation?.id) return;
@@ -1018,19 +1172,13 @@ export default function WhatsAppInbox() {
               />
             </div>
             <div className="flex gap-1">
-              {(
-                [
-                  ["all", "Todas"],
-                  ["unread", unreadConversationsCount > 0 ? `Não lidas (${unreadConversationsCount})` : "Não lidas"],
-                  ["mine", "Minhas"],
-                ] as const
-              ).map(([key, label]) => (
+              {inboxTabs.map(({ key, label }) => (
                 <Button
                   key={key}
                   size="sm"
-                  variant={filter === key ? "default" : "ghost"}
+                  variant={view === key ? "default" : "ghost"}
                   className="h-8 flex-1 text-xs"
-                  onClick={() => setFilter(key)}
+                  onClick={() => setView(key)}
                 >
                   {label}
                 </Button>
@@ -1122,6 +1270,17 @@ export default function WhatsAppInbox() {
                               Fora da janela 24h
                             </span>
                           )}
+                          {view === "all" && (
+                            <span className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              {c.status === "pending"
+                                ? "Pendente"
+                                : c.status === "closed"
+                                  ? "Fechado"
+                                  : c.assigned_to_name
+                                    ? `Com ${c.assigned_to_name}`
+                                    : "Em atendimento"}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex w-10 shrink-0 flex-col items-end gap-1.5 self-start pt-0.5">
@@ -1206,6 +1365,87 @@ export default function WhatsAppInbox() {
                     Só template aprovado
                   </Badge>
                 )}
+
+                <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    {conversation.status === "pending"
+                      ? "Aguardando atendimento"
+                      : conversation.status === "closed"
+                        ? "Atendimento encerrado"
+                        : conversation.assigned_to === user?.id
+                          ? "Atendido por você"
+                          : `Atendido por: ${conversation.assigned_to_name || "—"}`}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {conversation.status === "pending" ? (
+                      <Button
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs"
+                        disabled={conversationActionLoading !== null}
+                        onClick={() => void handleAcceptConversation()}
+                      >
+                        <UserCheck className="h-3.5 w-3.5" />
+                        Aceitar
+                      </Button>
+                    ) : null}
+                    {conversation.status === "open" &&
+                    (conversation.assigned_to === user?.id || isPrivileged) ? (
+                      <>
+                        <Popover open={transferOpen} onOpenChange={setTransferOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 gap-1.5 text-xs"
+                              disabled={conversationActionLoading !== null}
+                              onClick={handleOpenTransfer}
+                            >
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                              Transferir
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-64 space-y-3">
+                            <p className="text-sm font-medium">Transferir conversa</p>
+                            <Select value={transferTarget} onValueChange={setTransferTarget}>
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue
+                                  placeholder={transferUsersLoading ? "Carregando..." : "Selecione um atendente"}
+                                />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {transferUsers
+                                  .filter((u) => u.user_id !== user?.id)
+                                  .map((u) => (
+                                    <SelectItem key={u.user_id} value={u.user_id}>
+                                      {u.full_name || u.email || u.user_id}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              className="h-8 w-full text-xs"
+                              disabled={!transferTarget || conversationActionLoading !== null}
+                              onClick={() => void handleTransferConversation()}
+                            >
+                              Confirmar transferência
+                            </Button>
+                          </PopoverContent>
+                        </Popover>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 gap-1.5 text-xs"
+                          disabled={conversationActionLoading !== null}
+                          onClick={() => void handleCloseConversation()}
+                        >
+                          <UserX className="h-3.5 w-3.5" />
+                          Fechar
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
               </header>
 
               <div className="flex min-h-0 flex-1">
@@ -1262,7 +1502,33 @@ export default function WhatsAppInbox() {
 
                   {/* Composer */}
                   <footer className="border-t bg-card p-3">
-                    {windowOpen ? (
+                    {!canReplyConversation ? (
+                      <div className="mx-auto w-full max-w-4xl">
+                        {conversation.status === "pending" ? (
+                          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100">
+                            <span>Aceite o atendimento para responder a esta conversa.</span>
+                            <Button
+                              size="sm"
+                              className="h-7 gap-1.5 text-xs"
+                              disabled={conversationActionLoading !== null}
+                              onClick={() => void handleAcceptConversation()}
+                            >
+                              <UserCheck className="h-3.5 w-3.5" />
+                              Aceitar
+                            </Button>
+                          </div>
+                        ) : conversation.status === "closed" ? (
+                          <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                            Conversa encerrada — ela some das listas e volta para Pendentes se o cliente
+                            responder novamente.
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                            Atendido por {conversation.assigned_to_name || "outro atendente"} — somente leitura.
+                          </div>
+                        )}
+                      </div>
+                    ) : windowOpen ? (
                       <div className="mx-auto w-full max-w-4xl space-y-2">
                         <p className="text-xs text-muted-foreground">
                           O cliente respondeu recentemente — você pode enviar texto livre (regra da Meta).
