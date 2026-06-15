@@ -923,9 +923,22 @@ export default function WhatsAppPage() {
                       🔁 Cobranças intercala envios entre instâncias sem empresa vinculada
                     </div>
                   ) : companyId === "__GLOBAL__" ? (
-                    <div className="flex items-center h-10 px-3 rounded-md border border-dashed border-border text-xs text-muted-foreground">
-                      🌐 Será usada a instância da empresa de cada lead
-                    </div>
+                    <>
+                      <Select value={instanceId || "__LEAD_COMPANY__"} onValueChange={(v) => setInstanceId(v === "__LEAD_COMPANY__" ? "" : v)}>
+                        <SelectTrigger><SelectValue placeholder="Selecione a instância..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__LEAD_COMPANY__">🌐 Instância da empresa de cada lead</SelectItem>
+                          {instances.filter(i => i.is_active).map(i => (
+                            <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        {instanceId
+                          ? "Esta instância será usada para enviar a campanha de todas as empresas."
+                          : "Cada lead receberá pela instância vinculada à sua empresa."}
+                      </p>
+                    </>
                   ) : (
                     <Select value={instanceId} onValueChange={setInstanceId}>
                       <SelectTrigger><SelectValue placeholder="Selecione a instância..." /></SelectTrigger>

@@ -567,10 +567,15 @@ serve(async (req) => {
         if (!cfg) continue;
 
         // Cobranças: round-robin entre instâncias sem empresa vinculada.
-        // Global (sem empresa): sessão por card (instância da empresa do lead).
+        // Global (sem empresa): se a campanha definir instance_id, usa essa instância
+        // para TODAS as empresas; senão, sessão por card (instância da empresa do lead).
         // Caso normal: sessão fixa da campanha.
         const isCobrancas = moduleKey === "cobrancas";
-        const fixedSession = (isGlobal || isCobrancas) ? null : await resolveSession(supabase, campaign.instance_id);
+        const fixedSession = isCobrancas
+          ? null
+          : isGlobal
+            ? (campaign.instance_id ? await resolveSession(supabase, campaign.instance_id) : null)
+            : await resolveSession(supabase, campaign.instance_id);
         if (!isGlobal && !isCobrancas && !fixedSession) continue;
         if (isCobrancas && cobrancasSessions.length === 0) {
           console.warn(`[campaign ${campaign.id}] cobranças sem instâncias sem empresa vinculada — pulando`);
@@ -641,7 +646,7 @@ serve(async (req) => {
           if (isCobrancas) {
             session = pickRoundRobinSession(rrIndex);
             rrIndex++;
-          } else if (isGlobal) {
+          } else if (isGlobal && !fixedSession) {
             const cardCompanyId = resolveCardCompanyId(card, userToCompany);
             if (!cardCompanyId) {
               skippedNoCompany++;
