@@ -305,7 +305,6 @@ export default function CampanhaCopaRelatorioPage() {
                     <SelectItem value={ALL}>Todos</SelectItem>
                     <SelectItem value="sim">Sim — na loja da cidade</SelectItem>
                     <SelectItem value="nao">Não — prospect</SelectItem>
-                    <SelectItem value="outra_loja">Cliente de outra loja</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -412,20 +411,6 @@ export default function CampanhaCopaRelatorioPage() {
                 {metrics.prospect}
                 <span className="text-base font-normal text-muted-foreground ml-2">
                   ({metrics.pct_prospect}%)
-                </span>
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1">
-                <Building2 className="h-3.5 w-3.5" />
-                Cliente de outra loja
-              </CardDescription>
-              <CardTitle className="text-3xl">
-                {metrics.outra_loja}
-                <span className="text-base font-normal text-muted-foreground ml-2">
-                  ({metrics.pct_outra_loja}%)
                 </span>
               </CardTitle>
             </CardHeader>
@@ -600,8 +585,7 @@ export default function CampanhaCopaRelatorioPage() {
 
         <p className="text-xs text-muted-foreground pb-4">
           Legenda: <strong>Em Renovação</strong> = cliente já existe na Renovação da loja da cidade;{" "}
-          <strong>Prospect</strong> = não encontrado; <strong>Outra loja</strong> = encontrado em outra unidade da rede (
-          {renovacaoMatchLabel("outra_loja")}).
+          <strong>Prospect</strong> = não encontrado na loja (inclui clientes de outras unidades da rede).
         </p>
       </div>
     </AppLayout>

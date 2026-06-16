@@ -234,8 +234,9 @@ function buildRenovacaoIndexes(renovacoes: RenovacaoLite[]) {
 function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRelatorioMetrics {
   const total = rows.length;
   const em_renovacao = rows.filter((r) => r.renovacao_match === "sim").length;
-  const prospect = rows.filter((r) => r.renovacao_match === "nao").length;
-  const outra_loja = rows.filter((r) => r.renovacao_match === "outra_loja").length;
+  // outra_loja é fundido no prospect — não é exibido separadamente
+  const prospect = rows.filter((r) => r.renovacao_match === "nao" || r.renovacao_match === "outra_loja").length;
+  const outra_loja = 0;
   const consentimento_marketing = rows.filter((r) => r.consentimento_marketing).length;
 
   const empresaMap = new Map<string, number>();
