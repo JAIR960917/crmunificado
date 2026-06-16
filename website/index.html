@@ -522,116 +522,117 @@
 
 <script>
 // ================================================================
-// CONFIGURAÇÃO — preencha com os dados do seu Supabase
-// Você encontra a URL e a anon key em:
-//   Supabase > Settings > API  (para cloud)
-//   ou no painel da VPS (SUPABASE_PUBLIC_URL / ANON_KEY)
+// CONFIGURAÇÃO — cole apenas a URL base do seu Supabase/CRM
+// Exemplo: https://crm.joonker.com.br/supabase
+// Não é necessário nenhuma chave de API — o formulário usa uma
+// Edge Function pública que roda no servidor.
 // ================================================================
-const SUPABASE_URL  = 'COLE_AQUI_A_URL_DO_SUPABASE';   // ex: https://crm.joonker.com.br/supabase
-const SUPABASE_ANON = 'COLE_AQUI_A_ANON_KEY';
+const SUPABASE_URL = 'COLE_AQUI_A_URL_DO_SUPABASE';
 // ================================================================
 
+const API = `${SUPABASE_URL}/functions/v1/submit-site-form`;
 const SESSION = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-/* ---- Analytics ---- */
-function track(table, body) {
+/* ---- Analytics (sem credencial — tudo via Edge Function) ---- */
+function track(action, extra) {
   if (!SUPABASE_URL || SUPABASE_URL.includes('COLE')) return;
-  fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-    method:'POST',
-    headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON,'Authorization':`Bearer ${SUPABASE_ANON}`,'Prefer':'return=minimal'},
-    body:JSON.stringify(body),
-  }).catch(()=>{});
+  fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, session_id: SESSION, page: location.pathname, ...extra }),
+  }).catch(() => {});
 }
-track('site_page_views',{page:location.pathname||'/',referrer:document.referrer||null,session_id:SESSION});
+track('pageview', { referrer: document.referrer || null, user_agent: navigator.userAgent });
 
 /* ---- Mobile menu ---- */
-function toggleMenu(){document.getElementById('navMobile').classList.toggle('open');}
-function closeMenu(){document.getElementById('navMobile').classList.remove('open');}
+function toggleMenu() { document.getElementById('navMobile').classList.toggle('open'); }
+function closeMenu() { document.getElementById('navMobile').classList.remove('open'); }
 
 /* ---- Modal ---- */
-let fields=[], loaded=false;
+let fields = [], loaded = false;
 
-async function loadFields(){
-  if(loaded) return;
-  try{
-    const r=await fetch(`${SUPABASE_URL}/rest/v1/site_form_fields?is_active=eq.true&order=position.asc`,
-      {headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`}});
-    fields = r.ok ? await r.json() : [];
-  }catch{fields=[];}
-  loaded=true;
+async function loadFields() {
+  if (loaded) return;
+  try {
+    const r = await fetch(API);
+    const json = r.ok ? await r.json() : {};
+    fields = json.fields || [];
+  } catch { fields = []; }
+  loaded = true;
 }
 
-function renderForm(){
-  const bd=document.getElementById('modalBd');
-  if(!fields.length){
-    bd.innerHTML='<p style="color:#64748b;text-align:center;padding:20px">Formulário em breve. Entre em contato via WhatsApp!</p>';
+function renderForm() {
+  const bd = document.getElementById('modalBd');
+  if (!fields.length) {
+    bd.innerHTML = '<p style="color:#64748b;text-align:center;padding:20px">Formulário em breve. Entre em contato via WhatsApp!</p>';
     return;
   }
-  const html=fields.map(f=>{
-    const req=f.is_required?'<span class="req"> *</span>':'';
-    const ph=f.placeholder||'';
-    let inp='';
-    if(f.field_type==='textarea'){
-      inp=`<textarea class="fc2" id="f_${f.id}" placeholder="${ph}"${f.is_required?' required':''}></textarea>`;
-    } else if(f.field_type==='select'&&f.options?.length){
-      const opts=f.options.map(o=>`<option value="${o}">${o}</option>`).join('');
-      inp=`<select class="fc2" id="f_${f.id}"${f.is_required?' required':''}><option value="">Selecione...</option>${opts}</select>`;
+  const html = fields.map(f => {
+    const req = f.is_required ? '<span class="req"> *</span>' : '';
+    const ph = f.placeholder || '';
+    let inp = '';
+    if (f.field_type === 'textarea') {
+      inp = `<textarea class="fc2" id="f_${f.id}" placeholder="${ph}"${f.is_required ? ' required' : ''}></textarea>`;
+    } else if (f.field_type === 'select' && f.options?.length) {
+      const opts = f.options.map(o => `<option value="${o}">${o}</option>`).join('');
+      inp = `<select class="fc2" id="f_${f.id}"${f.is_required ? ' required' : ''}><option value="">Selecione...</option>${opts}</select>`;
     } else {
-      inp=`<input type="${f.field_type||'text'}" class="fc2" id="f_${f.id}" placeholder="${ph}"${f.is_required?' required':''}/>`;
+      inp = `<input type="${f.field_type || 'text'}" class="fc2" id="f_${f.id}" placeholder="${ph}"${f.is_required ? ' required' : ''}/>`;
     }
     return `<div class="fg"><label for="f_${f.id}">${f.label}${req}</label>${inp}</div>`;
   }).join('');
-  bd.innerHTML=`<form id="fform" onsubmit="submitForm(event)">${html}<button type="submit" class="f-submit" id="fsub">Enviar candidatura →</button></form>`;
+  bd.innerHTML = `<form id="fform" onsubmit="submitForm(event)">${html}<button type="submit" class="f-submit" id="fsub">Enviar candidatura →</button></form>`;
 }
 
-async function openModal(){
-  track('site_button_clicks',{button_id:'btn-franquia',button_label:'Seja Franqueado',page:location.pathname,session_id:SESSION});
+async function openModal() {
+  track('click', { button_id: 'btn-franquia', button_label: 'Seja Franqueado' });
   document.getElementById('overlay').classList.add('open');
-  document.body.style.overflow='hidden';
-  if(!loaded){await loadFields();renderForm();}
+  document.body.style.overflow = 'hidden';
+  if (!loaded) { await loadFields(); renderForm(); }
 }
-function closeModal(){
+function closeModal() {
   document.getElementById('overlay').classList.remove('open');
-  document.body.style.overflow='';
+  document.body.style.overflow = '';
 }
-function overlayClick(e){if(e.target===document.getElementById('overlay'))closeModal();}
+function overlayClick(e) { if (e.target === document.getElementById('overlay')) closeModal(); }
 
-async function submitForm(e){
+async function submitForm(e) {
   e.preventDefault();
-  const btn=document.getElementById('fsub');
-  btn.disabled=true; btn.textContent='Enviando...';
-  const data={};
-  let nome='',email='',telefone='';
-  fields.forEach(f=>{
-    const el=document.getElementById(`f_${f.id}`);
-    if(!el) return;
-    const v=el.value.trim();
-    data[f.label]=v;
-    if(f.field_type==='email'&&v) email=v;
-    else if(f.field_type==='tel'&&v) telefone=v;
-    else if(!nome&&f.field_type==='text'&&/nome/i.test(f.label)) nome=v;
+  const btn = document.getElementById('fsub');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  const data = {};
+  let nome = '', email = '', telefone = '';
+  fields.forEach(f => {
+    const el = document.getElementById(`f_${f.id}`);
+    if (!el) return;
+    const v = el.value.trim();
+    data[f.label] = v;
+    if (f.field_type === 'email' && v) email = v;
+    else if (f.field_type === 'tel' && v) telefone = v;
+    else if (!nome && f.field_type === 'text' && /nome/i.test(f.label)) nome = v;
   });
-  try{
-    const r=await fetch(`${SUPABASE_URL}/rest/v1/site_form_submissions`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON,'Authorization':`Bearer ${SUPABASE_ANON}`,'Prefer':'return=minimal'},
-      body:JSON.stringify({data,nome,email,telefone}),
+  try {
+    const r = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'submit', data, nome, email, telefone }),
     });
-    if(!r.ok) throw new Error('Erro');
-    track('site_button_clicks',{button_id:'form-submit',button_label:'Formulário Franquia Enviado',page:location.pathname,session_id:SESSION});
-    document.getElementById('modalBd').innerHTML=`
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.error || 'Erro');
+    track('click', { button_id: 'form-submit', button_label: 'Formulário Franquia Enviado' });
+    document.getElementById('modalBd').innerHTML = `
       <div class="f-ok">
         <div class="ok-ico">🎉</div>
         <h3>Candidatura enviada!</h3>
         <p>Recebemos suas informações e nossa equipe entrará em contato em até 24 horas. Obrigado pelo interesse em fazer parte da Óticas Joonker!</p>
       </div>`;
-  }catch{
-    btn.disabled=false;
-    btn.textContent='Enviar candidatura →';
-    alert('Erro ao enviar. Tente novamente ou nos contate pelo WhatsApp.');
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Enviar candidatura →';
+    alert(err.message || 'Erro ao enviar. Tente novamente ou nos contate pelo WhatsApp.');
   }
 }
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 </script>
 </body>
 </html>

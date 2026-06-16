@@ -17,6 +17,7 @@ export const JWT_EXEMPT_SERVICES = new Set([
   "whatsapp-webhook",
   "seed-admin",
   "submit-campanha-copa",
+  "submit-site-form",
 ]);
 
 /** Bloqueia uso da chave anon em funções que exigem usuário ou bootstrap. */
