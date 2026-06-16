@@ -23,51 +23,11 @@
   var periodoAberto = true;
   var periodoMensagem = "";
 
-  function injectPixelSnippet(html, slot) {
-    var code = (html || "").trim();
-    if (!code) return;
-
-    var marker = "data-copa-pixel-" + slot;
-    if (document.querySelector("[" + marker + "]")) return;
-
-    function mountScript(oldScript) {
-      var script = document.createElement("script");
-      script.setAttribute(marker, "1");
-      Array.from(oldScript.attributes || []).forEach(function (attr) {
-        script.setAttribute(attr.name, attr.value);
-      });
-      script.textContent = oldScript.textContent;
-      document.head.appendChild(script);
-    }
-
-    if (code.indexOf("<") >= 0) {
-      var tpl = document.createElement("template");
-      tpl.innerHTML = code;
-      tpl.content.querySelectorAll("script").forEach(mountScript);
-      tpl.content.querySelectorAll("noscript").forEach(function (ns) {
-        var clone = ns.cloneNode(true);
-        if (clone.setAttribute) clone.setAttribute(marker, "1");
-        document.body.appendChild(clone);
-      });
-    } else {
-      var inline = document.createElement("script");
-      inline.setAttribute(marker, "1");
-      inline.textContent = code;
-      document.head.appendChild(inline);
-    }
-  }
-
-  function injectFormPixel(snippet) {
-    if (pixelFormInjected || !snippet) return;
-    injectPixelSnippet(snippet, "form");
-    pixelFormInjected = true;
-  }
-
-  function injectSuccessPixel() {
-    if (pixelSuccessInjected || !pixelSuccessSnippet) return;
-    injectPixelSnippet(pixelSuccessSnippet, "success");
-    pixelSuccessInjected = true;
-  }
+  // Injeção dinâmica de código via API desabilitada por segurança.
+  // Para adicionar pixels (Meta, Google), configure-os diretamente no <head>
+  // do index.html da campanha com o código fixo do pixel.
+  function injectFormPixel(_snippet) { /* desabilitado */ }
+  function injectSuccessPixel() { /* desabilitado */ }
 
   function getConfig() {
     var cfg = window.__CRM_RUNTIME_CONFIG__ || {};

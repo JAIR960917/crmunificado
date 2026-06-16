@@ -87,6 +87,27 @@ Deno.serve(async (req) => {
     const forbidden = await assertAdminOrGerente(supabase, user!.id, corsHeaders);
     if (forbidden) return forbidden;
 
+    if (companyId) {
+      const { data: userRoles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user!.id);
+      const isAdmin = (userRoles || []).some((r: any) => r.role === "admin");
+      if (!isAdmin) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("user_id", user!.id)
+          .single();
+        if (!profile?.company_id || profile.company_id !== companyId) {
+          return new Response(JSON.stringify({ error: "Acesso negado: empresa não autorizada" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+    }
+
     // Busca integração da empresa solicitada
     const { data: integ, error: integErr } = await supabase
       .from("ssotica_integrations")

@@ -5,22 +5,9 @@ export const internalCorsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-function decodeJwtRole(authHeader: string): string | null {
-  try {
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-    const payloadPart = token.split(".")[1];
-    if (!payloadPart) return null;
-    const padded = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
-    const json = JSON.parse(atob(padded));
-    return typeof json?.role === "string" ? json.role : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Apenas cron interno (x-cron-secret) ou JWT com role=service_role.
- * Rejeita anon/authenticated mesmo que a chave seja válida no Kong.
+ * Apenas cron interno (x-cron-secret) ou token idêntico à SUPABASE_SERVICE_ROLE_KEY.
+ * Rejeita qualquer JWT com role=service_role no payload mas assinatura não verificada.
  */
 export function assertCronOrServiceRole(
   req: Request,
@@ -33,8 +20,8 @@ export function assertCronOrServiceRole(
   }
 
   const authHeader = req.headers.get("Authorization") ?? "";
-  const jwtRole = decodeJwtRole(authHeader);
-  if (jwtRole === "service_role") {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (serviceRoleKey && authHeader === `Bearer ${serviceRoleKey}`) {
     return null;
   }
 

@@ -30,7 +30,12 @@ async function verifySignature(payload: string, signatureHeader: string | null, 
   const hex = Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-  return hex === expected;
+  if (hex.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hex.length; i++) {
+    diff |= hex.charCodeAt(i) ^ expected.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 type WaMetadata = { phone_number_id?: string; display_phone_number?: string };
@@ -293,20 +298,24 @@ serve(async (req) => {
   const rawBody = await req.text();
   const signature = req.headers.get("x-hub-signature-256");
 
-  if (APP_SECRET) {
-    const valid = await verifySignature(rawBody, signature, APP_SECRET);
-    if (!valid) {
-      console.warn(
-        "[whatsapp-webhook] assinatura inválida — confira WHATSAPP_APP_SECRET (App Secret do app Meta)",
-        signature ? "header ok" : "sem x-hub-signature-256",
-      );
-      return new Response(JSON.stringify({ error: "Invalid signature" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-  } else {
-    console.warn("[whatsapp-webhook] WHATSAPP_APP_SECRET ausente — webhook aceito sem validar assinatura");
+  if (!APP_SECRET) {
+    console.error("[whatsapp-webhook] WHATSAPP_APP_SECRET não configurado — rejeitando requisição");
+    return new Response(JSON.stringify({ error: "Webhook not configured" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const valid = await verifySignature(rawBody, signature, APP_SECRET);
+  if (!valid) {
+    console.warn(
+      "[whatsapp-webhook] assinatura inválida — confira WHATSAPP_APP_SECRET (App Secret do app Meta)",
+      signature ? "header ok" : "sem x-hub-signature-256",
+    );
+    return new Response(JSON.stringify({ error: "Invalid signature" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   let body: Record<string, unknown>;

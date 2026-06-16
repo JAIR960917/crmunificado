@@ -136,7 +136,7 @@ export default function UsersPage() {
     if (error || data?.error) {
       toast.error(errMsg || "Erro ao criar usuário");
     } else {
-      toast.success(`Usuário criado. Senha inicial: ${password}`, { duration: 12000 });
+      toast.success("Usuário criado com sucesso. Copie a senha antes de fechar.", { duration: 8000 });
       setOpenCreate(false);
       setName(""); setEmail(""); setRole("vendedor"); setCreatePassword(""); setCreateCompanyId("__none__"); setCreateExtraCompanyIds([]);
       fetchData();
@@ -349,7 +349,7 @@ export default function UsersPage() {
                 <Label>Senha inicial</Label>
                 <div className="flex gap-2">
                   <Input
-                    type="text"
+                    type="password"
                     value={createPassword}
                     onChange={(e) => setCreatePassword(e.target.value)}
                     required

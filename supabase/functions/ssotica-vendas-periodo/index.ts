@@ -99,6 +99,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (!isAdmin && companyId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .single();
+      if (!profile?.company_id || profile.company_id !== companyId) {
+        return new Response(JSON.stringify({ error: "Acesso negado: empresa não autorizada" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Busca integração da empresa solicitada
     const { data: integ, error: integErr } = await supabase
       .from("ssotica_integrations")

@@ -1598,7 +1598,12 @@
         document.querySelectorAll('.nav-logo').forEach(el => {
           el.style.background = 'none';
           el.style.fontSize = '0';
-          el.innerHTML = `<img src="${cfg.logo_url}" style="width:40px;height:40px;object-fit:contain;border-radius:8px;display:block" alt="logo">`;
+          el.textContent = '';
+          const img = document.createElement('img');
+          img.src = cfg.logo_url;
+          img.style.cssText = 'width:40px;height:40px;object-fit:contain;border-radius:8px;display:block';
+          img.alt = 'logo';
+          el.appendChild(img);
         });
         // Atualiza o favicon da aba do browser
         let favicon = document.querySelector("link[rel~='icon']");
@@ -1613,34 +1618,101 @@
         try {
           const items = JSON.parse(cfg.hero_card_items);
           const el = document.getElementById('hero-card-items');
-          if (el) el.innerHTML = items.map(i => `<div class="hc-item"><div class="hc-dot"></div>${i}</div>`).join('');
+          if (el) {
+            el.textContent = '';
+            items.forEach(i => {
+              const div = document.createElement('div');
+              div.className = 'hc-item';
+              const dot = document.createElement('div');
+              dot.className = 'hc-dot';
+              div.appendChild(dot);
+              div.appendChild(document.createTextNode(String(i)));
+              el.appendChild(div);
+            });
+          }
         } catch {}
       }
       ['1', '2', '3', '4'].forEach(n => {
         const v = document.getElementById('stat-' + n + '-v');
         const l = document.getElementById('stat-' + n + '-l');
-        if (v && cfg['stat_' + n + '_value']) v.innerHTML = cfg['stat_' + n + '_value'];
+        if (v && cfg['stat_' + n + '_value']) v.textContent = cfg['stat_' + n + '_value'];
         if (l && cfg['stat_' + n + '_label']) l.textContent = cfg['stat_' + n + '_label'];
       });
       if (cfg.services_items) {
         try {
           const items = JSON.parse(cfg.services_items);
           const el = document.getElementById('services-grid');
-          if (el) el.innerHTML = items.map(s => `<div class="srv"><span class="srv-e">${s.icon}</span><h3>${s.title}</h3><p>${s.text}</p></div>`).join('');
+          if (el) {
+            el.textContent = '';
+            items.forEach(s => {
+              const div = document.createElement('div');
+              div.className = 'srv';
+              const span = document.createElement('span');
+              span.className = 'srv-e';
+              span.textContent = String(s.icon || '');
+              const h3 = document.createElement('h3');
+              h3.textContent = String(s.title || '');
+              const p = document.createElement('p');
+              p.textContent = String(s.text || '');
+              div.appendChild(span);
+              div.appendChild(h3);
+              div.appendChild(p);
+              el.appendChild(div);
+            });
+          }
         } catch {}
       }
       if (cfg.testimonials_items) {
         try {
           const items = JSON.parse(cfg.testimonials_items);
           const el = document.getElementById('testimonials-grid');
-          if (el) el.innerHTML = items.map(t => `<div class="test"><div class="test-stars">★★★★★</div><p>"${t.quote}"</p><div class="test-name">${t.author}</div><div class="test-city">${t.location}</div></div>`).join('');
+          if (el) {
+            el.textContent = '';
+            items.forEach(t => {
+              const div = document.createElement('div');
+              div.className = 'test';
+              const stars = document.createElement('div');
+              stars.className = 'test-stars';
+              stars.textContent = '★★★★★';
+              const quote = document.createElement('p');
+              quote.textContent = '“' + String(t.quote || '') + '”';
+              const name = document.createElement('div');
+              name.className = 'test-name';
+              name.textContent = String(t.author || '');
+              const city = document.createElement('div');
+              city.className = 'test-city';
+              city.textContent = String(t.location || '');
+              div.appendChild(stars);
+              div.appendChild(quote);
+              div.appendChild(name);
+              div.appendChild(city);
+              el.appendChild(div);
+            });
+          }
         } catch {}
       }
       if (cfg.franchise_cards) {
         try {
           const cards = JSON.parse(cfg.franchise_cards);
           const el = document.getElementById('franchise-cards');
-          if (el) el.innerHTML = cards.map(c => `<div class="fc"><div class="fc-n">${c.value}</div><h4>${c.title}</h4><p>${c.text}</p></div>`).join('');
+          if (el) {
+            el.textContent = '';
+            cards.forEach(c => {
+              const div = document.createElement('div');
+              div.className = 'fc';
+              const num = document.createElement('div');
+              num.className = 'fc-n';
+              num.textContent = String(c.value || '');
+              const h4 = document.createElement('h4');
+              h4.textContent = String(c.title || '');
+              const p = document.createElement('p');
+              p.textContent = String(c.text || '');
+              div.appendChild(num);
+              div.appendChild(h4);
+              div.appendChild(p);
+              el.appendChild(div);
+            });
+          }
         } catch {}
       }
       const fPhone = document.getElementById('footer-phone');
@@ -1694,27 +1766,79 @@
 
     function renderForm() {
       const bd = document.getElementById('modalBd');
+      bd.textContent = '';
       if (!fields.length) {
-        bd.innerHTML = '<p style="color:rgba(255,255,255,.4);text-align:center;padding:20px">Formulário em breve. Entre em contato via WhatsApp!</p>';
+        const p = document.createElement('p');
+        p.style.cssText = 'color:rgba(255,255,255,.4);text-align:center;padding:20px';
+        p.textContent = 'Formulário em breve. Entre em contato via WhatsApp!';
+        bd.appendChild(p);
         return;
       }
-      const html = fields.map(f => {
-        const req = f.is_required ? '<span class="req"> *</span>' : '';
-        const ph = f.placeholder || '';
-        let inp = '';
-        if (f.field_type === 'textarea') {
-          inp = `<textarea class="fc2" id="f_${f.id}" placeholder="${ph}"${f.is_required ? ' required' : ''}></textarea>`;
-        } else if (f.field_type === 'select' && f.options?.length) {
-          const opts = f.options.map(o => `<option value="${o}">${o}</option>`).join('');
-          inp = `<select class="fc2" id="f_${f.id}"${f.is_required ? ' required' : ''}><option value="">Selecione...</option>${opts}</select>`;
-        } else if (f.field_type === 'tel') {
-          inp = `<input type="tel" class="fc2" id="f_${f.id}" placeholder="${ph || '(00) 00000-0000'}" maxlength="15" oninput="maskPhone(this)"${f.is_required ? ' required' : ''}/>`;
-        } else {
-          inp = `<input type="${f.field_type || 'text'}" class="fc2" id="f_${f.id}" placeholder="${ph}"${f.is_required ? ' required' : ''}/>`;
+      const form = document.createElement('form');
+      form.id = 'fform';
+      form.addEventListener('submit', submitForm);
+      fields.forEach(f => {
+        const div = document.createElement('div');
+        div.className = 'fg';
+        const label = document.createElement('label');
+        label.htmlFor = 'f_' + f.id;
+        label.textContent = f.label;
+        if (f.is_required) {
+          const span = document.createElement('span');
+          span.className = 'req';
+          span.textContent = ' *';
+          label.appendChild(span);
         }
-        return `<div class="fg"><label for="f_${f.id}">${f.label}${req}</label>${inp}</div>`;
-      }).join('');
-      bd.innerHTML = `<form id="fform" onsubmit="submitForm(event)">${html}<button type="submit" class="f-submit" id="fsub">Enviar candidatura →</button></form>`;
+        div.appendChild(label);
+        let inp;
+        if (f.field_type === 'textarea') {
+          inp = document.createElement('textarea');
+          inp.className = 'fc2';
+          inp.id = 'f_' + f.id;
+          inp.placeholder = f.placeholder || '';
+          if (f.is_required) inp.required = true;
+        } else if (f.field_type === 'select' && f.options?.length) {
+          inp = document.createElement('select');
+          inp.className = 'fc2';
+          inp.id = 'f_' + f.id;
+          if (f.is_required) inp.required = true;
+          const def = document.createElement('option');
+          def.value = '';
+          def.textContent = 'Selecione...';
+          inp.appendChild(def);
+          f.options.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = String(o);
+            opt.textContent = String(o);
+            inp.appendChild(opt);
+          });
+        } else if (f.field_type === 'tel') {
+          inp = document.createElement('input');
+          inp.type = 'tel';
+          inp.className = 'fc2';
+          inp.id = 'f_' + f.id;
+          inp.placeholder = f.placeholder || '(00) 00000-0000';
+          inp.maxLength = 15;
+          inp.addEventListener('input', () => maskPhone(inp));
+          if (f.is_required) inp.required = true;
+        } else {
+          inp = document.createElement('input');
+          inp.type = f.field_type || 'text';
+          inp.className = 'fc2';
+          inp.id = 'f_' + f.id;
+          inp.placeholder = f.placeholder || '';
+          if (f.is_required) inp.required = true;
+        }
+        div.appendChild(inp);
+        form.appendChild(div);
+      });
+      const btn = document.createElement('button');
+      btn.type = 'submit';
+      btn.className = 'f-submit';
+      btn.id = 'fsub';
+      btn.textContent = 'Enviar candidatura →';
+      form.appendChild(btn);
+      bd.appendChild(form);
     }
 
     const SOURCE_LABELS = {
@@ -1761,12 +1885,21 @@
         const json = await r.json();
         if (r.status === 409 || json.duplicate) {
           // Duplicata — mostra tela informativa (não é erro do usuário)
-          document.getElementById('modalBd').innerHTML = `
-            <div class="f-ok">
-              <div class="ok-ico">📋</div>
-              <h3>Candidatura já registrada!</h3>
-              <p>${json.error}</p>
-            </div>`;
+          const modalBd = document.getElementById('modalBd');
+          modalBd.textContent = '';
+          const okDiv = document.createElement('div');
+          okDiv.className = 'f-ok';
+          const ico = document.createElement('div');
+          ico.className = 'ok-ico';
+          ico.textContent = '📋';
+          const h3 = document.createElement('h3');
+          h3.textContent = 'Candidatura já registrada!';
+          const p = document.createElement('p');
+          p.textContent = json.error || 'Sua candidatura já foi registrada anteriormente.';
+          okDiv.appendChild(ico);
+          okDiv.appendChild(h3);
+          okDiv.appendChild(p);
+          modalBd.appendChild(okDiv);
           return;
         }
         if (!r.ok) throw new Error(json.error || 'Erro ao enviar');
