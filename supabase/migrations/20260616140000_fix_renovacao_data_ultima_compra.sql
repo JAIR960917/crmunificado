@@ -82,5 +82,4 @@ WHERE status IN ('novo', 'em_contato', 'agendado', 'renovado', 'mais_de_3_anos')
   AND (
     renovou_outra_otica IS NOT TRUE
     OR data_exame_outra_otica IS NULL
-    OR data_exame_outra_otica = ''
   );
