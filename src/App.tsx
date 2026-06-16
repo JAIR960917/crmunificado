@@ -68,6 +68,7 @@ import CrediarioTarefasPage from "./pages/CrediarioTarefasPage";
 import SiteAnalyticsPage from "./pages/SiteAnalyticsPage";
 import SiteFormBuilderPage from "./pages/SiteFormBuilderPage";
 import SiteLeadsPage from "./pages/SiteLeadsPage";
+import SiteConfigPage from "./pages/SiteConfigPage";
 import MaintenancePage from "./pages/MaintenancePage";
 import NotFound from "./pages/NotFound";
 
@@ -185,6 +186,7 @@ const AppRoutes = () => {
       <Route path="/analytics-site" element={<RoleGate><SiteAnalyticsPage /></RoleGate>} />
       <Route path="/site-formulario" element={<RoleGate><SiteFormBuilderPage /></RoleGate>} />
       <Route path="/site-leads" element={<RoleGate><SiteLeadsPage /></RoleGate>} />
+      <Route path="/site-configuracoes" element={<RoleGate><SiteConfigPage /></RoleGate>} />
 
       {/* /instalar é semipública (orienta a instalar PWA) */}
       <Route path="/instalar" element={<InstallPage />} />

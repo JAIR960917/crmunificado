@@ -47,6 +47,7 @@ export const APP_PAGES: AppPage[] = [
   { key: "site_analytics",       label: "Analytics do Site",      path: "/analytics-site" },
   { key: "site_form_builder",    label: "Formulário do Site",     path: "/site-formulario" },
   { key: "site_leads",           label: "Leads do Site",          path: "/site-leads" },
+  { key: "site_config",          label: "Configurações do Site",  path: "/site-configuracoes" },
   { key: "configuracoes",        label: "Configurações",          path: "/configuracoes" },
 ];
 

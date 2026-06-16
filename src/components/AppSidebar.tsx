@@ -94,9 +94,10 @@ function isEstoqueFiscalPath(path: string) {
 
 /** Submenu Site Oficial (analytics, formulário e leads do site institucional). */
 const siteOficialNavItems: NavItem[] = [
-  { path: "/analytics-site",    label: "Analytics do Site",  icon: BarChart3 },
-  { path: "/site-formulario",   label: "Formulário",         icon: FileText  },
-  { path: "/site-leads",        label: "Leads do Site",      icon: UserCheck },
+  { path: "/analytics-site",      label: "Analytics do Site",     icon: BarChart3    },
+  { path: "/site-formulario",     label: "Formulário",            icon: FileText     },
+  { path: "/site-leads",          label: "Leads do Site",         icon: UserCheck    },
+  { path: "/site-configuracoes",  label: "Configurações do Site", icon: SlidersHorizontal },
 ];
 
 const SITE_OFICIAL_PATHS = new Set(siteOficialNavItems.map((i) => i.path));

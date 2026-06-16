@@ -20,49 +20,54 @@ serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // GET → retorna os campos ativos do formulário
+  // GET → campos do formulário OU config do site
   if (req.method === "GET") {
+    const url = new URL(req.url);
+    const type = url.searchParams.get("type");
+
+    if (type === "config") {
+      const { data } = await supabase.from("site_web_config").select("key, value");
+      const config: Record<string, string> = {};
+      for (const row of (data || [])) config[row.key] = row.value;
+      return json({ config });
+    }
+
+    // padrão: campos ativos do formulário
     const { data, error } = await supabase
       .from("site_form_fields")
       .select("id, label, field_type, placeholder, options, is_required, position")
       .eq("is_active", true)
       .order("position", { ascending: true });
-
     if (error) return json({ error: "Erro ao carregar formulário." }, 500);
     return json({ fields: data || [] });
   }
 
-  if (req.method !== "POST") {
-    return json({ error: "Método não permitido." }, 405);
-  }
+  if (req.method !== "POST") return json({ error: "Método não permitido." }, 405);
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const action = String(body.action || "submit");
 
-  // POST action=track → registra evento de analytics
+  // pageview analytics
   if (action === "pageview") {
     const { page, session_id, referrer, user_agent } = body as Record<string, string>;
     await supabase.from("site_page_views").insert({
-      page: page || "/",
-      session_id: session_id || null,
-      referrer: referrer || null,
-      user_agent: user_agent || null,
+      page: page || "/", session_id: session_id || null,
+      referrer: referrer || null, user_agent: user_agent || null,
     }).catch(() => {});
     return json({ ok: true });
   }
 
+  // click analytics
   if (action === "click") {
     const { button_id, button_label, page, session_id } = body as Record<string, string>;
     await supabase.from("site_button_clicks").insert({
-      button_id: button_id || null,
-      button_label: button_label || null,
-      page: page || "/",
-      session_id: session_id || null,
+      button_id: button_id || null, button_label: button_label || null,
+      page: page || "/", session_id: session_id || null,
     }).catch(() => {});
     return json({ ok: true });
   }
 
-  // POST action=submit (padrão) → salva o lead
+  // submit form (lead)
   const nome = String(body.nome || "").trim();
   const email = String(body.email || "").trim();
   const telefone = String(body.telefone || "").trim();
@@ -71,11 +76,8 @@ serve(async (req) => {
   if (!nome) return json({ error: "Informe seu nome." }, 400);
 
   const { error } = await supabase.from("site_form_submissions").insert({
-    nome: nome || null,
-    email: email || null,
-    telefone: telefone || null,
-    data: data ?? {},
-    status: "novo",
+    nome: nome || null, email: email || null,
+    telefone: telefone || null, data: data ?? {}, status: "novo",
   });
 
   if (error) {

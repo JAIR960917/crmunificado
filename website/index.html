@@ -48,10 +48,11 @@
 
     /* ===== TOKENS ===== */
     :root {
-      --blue: #1d4ed8;
-      --blue-h: #1e40af;
-      --blue-l: #3b82f6;
-      --blue-xl: #eff6ff;
+      --blue: #c8102e;
+      --blue-h: #a50d24;
+      --blue-l: #e53e3e;
+      --blue-xl: #fff1f1;
+      --dark: #0d0d0d;
       --amber: #f59e0b;
       --amber-h: #d97706;
       --slate-50: #f8fafc;
@@ -60,7 +61,7 @@
       --slate-500: #64748b;
       --slate-600: #475569;
       --slate-700: #334155;
-      --slate-900: #0f172a;
+      --slate-900: #0d0d0d;
       --green: #16a34a;
       --r: 12px;
       --sh: 0 4px 24px rgba(0, 0, 0, .08);
@@ -204,7 +205,7 @@
       min-height: 100vh;
       display: flex;
       align-items: center;
-      background: linear-gradient(140deg, var(--slate-900) 0%, #162d5c 55%, #1d4ed8 100%);
+      background: linear-gradient(140deg, var(--dark) 0%, #2a0008 55%, var(--blue) 100%);
       position: relative;
       overflow: hidden;
     }
@@ -518,7 +519,7 @@
       border-radius: 20px;
       overflow: hidden;
       aspect-ratio: 4/3;
-      background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+      background: linear-gradient(135deg, #2a0008, var(--blue));
       display: flex;
       align-items: center;
       justify-content: center;
@@ -586,7 +587,7 @@
 
     /* ===== NUMBERS ===== */
     .numbers-bg {
-      background: linear-gradient(135deg, var(--blue) 0%, #1e40af 100%);
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-h) 100%);
     }
 
     .numbers-grid {
@@ -712,7 +713,7 @@
 
     /* ===== FRANCHISE ===== */
     .fran {
-      background: linear-gradient(140deg, var(--slate-900) 0%, #162d5c 100%);
+      background: linear-gradient(140deg, var(--dark) 0%, #2a0008 100%);
       padding: 96px 0;
       position: relative;
       overflow: hidden;
@@ -1162,15 +1163,15 @@
     <div class="c hero-inner">
       <div class="hero-wrap">
         <div>
-          <div class="badge">✦ No mercado desde 2018</div>
+          <div class="badge" data-cfg="hero_badge">✦ No mercado desde 2018</div>
           <h1>Enxergue o Mundo<br />com <em>Clareza</em><br />e Estilo</h1>
-          <p>Uma das maiores redes de óticas do Brasil, com 10 lojas e uma equipe dedicada a cuidar da sua saúde visual
+          <p data-cfg="hero_subtitle">Uma das maiores redes de óticas do Brasil, com 10 lojas e uma equipe dedicada a cuidar da sua saúde visual
             com excelência.</p>
           <div class="hero-btns">
-            <button class="btn-y" onclick="document.getElementById('servicos').scrollIntoView({behavior:'smooth'})">
+            <button class="btn-y" data-cfg="hero_btn_primary" onclick="document.getElementById('servicos').scrollIntoView({behavior:'smooth'})">
               Nossos serviços →
             </button>
-            <button class="btn-o" onclick="openModal()">
+            <button class="btn-o" data-cfg="hero_btn_secondary" onclick="openModal()">
               Seja um Franqueado
             </button>
           </div>
@@ -1198,11 +1199,11 @@
             <div class="hero-card-top">
               <div class="hero-card-icon">👓</div>
               <div>
-                <h3>Por que a Joonker?</h3>
-                <p>Sua melhor escolha em visão</p>
+                <h3 data-cfg="hero_card_title">Por que a Joonker?</h3>
+                <p data-cfg="hero_card_subtitle">Sua melhor escolha em visão</p>
               </div>
             </div>
-            <div class="hc-list">
+            <div class="hc-list" id="hero-card-items">
               <div class="hc-item">
                 <div class="hc-dot"></div>Exame de vista gratuito
               </div>
@@ -1223,8 +1224,8 @@
           <div class="hero-badge2">
             <div class="hb2-icon">🏆</div>
             <div>
-              <div class="hb2-v">Nº1</div>
-              <div class="hb2-l">Em satisfação</div>
+              <div class="hb2-v" data-cfg="hero_badge_label">Nº1</div>
+              <div class="hb2-l" data-cfg="hero_badge_sub">Em satisfação</div>
             </div>
           </div>
         </div>
@@ -1237,20 +1238,20 @@
     <div class="c">
       <div class="numbers-grid">
         <div class="num-item">
-          <div class="num-v">10<b>+</b></div>
-          <div class="num-l">Lojas no Brasil</div>
+          <div class="num-v" id="stat-1-v">10<b>+</b></div>
+          <div class="num-l" id="stat-1-l">Lojas no Brasil</div>
         </div>
         <div class="num-item">
-          <div class="num-v">2018</div>
-          <div class="num-l">Ano de fundação</div>
+          <div class="num-v" id="stat-2-v">2018</div>
+          <div class="num-l" id="stat-2-l">Ano de fundação</div>
         </div>
         <div class="num-item">
-          <div class="num-v">50<b>K</b></div>
-          <div class="num-l">Clientes atendidos</div>
+          <div class="num-v" id="stat-3-v">50<b>K</b></div>
+          <div class="num-l" id="stat-3-l">Clientes atendidos</div>
         </div>
         <div class="num-item">
-          <div class="num-v">2<b>K+</b></div>
-          <div class="num-l">Modelos disponíveis</div>
+          <div class="num-v" id="stat-4-v">2<b>K+</b></div>
+          <div class="num-l" id="stat-4-l">Modelos disponíveis</div>
         </div>
       </div>
     </div>
@@ -1263,13 +1264,13 @@
         <div class="about-img">
           <div class="about-img-inner">
             <span class="ei">👁️</span>
-            <p>Desde 2018 cuidando da sua visão</p>
+            <p data-cfg="about_image_caption">Desde 2018 cuidando da sua visão</p>
           </div>
         </div>
         <div>
-          <span class="tag">Sobre nós</span>
-          <h2 class="s-title">Uma rede construída com propósito</h2>
-          <p class="s-sub">
+          <span class="tag" data-cfg="about_badge">Sobre nós</span>
+          <h2 class="s-title" data-cfg="about_title">Uma rede construída com propósito</h2>
+          <p class="s-sub" data-cfg="about_text">
             Nascemos em 2018 com uma missão: tornar o cuidado visual acessível, moderno e humano.
             Com 10 lojas e uma equipe apaixonada, transformamos a experiência óptica em cada atendimento.
           </p>
@@ -1277,22 +1278,22 @@
             <div class="feat">
               <div class="feat-ico">👁️</div>
               <div>
-                <h4>Exame de vista gratuito</h4>
-                <p>Realizamos exames com equipamentos modernos e optometristas qualificados sem custo adicional.</p>
+                <h4 data-cfg="about_f1_title">Exame de vista gratuito</h4>
+                <p data-cfg="about_f1_text">Realizamos exames com equipamentos modernos e optometristas qualificados sem custo adicional.</p>
               </div>
             </div>
             <div class="feat">
               <div class="feat-ico">🏆</div>
               <div>
-                <h4>Qualidade garantida</h4>
-                <p>Trabalhamos apenas com marcas referência do mercado. Garantia em todos os produtos.</p>
+                <h4 data-cfg="about_f2_title">Qualidade garantida</h4>
+                <p data-cfg="about_f2_text">Trabalhamos apenas com marcas referência do mercado. Garantia em todos os produtos.</p>
               </div>
             </div>
             <div class="feat">
               <div class="feat-ico">💳</div>
               <div>
-                <h4>Parcelamento facilitado</h4>
-                <p>Até 12x sem juros nos principais cartões. Convênios e planos de saúde aceitos.</p>
+                <h4 data-cfg="about_f3_title">Parcelamento facilitado</h4>
+                <p data-cfg="about_f3_text">Até 12x sem juros nos principais cartões. Convênios e planos de saúde aceitos.</p>
               </div>
             </div>
           </div>
@@ -1305,11 +1306,11 @@
   <section class="s s-bg" id="servicos">
     <div class="c">
       <div class="center">
-        <span class="tag">O que oferecemos</span>
-        <h2 class="s-title">Tudo que você precisa para ver melhor</h2>
-        <p class="s-sub">Do exame ao produto, cuidamos de cada detalhe para garantir a melhor experiência.</p>
+        <span class="tag" data-cfg="services_badge">O que oferecemos</span>
+        <h2 class="s-title" data-cfg="services_title">Tudo que você precisa para ver melhor</h2>
+        <p class="s-sub" data-cfg="services_subtitle">Do exame ao produto, cuidamos de cada detalhe para garantir a melhor experiência.</p>
       </div>
-      <div class="srv-grid">
+      <div class="srv-grid" id="services-grid">
         <div class="srv">
           <span class="srv-e">👁️</span>
           <h3>Exame de Vista</h3>
@@ -1343,10 +1344,10 @@
   <section class="s" id="depoimentos">
     <div class="c">
       <div class="center">
-        <span class="tag">Depoimentos</span>
-        <h2 class="s-title">O que nossos clientes dizem</h2>
+        <span class="tag" data-cfg="testimonials_badge">Depoimentos</span>
+        <h2 class="s-title" data-cfg="testimonials_title">O que nossos clientes dizem</h2>
       </div>
-      <div class="test-grid">
+      <div class="test-grid" id="testimonials-grid">
         <div class="test">
           <div class="test-stars">★★★★★</div>
           <p>"Atendimento incrível! Fiz meu exame gratuitamente e saí com meu óculos novo no mesmo dia. Recomendo muito
@@ -1376,11 +1377,11 @@
   <section class="fran" id="franquia">
     <div class="c">
       <div class="fran-inner">
-        <span class="tag">Oportunidade de negócio</span>
+        <span class="tag" data-cfg="franchise_badge">Oportunidade de negócio</span>
         <h2>Seja parte da rede que mais<br /><em>cresce</em> no Brasil</h2>
-        <p>Junte-se à família Joonker e tenha o suporte completo de uma rede consolidada: treinamento, marca
+        <p data-cfg="franchise_subtitle">Junte-se à família Joonker e tenha o suporte completo de uma rede consolidada: treinamento, marca
           reconhecida, sistema de gestão e uma operação já validada pelo mercado.</p>
-        <div class="fran-cards">
+        <div class="fran-cards" id="franchise-cards">
           <div class="fc">
             <div class="fc-n">10</div>
             <h4>Lojas abertas</h4>
@@ -1397,7 +1398,7 @@
             <p>Experiência e aprendizado para te apoiar desde o dia 1.</p>
           </div>
         </div>
-        <button class="btn-fran" onclick="openModal()">
+        <button class="btn-fran" data-cfg="franchise_btn" onclick="openModal()">
           Quero ser um franqueado →
         </button>
         <p class="fran-note">Preencha o formulário e nossa equipe entrará em contato em até 24 horas.</p>
@@ -1410,8 +1411,8 @@
     <div class="c">
       <div class="foot-grid">
         <div class="foot-brand">
-          <h3>Óticas Joonker</h3>
-          <p>Uma rede de óticas comprometida com a saúde visual e o estilo de vida dos nossos clientes desde 2018. 10
+          <h3 data-cfg="company_name">Óticas Joonker</h3>
+          <p data-cfg="footer_about">Uma rede de óticas comprometida com a saúde visual e o estilo de vida dos nossos clientes desde 2018. 10
             lojas, um propósito.</p>
         </div>
         <div class="foot-col">
@@ -1426,10 +1427,10 @@
         <div class="foot-col">
           <h4>Contato</h4>
           <ul>
-            <li><a href="mailto:contato@joonker.com.br">contato@joonker.com.br</a></li>
-            <li><a href="#">WhatsApp</a></li>
-            <li><a href="#">Instagram</a></li>
-            <li><a href="#">Facebook</a></li>
+            <li><a id="footer-email" href="mailto:contato@joonker.com.br">contato@joonker.com.br</a></li>
+            <li><a id="footer-phone" href="#">WhatsApp</a></li>
+            <li><a id="footer-instagram" href="#">Instagram</a></li>
+            <li><a id="footer-facebook" href="#">Facebook</a></li>
           </ul>
         </div>
       </div>
@@ -1479,6 +1480,92 @@
       }).catch(() => { });
     }
     track('pageview', { referrer: document.referrer || null, user_agent: navigator.userAgent });
+
+    /* ---- Config dinâmica do site (CMS) ---- */
+    function shadeColor(hex, amt) {
+      const n = parseInt(hex.replace('#', ''), 16);
+      const clamp = v => Math.min(255, Math.max(0, v));
+      const r = clamp(((n >> 16) & 0xff) + amt);
+      const g = clamp(((n >> 8) & 0xff) + amt);
+      const b = clamp((n & 0xff) + amt);
+      return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+
+    function applyConfig(cfg) {
+      const root = document.documentElement;
+      if (cfg.color_primary) {
+        root.style.setProperty('--blue', cfg.color_primary);
+        root.style.setProperty('--blue-h', shadeColor(cfg.color_primary, -30));
+        root.style.setProperty('--blue-l', shadeColor(cfg.color_primary, 40));
+      }
+      if (cfg.color_dark) {
+        root.style.setProperty('--dark', cfg.color_dark);
+        root.style.setProperty('--slate-900', cfg.color_dark);
+      }
+      document.querySelectorAll('[data-cfg]').forEach(el => {
+        const k = el.getAttribute('data-cfg');
+        if (cfg[k]) el.textContent = cfg[k];
+      });
+      if (cfg.company_name) document.title = cfg.company_name + ' — Rede de Óticas';
+      if (cfg.logo_url) {
+        document.querySelectorAll('.nav-logo').forEach(el => {
+          el.innerHTML = `<img src="${cfg.logo_url}" style="width:100%;height:100%;object-fit:contain;border-radius:8px" alt="logo">`;
+        });
+      }
+      if (cfg.hero_card_items) {
+        try {
+          const items = JSON.parse(cfg.hero_card_items);
+          const el = document.getElementById('hero-card-items');
+          if (el) el.innerHTML = items.map(i => `<div class="hc-item"><div class="hc-dot"></div>${i}</div>`).join('');
+        } catch {}
+      }
+      ['1', '2', '3', '4'].forEach(n => {
+        const v = document.getElementById('stat-' + n + '-v');
+        const l = document.getElementById('stat-' + n + '-l');
+        if (v && cfg['stat_' + n + '_value']) v.innerHTML = cfg['stat_' + n + '_value'];
+        if (l && cfg['stat_' + n + '_label']) l.textContent = cfg['stat_' + n + '_label'];
+      });
+      if (cfg.services_items) {
+        try {
+          const items = JSON.parse(cfg.services_items);
+          const el = document.getElementById('services-grid');
+          if (el) el.innerHTML = items.map(s => `<div class="srv"><span class="srv-e">${s.icon}</span><h3>${s.title}</h3><p>${s.text}</p></div>`).join('');
+        } catch {}
+      }
+      if (cfg.testimonials_items) {
+        try {
+          const items = JSON.parse(cfg.testimonials_items);
+          const el = document.getElementById('testimonials-grid');
+          if (el) el.innerHTML = items.map(t => `<div class="test"><div class="test-stars">★★★★★</div><p>"${t.quote}"</p><div class="test-name">${t.author}</div><div class="test-city">${t.location}</div></div>`).join('');
+        } catch {}
+      }
+      if (cfg.franchise_cards) {
+        try {
+          const cards = JSON.parse(cfg.franchise_cards);
+          const el = document.getElementById('franchise-cards');
+          if (el) el.innerHTML = cards.map(c => `<div class="fc"><div class="fc-n">${c.value}</div><h4>${c.title}</h4><p>${c.text}</p></div>`).join('');
+        } catch {}
+      }
+      const fPhone = document.getElementById('footer-phone');
+      if (fPhone && cfg.footer_phone) { fPhone.textContent = cfg.footer_phone; fPhone.href = 'tel:' + cfg.footer_phone.replace(/\D/g, ''); }
+      const fEmail = document.getElementById('footer-email');
+      if (fEmail && cfg.footer_email) { fEmail.textContent = cfg.footer_email; fEmail.href = 'mailto:' + cfg.footer_email; }
+      const fInsta = document.getElementById('footer-instagram');
+      if (fInsta && cfg.footer_instagram) fInsta.href = cfg.footer_instagram;
+      const fFb = document.getElementById('footer-facebook');
+      if (fFb && cfg.footer_facebook) fFb.href = cfg.footer_facebook;
+    }
+
+    async function loadSiteConfig() {
+      if (!SUPABASE_URL || SUPABASE_URL.includes('COLE')) return;
+      try {
+        const r = await fetch(`${API}?type=config`);
+        if (!r.ok) return;
+        const { config } = await r.json();
+        if (config) applyConfig(config);
+      } catch {}
+    }
+    loadSiteConfig();
 
     /* ---- Mobile menu ---- */
     function toggleMenu() { document.getElementById('navMobile').classList.toggle('open'); }
