@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 import { useVisibleStatusKeys } from "@/hooks/use-visible-status-keys";
 import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
-import { resolveCanalFromLeadData, fetchActiveAppointedLeadIds } from "@/lib/appointmentUtils";
+import { resolveCanalFromLeadData, fetchActiveAppointedLeadIds, logAppointmentHistory } from "@/lib/appointmentUtils";
 import { getLeadExamTimestamp, sortKanbanByExamAndTratativa } from "@/lib/kanbanCardSort";
 import BulkTransferDialog from "@/components/crm/BulkTransferDialog";
 
@@ -687,7 +687,7 @@ export default function LeadsPage() {
     setScheduleSaving(true);
     const { nome, telefone, idade } = getLeadSnapshot(schedulingLead);
     const nowIso = new Date().toISOString();
-    const { error } = await supabase.from("crm_appointments").insert({
+    const { data: newAppt, error } = await supabase.from("crm_appointments").insert({
       lead_id: schedulingLead.id,
       scheduled_by: user.id,
       scheduled_datetime: schedData.scheduled_datetime,
@@ -703,9 +703,14 @@ export default function LeadsPage() {
       nome,
       telefone,
       idade,
-    } as any);
+    } as any).select("id").single();
     if (error) toast.error("Erro ao agendar");
-    else toast.success("Lead agendado com sucesso!");
+    else {
+      toast.success("Lead agendado com sucesso!");
+      if (newAppt?.id) {
+        await logAppointmentHistory(newAppt.id, user.id, "created", `${currentUserName || "Usuário"} agendou consulta para ${nome}`);
+      }
+    }
     setScheduleSaving(false);
     setScheduleOpen(false);
     setSchedulingLead(null);

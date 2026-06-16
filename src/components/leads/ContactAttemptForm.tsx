@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { resolveCanalFromLeadData } from "@/lib/appointmentUtils";
+import { resolveCanalFromLeadData, logAppointmentHistory } from "@/lib/appointmentUtils";
 import TratativaContatoForm, {
   consultaPagaFromForma,
   type TratativaSavePayload,
@@ -84,7 +84,7 @@ export default function ContactAttemptForm({
     if (payload.atendeu === "sim" && payload.marcou === "sim" && payload.scheduledDatetime) {
       const nowIso = new Date().toISOString();
       const pagaNoAgendamento = consultaPagaFromForma(payload.formaPagamentoConsulta);
-      const { error: apptErr } = await supabase.from("crm_appointments").insert({
+      const { data: newAppt, error: apptErr } = await supabase.from("crm_appointments").insert({
         lead_id: leadId,
         scheduled_by: userId,
         scheduled_datetime: payload.scheduledDatetime,
@@ -101,8 +101,11 @@ export default function ContactAttemptForm({
         nome: leadSnapshot.nome,
         telefone: leadSnapshot.telefone,
         idade: leadSnapshot.idade,
-      } as any);
+      } as any).select("id").single();
       if (apptErr) throw apptErr;
+      if (newAppt?.id) {
+        await logAppointmentHistory(newAppt.id, userId, "created", `Agendamento criado para ${leadSnapshot.nome}`);
+      }
       toast.success("Contato registrado e consulta agendada!");
     } else {
       toast.success("Contato registrado!");

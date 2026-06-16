@@ -49,6 +49,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { logAppointmentHistory } from "@/lib/appointmentUtils";
 
 type RenegociacaoStatus = "sim" | "nao" | null;
 
@@ -157,11 +158,11 @@ async function insertAppointmentFromTratativa(
     idade?: string;
     canal: string;
   },
-) {
-  if (!payload.scheduledDatetime) return;
+): Promise<string | null> {
+  if (!payload.scheduledDatetime) return null;
   const nowIso = new Date().toISOString();
   const pagaNoAgendamento = consultaPagaFromForma(payload.formaPagamentoConsulta);
-  const { error } = await supabase.from("crm_appointments").insert({
+  const { data: newAppt, error } = await supabase.from("crm_appointments").insert({
     lead_id: opts.leadId ?? null,
     renovacao_id: opts.renovacaoId ?? null,
     scheduled_by: userId,
@@ -179,8 +180,9 @@ async function insertAppointmentFromTratativa(
     nome: opts.nome,
     telefone: opts.telefone,
     idade: opts.idade || "",
-  } as any);
+  } as any).select("id").single();
   if (error) throw error;
+  return newAppt?.id ?? null;
 }
 
 export default function CrediarioTarefasPage() {
@@ -360,13 +362,16 @@ export default function CrediarioTarefasPage() {
             .eq("id", editing.leadId)
             .maybeSingle();
           const leadData = ((lead?.data as Record<string, unknown>) || {});
-          await insertAppointmentFromTratativa(payload, user.id, {
+          const apptId1 = await insertAppointmentFromTratativa(payload, user.id, {
             leadId: editing.leadId,
             leadStatus: lead?.status || "novo",
             nome: formNome.trim(),
             telefone: unformatPhone(formTelefone) || String(leadData.telefone || ""),
             canal: "Ligação Leads",
           });
+          if (apptId1) {
+            await logAppointmentHistory(apptId1, user.id, "created", `Agendamento criado para ${formNome.trim()}`);
+          }
         }
       }
     } else if (editing.source === "crediario") {
@@ -381,12 +386,15 @@ export default function CrediarioTarefasPage() {
       if (error) throw error;
 
       if (payload.atendeu === "sim" && payload.marcou === "sim" && payload.scheduledDatetime) {
-        await insertAppointmentFromTratativa(payload, user.id, {
+        const apptId2 = await insertAppointmentFromTratativa(payload, user.id, {
           leadId: editing.leadId || null,
           nome: formNome.trim(),
           telefone: unformatPhone(formTelefone),
           canal: "Loja",
         });
+        if (apptId2) {
+          await logAppointmentHistory(apptId2, user.id, "created", `Agendamento criado para ${formNome.trim()}`);
+        }
       }
     } else {
       throw new Error("Tarefa inválida");

@@ -21,7 +21,7 @@ import { useVisibleStatusKeys } from "@/hooks/use-visible-status-keys";
 import { formatVisualAcuityDisplay } from "@/lib/visualAcuity";
 import { logTransition } from "@/lib/transitionLogs";
 import { sortKanbanByExamAndTratativa } from "@/lib/kanbanCardSort";
-import { resolveCanalFromLeadData } from "@/lib/appointmentUtils";
+import { resolveCanalFromLeadData, logAppointmentHistory } from "@/lib/appointmentUtils";
 import BulkTransferDialog from "@/components/crm/BulkTransferDialog";
 import RenovacaoOutraOticaDialog from "@/components/renovacoes/RenovacaoOutraOticaDialog";
 import {
@@ -630,7 +630,8 @@ export default function ActiveClientsPage() {
     const nome = String(d.nome || "Cliente");
     const telefone = String(d.telefone || "");
     const nowIso = new Date().toISOString();
-    const { error } = await supabase.from("crm_appointments").insert({
+    const userName = profiles.find((p) => p.user_id === user.id)?.full_name || "Usuário";
+    const { data: newAppt, error } = await supabase.from("crm_appointments").insert({
       lead_id: null,
       renovacao_id: schedulingItem.id,
       scheduled_by: user.id,
@@ -647,11 +648,14 @@ export default function ActiveClientsPage() {
       nome,
       telefone,
       idade: "",
-    } as any);
+    } as any).select("id").single();
     if (error) {
       toast.error("Erro ao agendar");
       setScheduleSaving(false);
       return;
+    }
+    if (newAppt?.id) {
+      await logAppointmentHistory(newAppt.id, user.id, "created", `${userName} agendou consulta para ${nome}`);
     }
     const { error: updErr } = await supabase
       .from("crm_renovacoes")

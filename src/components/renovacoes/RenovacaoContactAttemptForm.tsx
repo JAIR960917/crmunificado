@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logAppointmentHistory } from "@/lib/appointmentUtils";
 import TratativaContatoForm, {
   consultaPagaFromForma,
   type TratativaSavePayload,
@@ -70,7 +71,7 @@ export default function RenovacaoContactAttemptForm({
 
     if (payload.atendeu === "sim" && payload.marcou === "sim" && payload.scheduledDatetime) {
       const pagaNoAgendamento = consultaPagaFromForma(payload.formaPagamentoConsulta);
-      const { error: apptErr } = await supabase.from("crm_appointments").insert({
+      const { data: newAppt, error: apptErr } = await supabase.from("crm_appointments").insert({
         renovacao_id: renovacaoId,
         scheduled_by: userId,
         scheduled_datetime: payload.scheduledDatetime,
@@ -87,8 +88,11 @@ export default function RenovacaoContactAttemptForm({
         nome: renovacaoSnapshot.nome,
         telefone: renovacaoSnapshot.telefone,
         idade: renovacaoSnapshot.idade,
-      } as any);
+      } as any).select("id").single();
       if (apptErr) throw apptErr;
+      if (newAppt?.id) {
+        await logAppointmentHistory(newAppt.id, userId, "created", `Agendamento criado para ${renovacaoSnapshot.nome}`);
+      }
 
       await supabase
         .from("crm_renovacoes")

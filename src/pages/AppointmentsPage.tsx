@@ -885,7 +885,7 @@ export default function AppointmentsPage() {
         );
       }
     } else {
-      const { error } = await supabase.from("crm_appointments").insert({
+      const { data: newAppt, error } = await supabase.from("crm_appointments").insert({
         lead_id: null,
         scheduled_by: user.id,
         scheduled_datetime: dt.toISOString(),
@@ -901,9 +901,14 @@ export default function AppointmentsPage() {
         nome: formNome, telefone: formTelefone, idade: formIdade,
         previous_status: "manual",
         original_scheduled_datetime: dt.toISOString(),
-      } as any);
+      } as any).select("id").single();
       if (error) toast.error("Erro ao criar agendamento");
-      else toast.success("Agendamento criado");
+      else {
+        toast.success("Agendamento criado");
+        if (newAppt?.id) {
+          await logAppointmentHistory(newAppt.id, user.id, "created", `${getProfileName(user.id)} criou agendamento para ${formNome}`);
+        }
+      }
     }
     setSaving(false);
     setDialogOpen(false);
