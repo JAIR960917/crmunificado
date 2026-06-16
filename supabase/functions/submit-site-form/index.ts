@@ -50,21 +50,23 @@ serve(async (req) => {
   // pageview analytics
   if (action === "pageview") {
     const { page, session_id, referrer, user_agent } = body as Record<string, string>;
-    await supabase.from("site_page_views").insert({
+    const { error: pvErr } = await supabase.from("site_page_views").insert({
       page: page || "/", session_id: session_id || null,
       referrer: referrer || null, user_agent: user_agent || null,
-    }).catch(() => {});
-    return json({ ok: true });
+    });
+    if (pvErr) console.error("[submit-site-form] pageview insert error:", pvErr.message);
+    return json({ ok: !pvErr, error: pvErr?.message });
   }
 
   // click analytics
   if (action === "click") {
     const { button_id, button_label, page, session_id } = body as Record<string, string>;
-    await supabase.from("site_button_clicks").insert({
+    const { error: clErr } = await supabase.from("site_button_clicks").insert({
       button_id: button_id || null, button_label: button_label || null,
       page: page || "/", session_id: session_id || null,
-    }).catch(() => {});
-    return json({ ok: true });
+    });
+    if (clErr) console.error("[submit-site-form] click insert error:", clErr.message);
+    return json({ ok: !clErr, error: clErr?.message });
   }
 
   // submit form (lead)
