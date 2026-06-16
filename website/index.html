@@ -1039,7 +1039,7 @@
     .f-load {
       text-align: center;
       padding: 30px;
-      color: var(--slate-500);
+      color: rgba(255, 255, 255, .45);
       font-size: .875rem;
     }
 
@@ -1056,14 +1056,19 @@
     .f-ok h3 {
       font-size: 1.2rem;
       font-weight: 800;
-      color: var(--slate-900);
+      color: #fff;
       margin-bottom: 10px;
     }
 
     .f-ok p {
       font-size: .875rem;
-      color: var(--slate-600);
+      color: rgba(255, 255, 255, .6);
       line-height: 1.7;
+    }
+
+    .fc2 option {
+      background: #1e1e1e;
+      color: #fff;
     }
 
     /* ===== RESPONSIVE ===== */
@@ -1602,10 +1607,21 @@
       loaded = true;
     }
 
+    function maskPhone(el) {
+      let v = el.value.replace(/\D/g, '').slice(0, 11);
+      if (v.length <= 10) {
+        v = v.replace(/^(\d{0,2})(\d{0,4})(\d{0,4})$/, (_, a, b, c) =>
+          a ? '(' + a + (b ? ') ' + b + (c ? '-' + c : '') : ')') : '');
+      } else {
+        v = v.replace(/^(\d{2})(\d{5})(\d{0,4})$/, '($1) $2-$3');
+      }
+      el.value = v;
+    }
+
     function renderForm() {
       const bd = document.getElementById('modalBd');
       if (!fields.length) {
-        bd.innerHTML = '<p style="color:#64748b;text-align:center;padding:20px">Formulário em breve. Entre em contato via WhatsApp!</p>';
+        bd.innerHTML = '<p style="color:rgba(255,255,255,.4);text-align:center;padding:20px">Formulário em breve. Entre em contato via WhatsApp!</p>';
         return;
       }
       const html = fields.map(f => {
@@ -1617,6 +1633,8 @@
         } else if (f.field_type === 'select' && f.options?.length) {
           const opts = f.options.map(o => `<option value="${o}">${o}</option>`).join('');
           inp = `<select class="fc2" id="f_${f.id}"${f.is_required ? ' required' : ''}><option value="">Selecione...</option>${opts}</select>`;
+        } else if (f.field_type === 'tel') {
+          inp = `<input type="tel" class="fc2" id="f_${f.id}" placeholder="${ph || '(00) 00000-0000'}" maxlength="15" oninput="maskPhone(this)"${f.is_required ? ' required' : ''}/>`;
         } else {
           inp = `<input type="${f.field_type || 'text'}" class="fc2" id="f_${f.id}" placeholder="${ph}"${f.is_required ? ' required' : ''}/>`;
         }
@@ -1667,7 +1685,17 @@
           body: JSON.stringify({ action: 'submit', data, nome, email, telefone }),
         });
         const json = await r.json();
-        if (!r.ok) throw new Error(json.error || 'Erro');
+        if (r.status === 409 || json.duplicate) {
+          // Duplicata — mostra tela informativa (não é erro do usuário)
+          document.getElementById('modalBd').innerHTML = `
+            <div class="f-ok">
+              <div class="ok-ico">📋</div>
+              <h3>Candidatura já registrada!</h3>
+              <p>${json.error}</p>
+            </div>`;
+          return;
+        }
+        if (!r.ok) throw new Error(json.error || 'Erro ao enviar');
         track('click', { button_id: 'form-enviado', button_label: '✅ Formulário Enviado' });
         document.getElementById('modalBd').innerHTML = `
       <div class="f-ok">

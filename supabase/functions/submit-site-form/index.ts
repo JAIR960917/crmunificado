@@ -77,6 +77,30 @@ serve(async (req) => {
 
   if (!nome) return json({ error: "Informe seu nome." }, 400);
 
+  // Verifica duplicata por e-mail ou telefone
+  if (email || telefone) {
+    const orParts: string[] = [];
+    if (email) orParts.push(`email.eq.${email}`);
+    if (telefone) {
+      // Compara apenas dígitos para evitar problema de formatação
+      const digits = telefone.replace(/\D/g, "");
+      if (digits) orParts.push(`telefone.eq.${telefone}`);
+    }
+    if (orParts.length > 0) {
+      const { data: existing } = await supabase
+        .from("site_form_submissions")
+        .select("id")
+        .or(orParts.join(","))
+        .limit(1);
+      if (existing && existing.length > 0) {
+        return json({
+          error: "Já recebemos uma candidatura com este e-mail ou telefone. Nossa equipe entrará em contato em breve!",
+          duplicate: true,
+        }, 409);
+      }
+    }
+  }
+
   const { error } = await supabase.from("site_form_submissions").insert({
     nome: nome || null, email: email || null,
     telefone: telefone || null, data: data ?? {}, status: "novo",
