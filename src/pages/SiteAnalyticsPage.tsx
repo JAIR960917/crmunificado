@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Globe, MousePointerClick, Users, Eye } from "lucide-react";
+import { Globe, MousePointerClick, Users, Eye, FileCheck } from "lucide-react";
 
 type PageView = { page: string; session_id: string | null; created_at: string };
 type ButtonClick = { button_id: string | null; button_label: string | null; page: string; created_at: string };
@@ -28,6 +28,7 @@ export default function SiteAnalyticsPage() {
   const [customEnd, setCustomEnd] = useState(fmt(new Date()));
   const [views, setViews] = useState<PageView[]>([]);
   const [clicks, setClicks] = useState<ButtonClick[]>([]);
+  const [submissions, setSubmissions] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const { startISO, endISO } = useMemo(() => {
@@ -62,9 +63,15 @@ export default function SiteAnalyticsPage() {
         .select("button_id, button_label, page, created_at")
         .gte("created_at", startISO)
         .lte("created_at", endISO),
-    ]).then(([viewsRes, clicksRes]: [any, any]) => {
+      db
+        .from("site_form_submissions")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", startISO)
+        .lte("created_at", endISO),
+    ]).then(([viewsRes, clicksRes, submissionsRes]: [any, any, any]) => {
       setViews((viewsRes.data || []) as PageView[]);
       setClicks((clicksRes.data || []) as ButtonClick[]);
+      setSubmissions(submissionsRes.count ?? 0);
     }).finally(() => setLoading(false));
   }, [startISO, endISO]);
 
@@ -89,20 +96,23 @@ export default function SiteAnalyticsPage() {
   }, [views]);
 
   const topButtons = useMemo(() => {
-    const byBtn = new Map<string, number>();
+    const byBtn = new Map<string, { count: number; id: string | null }>();
     clicks.forEach((c) => {
-      const key = c.button_label || c.button_id || "(sem nome)";
-      byBtn.set(key, (byBtn.get(key) || 0) + 1);
+      const label = c.button_label || c.button_id || "(sem nome)";
+      const prev = byBtn.get(label) ?? { count: 0, id: c.button_id };
+      byBtn.set(label, { count: prev.count + 1, id: c.button_id });
     });
     return Array.from(byBtn.entries())
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 10)
-      .map(([label, count]) => ({ label, count }));
+      .sort(([, a], [, b]) => b.count - a.count)
+      .slice(0, 15)
+      .map(([label, { count, id }]) => ({ label, count, id }));
   }, [clicks]);
 
   const totalVisits = views.length;
   const uniqueSessions = new Set(views.map((v) => v.session_id).filter(Boolean)).size;
-  const totalClicks = clicks.length;
+  // Cliques em botões, excluindo o próprio envio do formulário
+  const totalClicks = clicks.filter(c => c.button_id !== 'form-enviado').length;
+  const conversionRate = uniqueSessions > 0 ? ((submissions / uniqueSessions) * 100).toFixed(1) : "0.0";
 
   return (
     <AppLayout>
@@ -158,10 +168,12 @@ export default function SiteAnalyticsPage() {
         </div>
 
         {/* Cards de resumo */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-          <StatCard label="Total de Visitas" value={totalVisits} icon={Eye} loading={loading} description="Visualizações de página no período" />
-          <StatCard label="Sessões Únicas" value={uniqueSessions} icon={Users} loading={loading} description="Visitantes únicos estimados" />
-          <StatCard label="Total de Cliques" value={totalClicks} icon={MousePointerClick} loading={loading} description="Cliques em botões e links" />
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Total de Visitas" value={totalVisits} icon={Eye} loading={loading} description="Pageviews no período" />
+          <StatCard label="Visitantes Únicos" value={uniqueSessions} icon={Users} loading={loading} description="Sessões únicas estimadas" />
+          <StatCard label="Cliques em Botões" value={totalClicks} icon={MousePointerClick} loading={loading} description="Todos os botões do site" />
+          <StatCard label="Formulários Enviados" value={submissions} icon={FileCheck} loading={loading}
+            description={`Taxa de conversão: ${conversionRate}%`} highlight={submissions > 0} />
         </div>
 
         {/* Gráfico de visitas por dia */}
@@ -250,19 +262,37 @@ export default function SiteAnalyticsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Botão / Link</TableHead>
-                      <TableHead className="text-right w-24">Cliques</TableHead>
+                      <TableHead>Botão / Ação</TableHead>
+                      <TableHead className="text-right w-20">Cliques</TableHead>
+                      <TableHead className="text-right w-20">% Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {topButtons.map((r) => (
-                      <TableRow key={r.label}>
-                        <TableCell className="text-sm">{r.label}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="outline">{r.count}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {topButtons.map((r) => {
+                      const isForm = r.id === 'form-enviado';
+                      const pct = totalClicks > 0 && !isForm
+                        ? ((r.count / totalClicks) * 100).toFixed(0)
+                        : null;
+                      return (
+                        <TableRow key={r.id} className={isForm ? "bg-green-500/5" : undefined}>
+                          <TableCell className="text-sm">
+                            {r.label}
+                            {isForm && (
+                              <Badge className="ml-2 text-[10px] bg-green-600 text-white border-0">formulário</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={isForm ? "default" : "outline"}
+                              className={isForm ? "bg-green-600 text-white border-0" : undefined}>
+                              {r.count}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">
+                            {pct != null ? `${pct}%` : "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -275,29 +305,23 @@ export default function SiteAnalyticsPage() {
 }
 
 function StatCard({
-  label,
-  value,
-  icon: Icon,
-  loading,
-  description,
+  label, value, icon: Icon, loading, description, highlight = false,
 }: {
-  label: string;
-  value: number;
-  icon: any;
-  loading: boolean;
-  description: string;
+  label: string; value: number; icon: any; loading: boolean; description: string; highlight?: boolean;
 }) {
   return (
-    <Card>
+    <Card className={highlight && value > 0 ? "border-green-600/40" : undefined}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{label}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <Icon className={`h-4 w-4 ${highlight && value > 0 ? "text-green-500" : "text-muted-foreground"}`} />
       </CardHeader>
       <CardContent>
         {loading ? (
           <Skeleton className="h-8 w-20" />
         ) : (
-          <div className="text-3xl font-bold">{value.toLocaleString("pt-BR")}</div>
+          <div className={`text-3xl font-bold ${highlight && value > 0 ? "text-green-500" : ""}`}>
+            {value.toLocaleString("pt-BR")}
+          </div>
         )}
         <p className="text-xs text-muted-foreground mt-1">{description}</p>
       </CardContent>

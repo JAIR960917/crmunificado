@@ -1146,7 +1146,7 @@
       <li><a href="#sobre">Sobre</a></li>
       <li><a href="#servicos">Serviços</a></li>
       <li><a href="#franquia">Franquia</a></li>
-      <li><button class="nav-cta" onclick="openModal()">Seja Franqueado</button></li>
+      <li><button class="nav-cta" onclick="openModal('navbar')">Seja Franqueado</button></li>
     </ul>
     <button class="nav-toggle" id="navToggle" onclick="toggleMenu()" aria-label="Menu">
       <span></span><span></span><span></span>
@@ -1156,7 +1156,7 @@
     <a href="#sobre" onclick="closeMenu()">Sobre nós</a>
     <a href="#servicos" onclick="closeMenu()">Serviços</a>
     <a href="#franquia" onclick="closeMenu()">Franquia</a>
-    <a href="#" class="nav-cta-m" onclick="closeMenu();openModal()">
+    <a href="#" class="nav-cta-m" onclick="closeMenu();openModal('menu-mobile')">
       <button class="nav-cta" style="width:100%">Seja Franqueado</button>
     </a>
   </nav>
@@ -1171,10 +1171,10 @@
           <p data-cfg="hero_subtitle">Uma das maiores redes de óticas do Brasil, com 10 lojas e uma equipe dedicada a cuidar da sua saúde visual
             com excelência.</p>
           <div class="hero-btns">
-            <button class="btn-y" data-cfg="hero_btn_primary" onclick="document.getElementById('servicos').scrollIntoView({behavior:'smooth'})">
+            <button class="btn-y" data-cfg="hero_btn_primary" onclick="track('click',{button_id:'btn-servicos',button_label:'Nossos Serviços (Hero)'});document.getElementById('servicos').scrollIntoView({behavior:'smooth'})">
               Nossos serviços →
             </button>
-            <button class="btn-o" data-cfg="hero_btn_secondary" onclick="openModal()">
+            <button class="btn-o" data-cfg="hero_btn_secondary" onclick="openModal('hero')">
               Seja um Franqueado
             </button>
           </div>
@@ -1401,7 +1401,7 @@
             <p>Experiência e aprendizado para te apoiar desde o dia 1.</p>
           </div>
         </div>
-        <button class="btn-fran" data-cfg="franchise_btn" onclick="openModal()">
+        <button class="btn-fran" data-cfg="franchise_btn" onclick="openModal('secao-franquia')">
           Quero ser um franqueado →
         </button>
         <p class="fran-note">Preencha o formulário e nossa equipe entrará em contato em até 24 horas.</p>
@@ -1424,7 +1424,7 @@
             <li><a href="#sobre">Sobre nós</a></li>
             <li><a href="#servicos">Serviços</a></li>
             <li><a href="#franquia">Franquia</a></li>
-            <li><a href="#" onclick="openModal()">Contato</a></li>
+            <li><a href="#" onclick="openModal('footer')">Contato</a></li>
           </ul>
         </div>
         <div class="foot-col">
@@ -1610,8 +1610,16 @@
       bd.innerHTML = `<form id="fform" onsubmit="submitForm(event)">${html}<button type="submit" class="f-submit" id="fsub">Enviar candidatura →</button></form>`;
     }
 
-    async function openModal() {
-      track('click', { button_id: 'btn-franquia', button_label: 'Seja Franqueado' });
+    const SOURCE_LABELS = {
+      'navbar': 'Navbar — Seja Franqueado',
+      'menu-mobile': 'Menu Mobile — Seja Franqueado',
+      'hero': 'Hero — Seja Franqueado',
+      'secao-franquia': 'Seção Franquia — CTA',
+      'footer': 'Rodapé — Contato',
+    };
+    async function openModal(source) {
+      const label = SOURCE_LABELS[source] || 'Seja Franqueado';
+      track('click', { button_id: 'btn-modal-' + (source || 'desconhecido'), button_label: label });
       document.getElementById('overlay').classList.add('open');
       document.body.style.overflow = 'hidden';
       if (!loaded) { await loadFields(); renderForm(); }
@@ -1645,7 +1653,7 @@
         });
         const json = await r.json();
         if (!r.ok) throw new Error(json.error || 'Erro');
-        track('click', { button_id: 'form-submit', button_label: 'Formulário Franquia Enviado' });
+        track('click', { button_id: 'form-enviado', button_label: '✅ Formulário Enviado' });
         document.getElementById('modalBd').innerHTML = `
       <div class="f-ok">
         <div class="ok-ico">🎉</div>
