@@ -432,6 +432,44 @@ export function parseWhatsAppMessage(msg: Record<string, unknown>): ParsedWaMess
     };
   }
 
+  if (type === "reaction") {
+    const reaction = msg.reaction as { emoji?: string } | undefined;
+    const emoji = reaction?.emoji || "👍";
+    const text = `${emoji} Reagiu à mensagem`;
+    return { messageType: "text", text, preview: text };
+  }
+
+  if (type === "location") {
+    const loc = msg.location as { latitude?: number; longitude?: number; name?: string; address?: string } | undefined;
+    const label = loc?.name || loc?.address || "";
+    const coords = loc?.latitude != null && loc?.longitude != null ? `${loc.latitude},${loc.longitude}` : null;
+    const text = label
+      ? `📍 ${label}${coords ? ` (${coords})` : ""}`
+      : coords
+      ? `📍 Localização: ${coords}`
+      : "📍 Localização";
+    return { messageType: "text", text, preview: text };
+  }
+
+  if (type === "contacts") {
+    const cts = msg.contacts as { name?: { formatted_name?: string }; phones?: { phone?: string }[] }[] | undefined;
+    const first = cts?.[0];
+    const name = first?.name?.formatted_name || "Contato";
+    const phone = first?.phones?.[0]?.phone || "";
+    const text = phone ? `👤 ${name} — ${phone}` : `👤 ${name}`;
+    const preview = cts && cts.length > 1 ? `👤 ${cts.length} contatos compartilhados` : text;
+    return { messageType: "text", text, preview };
+  }
+
+  if (type === "order") {
+    return { messageType: "text", text: "🛒 Pedido recebido via WhatsApp", preview: "🛒 Pedido" };
+  }
+
+  if (type === "unsupported" || type === "system") {
+    const text = "📵 Mensagem não suportada (enquete, evento ou outro tipo)";
+    return { messageType: "text", text, preview: text };
+  }
+
   const fallback = `[${type}]`;
   return { messageType: "text", text: fallback, preview: fallback };
 }

@@ -75,7 +75,22 @@ export default function WhatsAppMediaMessage({ message }: { message: MediaMessag
   }, [isMedia, message.id, message.media_id]);
 
   if (!isMedia) {
-    return <p className="whitespace-pre-wrap leading-relaxed">{message.body || "—"}</p>;
+    const body = message.body || "—";
+    if (body === "[unsupported]") {
+      return (
+        <p className="text-xs italic text-muted-foreground">
+          📵 Mensagem não suportada (enquete, evento ou outro tipo)
+        </p>
+      );
+    }
+    if (body.startsWith("[") && body.endsWith("]") && body !== "[audio]") {
+      return (
+        <p className="text-xs italic text-muted-foreground">
+          Tipo de mensagem desconhecido: {body}
+        </p>
+      );
+    }
+    return <p className="whitespace-pre-wrap leading-relaxed">{body}</p>;
   }
 
   if (!message.media_id) {
