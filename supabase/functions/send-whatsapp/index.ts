@@ -901,15 +901,17 @@ serve(async (req) => {
           }
 
           // Reforço: também ignora envios anteriores feitos APÓS a entrada
-          // atual na coluna (cobre execuções simultâneas onde o lock ainda
-          // não foi gravado).
+          // atual na coluna OU nos últimos 7 dias (cobre o caso em que o card
+          // saiu e voltou para a mesma coluna no mesmo dia, fazendo o trigger
+          // DB resetar gatilho_enviado_em e criar um novo status_entered_at).
           const enteredAt = resolveCardEnteredAt(card);
           const enteredAtIso = enteredAt.toISOString();
           const enteredAtMs = enteredAt.getTime();
+          const cooldownMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
           const sendsMapForCard = sendsByCardWithTs.get(card.id) || new Map<string, number>();
           const sentStepIds = new Set<string>();
           for (const [stepId, ts] of sendsMapForCard.entries()) {
-            if (ts >= enteredAtMs) sentStepIds.add(stepId);
+            if (ts >= enteredAtMs || ts >= cooldownMs) sentStepIds.add(stepId);
           }
 
           // Resolve sessão por card
