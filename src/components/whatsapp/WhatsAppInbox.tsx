@@ -40,10 +40,21 @@ import {
   Square,
   Bell,
   BellOff,
+  Trash2,
   UserCheck,
   UserX,
   ArrowRightLeft,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   getNotificationPermission,
   requestWhatsAppNotificationPermission,
@@ -252,6 +263,9 @@ export default function WhatsAppInbox() {
   const [notifyPermission, setNotifyPermission] = useState(() => getNotificationPermission());
   /** Onde o painel lateral encontrou o card (cobrança / renovação / lead). */
   const [panelResolvedModule, setPanelResolvedModule] = useState<ModuleKey | null>(null);
+
+  const [deletingMsgId, setDeletingMsgId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [conversationActionLoading, setConversationActionLoading] = useState<"accept" | "close" | "transfer" | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -711,6 +725,25 @@ export default function WhatsAppInbox() {
       setConversationActionLoading(null);
     }
   }, [conversation, transferTarget, transferUsers, applyConversationPatch, loadConversations]);
+
+  const handleDeleteMessage = useCallback(async () => {
+    if (!deletingMsgId) return;
+    setDeleteLoading(true);
+    try {
+      const { error } = await supabase
+        .from("whatsapp_messages")
+        .delete()
+        .eq("id", deletingMsgId);
+      if (error) throw error;
+      setMessages((prev) => prev.filter((m) => m.id !== deletingMsgId));
+      toast.success("Mensagem excluída.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir mensagem");
+    } finally {
+      setDeletingMsgId(null);
+      setDeleteLoading(false);
+    }
+  }, [deletingMsgId]);
 
   const loadMessages = useCallback(async (conversationId: string) => {
     const extendedCols =
@@ -1456,8 +1489,18 @@ export default function WhatsAppInbox() {
                       {messages.map((msg) => {
                         const out = msg.direction === "out";
                         const at = new Date(msg.created_at);
+                        const canDelete = out && (isAdmin || isGerente || msg.sent_by === user?.id);
                         return (
-                          <div key={msg.id} className={cn("flex", out ? "justify-end" : "justify-start")}>
+                          <div key={msg.id} className={cn("group flex items-end gap-1", out ? "justify-end" : "justify-start")}>
+                            {out && canDelete && (
+                              <button
+                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                title="Excluir mensagem"
+                                onClick={() => setDeletingMsgId(msg.id)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                             <div
                               className={cn(
                                 "relative max-w-[85%] rounded-lg px-3 py-2 text-sm shadow-sm",
@@ -1815,6 +1858,28 @@ export default function WhatsAppInbox() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={!!deletingMsgId} onOpenChange={(open) => { if (!open) setDeletingMsgId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir mensagem</AlertDialogTitle>
+            <AlertDialogDescription>
+              A mensagem será removida do histórico do CRM. Ela <strong>não</strong> será apagada do
+              WhatsApp do cliente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteLoading}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              onClick={() => void handleDeleteMessage()}
+            >
+              {deleteLoading ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
