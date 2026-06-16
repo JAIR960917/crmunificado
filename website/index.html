@@ -27,7 +27,8 @@
 
     body {
       font-family: 'Inter', -apple-system, sans-serif;
-      background: #0a0a0a;
+      background: radial-gradient(ellipse at 50% 30%, #1a0508 0%, #0a0a0a 60%);
+      background-attachment: fixed;
       color: #d1d5db;
       line-height: 1.6;
     }
@@ -248,9 +249,9 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: rgba(245, 158, 11, .14);
-      border: 1px solid rgba(245, 158, 11, .38);
-      color: var(--amber);
+      background: rgba(200, 16, 46, .12);
+      border: 1px solid rgba(200, 16, 46, .35);
+      color: var(--blue-l);
       padding: 5px 14px;
       border-radius: 100px;
       font-size: .75rem;
@@ -271,7 +272,7 @@
 
     .hero h1 em {
       font-style: normal;
-      color: var(--amber);
+      color: var(--blue-l);
     }
 
     .hero p {
@@ -289,8 +290,8 @@
     }
 
     .btn-y {
-      background: var(--amber);
-      color: var(--slate-900);
+      background: var(--blue);
+      color: #fff;
       padding: 14px 30px;
       border-radius: var(--r);
       font-size: .95rem;
@@ -305,9 +306,9 @@
     }
 
     .btn-y:hover {
-      background: var(--amber-h);
+      background: var(--blue-h);
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(245, 158, 11, .42);
+      box-shadow: 0 8px 24px rgba(200, 16, 46, .45);
     }
 
     .btn-o {
@@ -347,7 +348,7 @@
     }
 
     .stat-v b {
-      color: var(--amber);
+      color: var(--blue);
       font-weight: 900;
     }
 
@@ -383,7 +384,7 @@
     .hero-card-icon {
       width: 52px;
       height: 52px;
-      background: var(--amber);
+      background: var(--blue);
       border-radius: 14px;
       display: flex;
       align-items: center;
@@ -421,7 +422,7 @@
     .hc-dot {
       width: 8px;
       height: 8px;
-      background: var(--amber);
+      background: var(--blue);
       border-radius: 50%;
       flex-shrink: 0;
     }
@@ -520,7 +521,8 @@
       border-radius: 20px;
       overflow: hidden;
       aspect-ratio: 4/3;
-      background: linear-gradient(135deg, #2a0008, var(--blue));
+      background: linear-gradient(135deg, #180408 0%, #250810 100%);
+      border: 1px solid rgba(200, 16, 46, .18);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -588,7 +590,9 @@
 
     /* ===== NUMBERS ===== */
     .numbers-bg {
-      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-h) 100%);
+      background: linear-gradient(135deg, #1c0609 0%, #120406 100%);
+      border-top: 1px solid rgba(200, 16, 46, .15);
+      border-bottom: 1px solid rgba(200, 16, 46, .15);
     }
 
     .numbers-grid {
@@ -615,12 +619,12 @@
     }
 
     .num-v b {
-      color: var(--amber);
+      color: var(--blue);
     }
 
     .num-l {
       font-size: .8rem;
-      color: rgba(255, 255, 255, .62);
+      color: rgba(255, 255, 255, .45);
       margin-top: 8px;
       letter-spacing: .04em;
       text-transform: uppercase;
@@ -687,7 +691,7 @@
     }
 
     .test-stars {
-      color: var(--amber);
+      color: var(--blue);
       font-size: 1rem;
       margin-bottom: 12px;
       letter-spacing: 2px;
@@ -737,7 +741,7 @@
     }
 
     .fran-inner .tag {
-      color: var(--amber);
+      color: var(--blue);
     }
 
     .fran-inner h2 {
@@ -751,7 +755,7 @@
 
     .fran-inner h2 em {
       font-style: normal;
-      color: var(--amber);
+      color: var(--blue);
     }
 
     .fran-inner>p {
@@ -779,7 +783,7 @@
     .fc-n {
       font-size: 2.2rem;
       font-weight: 900;
-      color: var(--amber);
+      color: #fff;
       line-height: 1;
       margin-bottom: 10px;
     }
@@ -798,8 +802,8 @@
     }
 
     .btn-fran {
-      background: var(--amber);
-      color: var(--slate-900);
+      background: var(--blue);
+      color: #fff;
       padding: 18px 48px;
       border-radius: var(--r);
       font-size: 1.05rem;
@@ -814,9 +818,9 @@
     }
 
     .btn-fran:hover {
-      background: var(--amber-h);
+      background: var(--blue-h);
       transform: translateY(-3px);
-      box-shadow: 0 12px 40px rgba(245, 158, 11, .42);
+      box-shadow: 0 12px 40px rgba(200, 16, 46, .45);
     }
 
     .fran-note {
