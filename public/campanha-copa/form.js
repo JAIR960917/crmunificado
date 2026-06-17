@@ -503,7 +503,7 @@
       jogo_key: currentJogoKey,
       nome: document.getElementById("nome").value.trim(),
       cpf: document.getElementById("cpf").value.trim(),
-      idade: document.getElementById("idade").value.trim(),
+      idade: document.getElementById("idade").value.replace(/\D/g, ""),
       cidade: municipio && uf ? municipio + "/" + uf : municipio || uf,
       telefone: document.getElementById("telefone").value.trim(),
       usa_oculos: getRadioValue("usa_oculos"),
