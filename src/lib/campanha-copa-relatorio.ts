@@ -103,12 +103,28 @@ type RenovacaoLite = {
   id: string;
   status: string;
   data_ultima_compra: string | null;
+  data_ultima_venda: string | null;
   ssotica_company_id: string;
   cpf_digits: string;
   phone_digits: string;
   updated_at: string;
   created_at: string;
 };
+
+/**
+ * data_ultima_compra prioriza a data da última RECEITA (exame de vista)
+ * sobre a venda quando o cliente tem alguma receita no histórico (regra do
+ * fluxo de Renovação). Isso esconde vendas novas sem receita associada.
+ * Usamos o maior valor entre data_ultima_compra e data_ultima_venda (JSONB)
+ * para saber a data real da compra mais recente.
+ */
+function ultimaCompraReal(ren: RenovacaoLite): string | null {
+  const a = ren.data_ultima_compra;
+  const b = ren.data_ultima_venda;
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return a >= b ? a : b;
+}
 
 /**
  * Compara uma data (coluna `date`, ex.: "2026-06-17") com um timestamp
@@ -444,21 +460,23 @@ export async function fetchCampanhaCopaRelatorio(
       renovacao_status_label: matched?.status
         ? statusLabelByKey.get(matched.status) ?? matched.status
         : null,
-      renovacao_match_data_compra: matched?.data_ultima_compra ?? null,
+      renovacao_match_data_compra: matched ? ultimaCompraReal(matched) : null,
       renovacao_match_company_id: renovacaoCompanyId,
       renovacao_company_name: renovacaoCompanyId
         ? companyNameById.get(renovacaoCompanyId) ?? null
         : null,
       converteu_apos_campanha: !!(
-        matched?.data_ultima_compra &&
-        dateOnOrAfterTimestamp(matched.data_ultima_compra, sub.created_at)
+        matched &&
+        ultimaCompraReal(matched) &&
+        dateOnOrAfterTimestamp(ultimaCompraReal(matched)!, sub.created_at)
       ),
       // O registro de renovação só existe a partir da primeira compra conhecida.
-      // Se ele foi criado DEPOIS da inscrição na campanha, o cliente ainda não
-      // existia como comprador no momento em que participou — ou seja, era um
-      // prospect que converteu. Se já existia antes, já era cliente.
+      // Se ele foi criado no MESMO DIA ou DEPOIS da inscrição na campanha, o
+      // cliente ainda não existia como comprador no momento em que participou
+      // — ou seja, era um prospect que converteu. Se já existia em um dia
+      // anterior à inscrição, já era cliente.
       cliente_novo_pos_campanha: !!(
-        matched?.created_at && timestampBefore(sub.created_at, matched.created_at)
+        matched?.created_at && !timestampBefore(matched.created_at, sub.created_at)
       ),
     };
   });
