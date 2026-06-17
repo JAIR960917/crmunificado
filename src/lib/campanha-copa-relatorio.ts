@@ -71,6 +71,7 @@ export type CampanhaCopaRelatorioRow = {
   renovacao_match_company_id: string | null;
   renovacao_company_name: string | null;
   converteu_apos_campanha: boolean;
+  cliente_novo_pos_campanha: boolean;
 };
 
 export type CampanhaCopaRelatorioResult = {
@@ -106,7 +107,22 @@ type RenovacaoLite = {
   cpf_digits: string;
   phone_digits: string;
   updated_at: string;
+  created_at: string;
 };
+
+/**
+ * Compara uma data (coluna `date`, ex.: "2026-06-17") com um timestamp
+ * completo (ex.: "2026-06-17T14:23:00.000Z") por dia civil, evitando o caso
+ * em que uma compra no MESMO DIA da inscrição é avaliada como anterior por
+ * comparação de string pura (string mais curta é "menor").
+ */
+function dateOnOrAfterTimestamp(dateOnly: string, isoTimestamp: string): boolean {
+  return dateOnly.slice(0, 10) >= isoTimestamp.slice(0, 10);
+}
+
+function timestampBefore(isoA: string, isoB: string): boolean {
+  return isoA.slice(0, 10) < isoB.slice(0, 10);
+}
 
 const MAX_SUBMISSIONS = 5000;
 
@@ -243,16 +259,17 @@ function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRelatorioMe
   const prospect = rows.filter((r) => r.renovacao_match === "nao" || r.renovacao_match === "outra_loja").length;
   const outra_loja = 0;
   const consentimento_marketing = rows.filter((r) => r.consentimento_marketing).length;
-  // Comprou APÓS a data da inscrição na campanha (última compra > data do formulário),
-  // independente de já ser cliente (em renovação) ou não no momento da inscrição.
+  // Comprou APÓS a data da inscrição na campanha (última compra >= data do
+  // formulário), independente de já ser cliente (em renovação) ou não no
+  // momento da inscrição.
   const convertidos = rows.filter((r) => r.converteu_apos_campanha).length;
-  // Apenas quem NÃO estava em renovação (prospect: "nao" ou "outra_loja") e
-  // comprou após a campanha — aproximação de "nunca tinha comprado antes",
-  // pois data_ultima_compra > created_at indica que no momento da inscrição a
-  // pessoa ainda não tinha compra registrada. Requer step-2 (sync SSótica) para
-  // precisão total.
+  // Apenas quem NÃO tinha nenhum registro de compra antes de se inscrever
+  // (o registro de renovação só passou a existir DEPOIS da inscrição) e
+  // comprou após a campanha. Não usa o status atual de renovação, pois esse
+  // muda para "sim" assim que a primeira compra é sincronizada — o que faria
+  // o próprio prospect convertido "desaparecer" da contagem.
   const prospect_convertidos = rows.filter(
-    (r) => r.renovacao_match !== "sim" && r.converteu_apos_campanha,
+    (r) => r.cliente_novo_pos_campanha && r.converteu_apos_campanha,
   ).length;
 
   const empresaMap = new Map<string, number>();
@@ -434,7 +451,14 @@ export async function fetchCampanhaCopaRelatorio(
         : null,
       converteu_apos_campanha: !!(
         matched?.data_ultima_compra &&
-        matched.data_ultima_compra > sub.created_at
+        dateOnOrAfterTimestamp(matched.data_ultima_compra, sub.created_at)
+      ),
+      // O registro de renovação só existe a partir da primeira compra conhecida.
+      // Se ele foi criado DEPOIS da inscrição na campanha, o cliente ainda não
+      // existia como comprador no momento em que participou — ou seja, era um
+      // prospect que converteu. Se já existia antes, já era cliente.
+      cliente_novo_pos_campanha: !!(
+        matched?.created_at && timestampBefore(sub.created_at, matched.created_at)
       ),
     };
   });
