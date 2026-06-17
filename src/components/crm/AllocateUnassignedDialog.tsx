@@ -149,12 +149,12 @@ export default function AllocateUnassignedDialog({ open, onOpenChange, companies
               type="button"
               variant={mode === "cidade" ? "default" : "outline"}
               onClick={() => setMode("cidade")}
-              className="h-auto flex-col items-start gap-1 py-2 text-left"
+              className="h-auto w-full flex-col items-start justify-start gap-1 whitespace-normal py-2 text-left"
             >
-              <span className="flex items-center gap-1.5 text-sm font-medium">
-                <MapPin className="h-4 w-4" /> Por cidade
+              <span className="flex w-full items-center gap-1.5 text-sm font-medium">
+                <MapPin className="h-4 w-4 shrink-0" /> Por cidade
               </span>
-              <span className="text-xs font-normal opacity-80">
+              <span className="block w-full whitespace-normal text-xs font-normal leading-snug opacity-80">
                 Envia cada lead para a empresa correta, conforme a cidade dele
               </span>
             </Button>
@@ -162,12 +162,12 @@ export default function AllocateUnassignedDialog({ open, onOpenChange, companies
               type="button"
               variant={mode === "empresa" ? "default" : "outline"}
               onClick={() => setMode("empresa")}
-              className="h-auto flex-col items-start gap-1 py-2 text-left"
+              className="h-auto w-full flex-col items-start justify-start gap-1 whitespace-normal py-2 text-left"
             >
-              <span className="flex items-center gap-1.5 text-sm font-medium">
-                <Building2 className="h-4 w-4" /> Empresa específica
+              <span className="flex w-full items-center gap-1.5 text-sm font-medium">
+                <Building2 className="h-4 w-4 shrink-0" /> Empresa específica
               </span>
-              <span className="text-xs font-normal opacity-80">
+              <span className="block w-full whitespace-normal text-xs font-normal leading-snug opacity-80">
                 Envia todos os leads sem usuário para uma única empresa escolhida
               </span>
             </Button>
