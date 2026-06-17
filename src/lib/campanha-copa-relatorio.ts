@@ -24,6 +24,7 @@ export type CampanhaCopaRelatorioFilters = {
   assigned_to?: string | null;
   placar?: string | null;
   company_id?: string | null;
+  converteu?: boolean | null;
 };
 
 export type CampanhaCopaRelatorioMetrics = {
@@ -35,6 +36,8 @@ export type CampanhaCopaRelatorioMetrics = {
   pct_prospect: number;
   pct_outra_loja: number;
   consentimento_marketing: number;
+  convertidos: number;
+  prospect_convertidos: number;
   por_empresa: Array<{ empresa: string; total: number }>;
   por_exame: Array<{ exame: string; total: number }>;
 };
@@ -67,6 +70,7 @@ export type CampanhaCopaRelatorioRow = {
   renovacao_match_data_compra: string | null;
   renovacao_match_company_id: string | null;
   renovacao_company_name: string | null;
+  converteu_apos_campanha: boolean;
 };
 
 export type CampanhaCopaRelatorioResult = {
@@ -239,6 +243,13 @@ function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRelatorioMe
   const prospect = rows.filter((r) => r.renovacao_match === "nao" || r.renovacao_match === "outra_loja").length;
   const outra_loja = 0;
   const consentimento_marketing = rows.filter((r) => r.consentimento_marketing).length;
+  // Comprou APÓS a data da inscrição na campanha (última compra > data do formulário)
+  const convertidos = rows.filter((r) => r.converteu_apos_campanha).length;
+  // "Nunca tinha comprado" que depois comprou: aproximação pelo mesmo critério,
+  // pois data_ultima_compra > created_at indica que no momento da inscrição a
+  // pessoa ainda não tinha compra registrada. Requer step-2 (sync SSótica) para
+  // precisão total.
+  const prospect_convertidos = convertidos;
 
   const empresaMap = new Map<string, number>();
   const exameMap = new Map<string, number>();
@@ -266,6 +277,8 @@ function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRelatorioMe
     pct_prospect: total > 0 ? Math.round((prospect / total) * 1000) / 10 : 0,
     pct_outra_loja: total > 0 ? Math.round((outra_loja / total) * 1000) / 10 : 0,
     consentimento_marketing,
+    convertidos,
+    prospect_convertidos,
     por_empresa,
     por_exame,
   };
@@ -415,6 +428,10 @@ export async function fetchCampanhaCopaRelatorio(
       renovacao_company_name: renovacaoCompanyId
         ? companyNameById.get(renovacaoCompanyId) ?? null
         : null,
+      converteu_apos_campanha: !!(
+        matched?.data_ultima_compra &&
+        matched.data_ultima_compra > sub.created_at
+      ),
     };
   });
 
@@ -424,6 +441,10 @@ export async function fetchCampanhaCopaRelatorio(
 
   if (filters.company_id) {
     rows = rows.filter((r) => r.company_id === filters.company_id);
+  }
+
+  if (filters.converteu != null) {
+    rows = rows.filter((r) => r.converteu_apos_campanha === filters.converteu);
   }
 
   return {

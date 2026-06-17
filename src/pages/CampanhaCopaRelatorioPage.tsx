@@ -9,6 +9,7 @@ import {
   Filter,
   Loader2,
   RefreshCw,
+  ShoppingBag,
   Trophy,
   UserCheck,
   Users,
@@ -119,6 +120,8 @@ export default function CampanhaCopaRelatorioPage() {
     pct_prospect: 0,
     pct_outra_loja: 0,
     consentimento_marketing: 0,
+    convertidos: 0,
+    prospect_convertidos: 0,
     por_empresa: [] as Array<{ empresa: string; total: number }>,
     por_exame: [] as Array<{ exame: string; total: number }>,
   });
@@ -137,6 +140,7 @@ export default function CampanhaCopaRelatorioPage() {
   const [jogoOptions, setJogoOptions] = useState<string[]>([]);
   const [empresaOptions, setEmpresaOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [empresa, setEmpresa] = useState(ALL);
+  const [converteu, setConverteu] = useState(ALL);
 
   const placarFiltro = useMemo(
     () => normalizePlacarInput(placarHome, placarAway),
@@ -153,7 +157,8 @@ export default function CampanhaCopaRelatorioPage() {
     assigned_to: assignedTo === ALL ? null : assignedTo,
     placar: placarFiltro,
     company_id: empresa === ALL ? null : empresa,
-  }), [ultimoExame, cidade, jogo, dataInicio, dataFim, renovacaoFiltro, assignedTo, placarFiltro, empresa]);
+    converteu: converteu === ALL ? null : converteu === "sim",
+  }), [ultimoExame, cidade, jogo, dataInicio, dataFim, renovacaoFiltro, assignedTo, placarFiltro, empresa, converteu]);
 
   const loadMeta = useCallback(async () => {
     const [profRes, meta] = await Promise.all([
@@ -357,6 +362,20 @@ export default function CampanhaCopaRelatorioPage() {
                 </Select>
               </div>
 
+              <div className="space-y-2">
+                <Label>Comprou após a campanha?</Label>
+                <Select value={converteu} onValueChange={setConverteu}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>Todos</SelectItem>
+                    <SelectItem value="sim">Sim — comprou após a inscrição</SelectItem>
+                    <SelectItem value="nao">Não — ainda não comprou</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2 sm:col-span-2">
                 <Label>Placar (palpite)</Label>
                 <div className="flex items-center gap-2">
@@ -436,6 +455,55 @@ export default function CampanhaCopaRelatorioPage() {
               </CardTitle>
             </CardHeader>
           </Card>
+          <Card className="border-amber-500/40 bg-amber-500/5">
+            <CardHeader className="pb-2">
+              <CardDescription className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                <ShoppingBag className="h-3.5 w-3.5" />
+                Compraram após a campanha
+              </CardDescription>
+              <CardTitle className="text-3xl text-amber-600 dark:text-amber-400">
+                {metrics.convertidos}
+                <span className="text-base font-normal text-muted-foreground ml-2">
+                  ({metrics.total > 0 ? Math.round((metrics.convertidos / metrics.total) * 100) : 0}%)
+                </span>
+              </CardTitle>
+              <p className="text-xs text-muted-foreground pt-1">
+                Última compra registrada é posterior à data de inscrição
+              </p>
+            </CardHeader>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+          <Card className="border-green-500/40 bg-green-500/5">
+            <CardHeader className="pb-2">
+              <CardDescription className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                <ShoppingBag className="h-3.5 w-3.5" />
+                Prospects que compraram (nunca havia comprado)
+              </CardDescription>
+              <CardTitle className="text-3xl text-green-600 dark:text-green-400">
+                {metrics.prospect_convertidos}
+                <span className="text-base font-normal text-muted-foreground ml-2">
+                  ({metrics.prospect > 0 ? Math.round((metrics.prospect_convertidos / (metrics.prospect + metrics.prospect_convertidos)) * 100) : 0}% dos prospects)
+                </span>
+              </CardTitle>
+              <p className="text-xs text-muted-foreground pt-1">
+                Leads sem histórico de compra anterior que converteram após a campanha
+              </p>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Consentimento de marketing</CardTitle>
+              <CardDescription>
+                {metrics.consentimento_marketing} de {metrics.total} inscrições autorizaram comunicações (
+                {metrics.total > 0
+                  ? Math.round((metrics.consentimento_marketing / metrics.total) * 100)
+                  : 0}
+                %)
+              </CardDescription>
+            </CardHeader>
+          </Card>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -490,19 +558,6 @@ export default function CampanhaCopaRelatorioPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Consentimento de marketing</CardTitle>
-            <CardDescription>
-              {metrics.consentimento_marketing} de {metrics.total} inscrições autorizaram comunicações (
-              {metrics.total > 0
-                ? Math.round((metrics.consentimento_marketing / metrics.total) * 100)
-                : 0}
-              %)
-            </CardDescription>
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle className="text-base">Inscrições detalhadas</CardTitle>
@@ -544,6 +599,7 @@ export default function CampanhaCopaRelatorioPage() {
                     <TableHead>Palpite</TableHead>
                     <TableHead>Último exame</TableHead>
                     <TableHead>Em Renovação?</TableHead>
+                    <TableHead>Comprou após?</TableHead>
                     <TableHead>Coluna Renovação</TableHead>
                     <TableHead>Última compra SSótica</TableHead>
                     <TableHead>Loja</TableHead>
@@ -576,6 +632,13 @@ export default function CampanhaCopaRelatorioPage() {
                           <div className="text-[10px] text-muted-foreground mt-0.5">
                             via {row.renovacao_match_type}
                           </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.converteu_apos_campanha ? (
+                          <Badge className="bg-amber-600 hover:bg-amber-600 text-white">Sim</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground">Não</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-sm">
