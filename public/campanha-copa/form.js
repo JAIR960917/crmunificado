@@ -23,11 +23,36 @@
   var periodoAberto = true;
   var periodoMensagem = "";
 
-  // Injeção dinâmica de código via API desabilitada por segurança.
-  // Para adicionar pixels (Meta, Google), configure-os diretamente no <head>
-  // do index.html da campanha com o código fixo do pixel.
-  function injectFormPixel(_snippet) { /* desabilitado */ }
-  function injectSuccessPixel() { /* desabilitado */ }
+  // Injeta um snippet HTML/JS no documento. Scripts precisam ser re-criados
+  // porque innerHTML não executa <script> automaticamente.
+  function injectSnippet(html) {
+    if (!html || !html.trim()) return;
+    var tmp = document.createElement("div");
+    tmp.innerHTML = html;
+
+    tmp.querySelectorAll("script").forEach(function (old) {
+      var s = document.createElement("script");
+      Array.from(old.attributes).forEach(function (a) { s.setAttribute(a.name, a.value); });
+      if (!old.src) s.textContent = old.textContent;
+      document.head.appendChild(s);
+    });
+
+    tmp.querySelectorAll("noscript").forEach(function (ns) {
+      document.body.appendChild(ns.cloneNode(true));
+    });
+  }
+
+  function injectFormPixel(snippet) {
+    if (!snippet || pixelFormInjected) return;
+    pixelFormInjected = true;
+    injectSnippet(snippet);
+  }
+
+  function injectSuccessPixel() {
+    if (!pixelSuccessSnippet || pixelSuccessInjected) return;
+    pixelSuccessInjected = true;
+    injectSnippet(pixelSuccessSnippet);
+  }
 
   function getConfig() {
     var cfg = window.__CRM_RUNTIME_CONFIG__ || {};
