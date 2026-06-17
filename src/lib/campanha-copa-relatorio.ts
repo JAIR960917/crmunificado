@@ -243,13 +243,17 @@ function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRelatorioMe
   const prospect = rows.filter((r) => r.renovacao_match === "nao" || r.renovacao_match === "outra_loja").length;
   const outra_loja = 0;
   const consentimento_marketing = rows.filter((r) => r.consentimento_marketing).length;
-  // Comprou APÓS a data da inscrição na campanha (última compra > data do formulário)
+  // Comprou APÓS a data da inscrição na campanha (última compra > data do formulário),
+  // independente de já ser cliente (em renovação) ou não no momento da inscrição.
   const convertidos = rows.filter((r) => r.converteu_apos_campanha).length;
-  // "Nunca tinha comprado" que depois comprou: aproximação pelo mesmo critério,
+  // Apenas quem NÃO estava em renovação (prospect: "nao" ou "outra_loja") e
+  // comprou após a campanha — aproximação de "nunca tinha comprado antes",
   // pois data_ultima_compra > created_at indica que no momento da inscrição a
   // pessoa ainda não tinha compra registrada. Requer step-2 (sync SSótica) para
   // precisão total.
-  const prospect_convertidos = convertidos;
+  const prospect_convertidos = rows.filter(
+    (r) => r.renovacao_match !== "sim" && r.converteu_apos_campanha,
+  ).length;
 
   const empresaMap = new Map<string, number>();
   const exameMap = new Map<string, number>();
