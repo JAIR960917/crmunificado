@@ -16,6 +16,8 @@ type FormFieldInfo = {
   is_name_field?: boolean;
   is_phone_field?: boolean;
   show_on_card?: boolean;
+  parent_field_id?: string | null;
+  parent_trigger_value?: string | null;
 };
 
 type LeadActivity = {
@@ -180,6 +182,12 @@ export default function LeadCard({
       {formFields
         .filter((f) => {
           if (nameFieldIds.has(f.id) || phoneFieldIds.has(f.id)) return false;
+          // Campo condicional: só exibe se a resposta do pai bater com o valor que o ativa
+          if (f.parent_field_id) {
+            const parentValue = data[`field_${f.parent_field_id}`];
+            const parentValues = Array.isArray(parentValue) ? parentValue : [parentValue];
+            if (!parentValues.includes(f.parent_trigger_value)) return false;
+          }
           if (f.show_on_card) return true;
           const label = (f.label || "").toLowerCase();
           return /exame|dor|sintoma|doen|idade|cidade|acuidade/.test(label);
@@ -187,7 +195,9 @@ export default function LeadCard({
         .map((f) => {
           const value = data[`field_${f.id}`];
           if (value === undefined || value === null || value === "") return null;
-          const display = f.field_type === "visual_acuity"
+          const isPlainObject = value && typeof value === "object" && !Array.isArray(value);
+          if (isPlainObject && f.field_type !== "visual_acuity") return null;
+          const display = isPlainObject
             ? formatVisualAcuityDisplay(value)
             : Array.isArray(value)
               ? value.join(", ")

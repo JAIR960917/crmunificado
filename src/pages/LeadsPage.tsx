@@ -43,7 +43,7 @@ type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string; is_system_excluded?: boolean;
 };
 type Company = { id: string; name: string };
-type FormFieldInfo = { id: string; label: string; position?: number; is_name_field: boolean; is_phone_field: boolean; show_on_card?: boolean; status_mapping?: Record<string, string> | null; date_status_ranges?: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null };
+type FormFieldInfo = { id: string; label: string; field_type?: string; position?: number; is_name_field: boolean; is_phone_field: boolean; show_on_card?: boolean; parent_field_id?: string | null; parent_trigger_value?: string | null; status_mapping?: Record<string, string> | null; date_status_ranges?: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null };
 type LeadActivity = { id: string; lead_id: string; title: string; scheduled_date: string; completed_at: string | null };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
@@ -217,7 +217,7 @@ export default function LeadsPage() {
         supabase.from("crm_statuses").select("*").order("position"),
         supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle(),
         supabase.from("manager_companies").select("company_id").eq("user_id", user!.id),
-        supabase.from("crm_form_fields").select("id, label, position, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
+        supabase.from("crm_form_fields").select("id, label, field_type, position, is_name_field, is_phone_field, show_on_card, parent_field_id, parent_trigger_value, status_mapping, date_status_ranges").order("position"),
         supabase.from("crm_form_fields").select("*").order("position"),
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
         supabase.from("user_roles").select("user_id, role"),

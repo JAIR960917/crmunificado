@@ -602,7 +602,7 @@ export default function LeadFormDialog({
       const fieldKey = `field_${field.id}`;
       const raw = formData[fieldKey];
       let display = "";
-      if (field.field_type === "visual_acuity") {
+      if (field.field_type === "visual_acuity" || (raw && typeof raw === "object" && !Array.isArray(raw))) {
         display = formatVisualAcuityReview(raw);
       } else if (Array.isArray(raw)) {
         display = raw.length > 0 ? raw.join(", ") : "—";
