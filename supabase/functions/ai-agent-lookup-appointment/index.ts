@@ -135,19 +135,23 @@ serve(async (req) => {
       .map((r) => `${r.nome || "Cliente"} — ${formatDateTimeBR(r.scheduled_datetime)} (status: ${r.confirmacao || "Pendente"})`)
       .join("; ");
 
+    // Não envia o ISO datetime bruto: o modelo às vezes "recalcula" a data/hora
+    // sozinho a partir do offset (-03:00) e erra (soma 3h, virando horário
+    // UTC). Manda só o texto já formatado em horário de Brasília.
     return jsonResponse({
       ok: true,
       appointments: relevant.map((r) => ({
         id: r.id,
         nome: r.nome,
-        scheduled_datetime: r.scheduled_datetime,
+        data_hora: formatDateTimeBR(r.scheduled_datetime),
         confirmacao: r.confirmacao,
         comparecimento: r.comparecimento,
       })),
       message:
-        future.length > 0
+        (future.length > 0
           ? `Agendamento(s) encontrado(s): ${lista}.`
-          : `Não há agendamento futuro. Último encontrado (já passou): ${lista}.`,
+          : `Não há agendamento futuro. Último encontrado (já passou): ${lista}.`) +
+        " Use exatamente esse(s) horário(s) informado(s) ao responder o cliente — não recalcule ou converta a data/hora.",
     });
   } catch (error) {
     console.error("ai-agent-lookup-appointment error:", error);
