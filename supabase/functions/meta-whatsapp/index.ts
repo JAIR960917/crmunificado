@@ -76,7 +76,7 @@ serve(async (req) => {
         .maybeSingle();
       const { data: metaInstances } = await supabase
         .from("whatsapp_instances")
-        .select("id, name, phone_number_id, waba_id, display_phone, meta_default_template, meta_template_language, is_active")
+        .select("id, name, phone_number_id, waba_id, display_phone, meta_default_template, meta_template_language, is_active, ai_enabled, ai_webhook_url, ai_webhook_secret")
         .eq("provider", "meta");
 
       return new Response(JSON.stringify({
@@ -97,11 +97,14 @@ serve(async (req) => {
     }
 
     if (action === "update-meta-instance") {
-      const { id, meta_default_template, meta_template_language, waba_id } = body as {
+      const { id, meta_default_template, meta_template_language, waba_id, ai_enabled, ai_webhook_url, ai_webhook_secret } = body as {
         id?: string;
         meta_default_template?: string | null;
         meta_template_language?: string | null;
         waba_id?: string | null;
+        ai_enabled?: boolean;
+        ai_webhook_url?: string | null;
+        ai_webhook_secret?: string | null;
       };
 
       if (!id?.trim()) {
@@ -120,6 +123,15 @@ serve(async (req) => {
       }
       if (waba_id === null || typeof waba_id === "string") {
         payload.waba_id = waba_id?.trim() || null;
+      }
+      if (typeof ai_enabled === "boolean") {
+        payload.ai_enabled = ai_enabled;
+      }
+      if (ai_webhook_url === null || typeof ai_webhook_url === "string") {
+        payload.ai_webhook_url = ai_webhook_url?.trim() || null;
+      }
+      if (ai_webhook_secret === null || typeof ai_webhook_secret === "string") {
+        payload.ai_webhook_secret = ai_webhook_secret?.trim() || null;
       }
 
       const { data: row, error: rowErr } = await supabase

@@ -46,6 +46,9 @@ type MetaInstanceRow = {
   session?: string | null;
   display_phone?: string | null;
   is_active?: boolean | null;
+  ai_enabled?: boolean | null;
+  ai_webhook_url?: string | null;
+  ai_webhook_secret?: string | null;
 };
 
 function phoneDigits(value: string): string {
@@ -67,7 +70,7 @@ async function loadMetaInstances(
 ): Promise<MetaInstanceRow[]> {
   const { data, error } = await supabase
     .from("whatsapp_instances")
-    .select("id, phone_number_id, session, display_phone, is_active")
+    .select("id, phone_number_id, session, display_phone, is_active, ai_enabled, ai_webhook_url, ai_webhook_secret")
     .eq("provider", "meta");
   if (error) {
     console.error("[whatsapp-webhook] erro ao listar instâncias meta:", error.message);
@@ -167,12 +170,12 @@ async function upsertConversationMessage(
     initialStatus: string;
     incrementUnread: boolean;
   },
-): Promise<boolean> {
-  const { instanceId, waId, contactName, direction, text, preview, waMessageId, initialStatus, incrementUnread } = opts;
+): Promise<{ ok: boolean; conversationId: string | null }> {
+  const { instanceId, waId, contactName, direction, text, preview, waMessageId, initialStatus } = opts;
   const canonicalWaId = normalizeWaId(waId);
   if (!canonicalWaId) {
     console.warn("[whatsapp-webhook] wa_id vazio — mensagem ignorada");
-    return false;
+    return { ok: false, conversationId: null };
   }
 
   const now = new Date();
@@ -203,7 +206,7 @@ async function upsertConversationMessage(
         conversationId = retry.id;
       } else {
         console.error("[whatsapp-webhook] erro ao criar conversa:", insertErr.message, insertErr.details);
-        return false;
+        return { ok: false, conversationId: null };
       }
     } else {
       conversationId = inserted?.id || null;
@@ -212,7 +215,7 @@ async function upsertConversationMessage(
 
   if (!conversationId) {
     console.error("[whatsapp-webhook] conversation_id indefinido após upsert");
-    return false;
+    return { ok: false, conversationId: null };
   }
 
   if (waMessageId) {
@@ -223,7 +226,7 @@ async function upsertConversationMessage(
       .maybeSingle();
     if (dup?.id) {
       console.log("[whatsapp-webhook] mensagem duplicada ignorada", waMessageId);
-      return true;
+      return { ok: true, conversationId };
     }
   }
 
@@ -245,7 +248,7 @@ async function upsertConversationMessage(
 
   if (!inserted.ok) {
     console.error("[whatsapp-webhook] erro ao inserir mensagem:", inserted.error);
-    return false;
+    return { ok: false, conversationId: null };
   }
 
   const { error: metaErr } = await supabase.rpc("apply_whatsapp_conversation_message_meta", {
@@ -261,11 +264,68 @@ async function upsertConversationMessage(
   });
   if (metaErr) {
     console.error("[whatsapp-webhook] erro ao atualizar conversa:", metaErr.message);
-    return false;
+    return { ok: false, conversationId: null };
   }
 
   console.log(`[whatsapp-webhook] gravado conv=${conversationId} wa_id=${canonicalWaId} dir=${direction}`);
-  return true;
+  return { ok: true, conversationId };
+}
+
+/**
+ * Encaminha a mensagem recebida ao workflow n8n do agente de IA (se o
+ * número tiver IA habilitada e a conversa não tiver sido assumida por um
+ * atendente humano). Best-effort: erro aqui não falha o webhook da Meta.
+ */
+async function forwardToAiAgent(
+  supabase: ReturnType<typeof createClient>,
+  instance: MetaInstanceRow | undefined,
+  conversationId: string,
+  waId: string,
+  contactName: string | null,
+  text: string,
+): Promise<void> {
+  if (!instance?.ai_enabled || !instance.ai_webhook_url) return;
+
+  try {
+    const { data: conv } = await supabase
+      .from("whatsapp_conversations")
+      .select("ai_active")
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (!conv || conv.ai_active === false) return;
+
+    const { data: history } = await supabase
+      .from("whatsapp_messages")
+      .select("direction, body, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(15);
+
+    const payload = {
+      conversation_id: conversationId,
+      instance_id: instance.id,
+      wa_id: waId,
+      contact_name: contactName,
+      message: text,
+      history: ((history || []) as { direction: string; body: string | null; created_at: string }[])
+        .reverse()
+        .map((m) => ({ direction: m.direction, text: m.body, created_at: m.created_at })),
+    };
+
+    const res = await fetch(instance.ai_webhook_url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(instance.ai_webhook_secret ? { "x-ai-agent-secret": instance.ai_webhook_secret } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error(`[whatsapp-webhook] n8n webhook respondeu HTTP ${res.status} para conv=${conversationId}`);
+    }
+  } catch (e) {
+    console.error("[whatsapp-webhook] erro ao encaminhar para o agente de IA:", e instanceof Error ? e.message : e);
+  }
 }
 
 serve(async (req) => {
@@ -392,7 +452,7 @@ serve(async (req) => {
           `[whatsapp-webhook] msg ${direction} type=${String(msg.type || "")} wa_id=${waId} preview=${parsed.preview.slice(0, 60)}`,
         );
 
-        const ok = await upsertConversationMessage(supabase, {
+        const { ok, conversationId } = await upsertConversationMessage(supabase, {
           instanceId,
           waId,
           contactName,
@@ -410,6 +470,11 @@ serve(async (req) => {
           incrementUnread: direction === "in",
         });
         if (ok) saved += 1;
+
+        if (ok && direction === "in" && conversationId && parsed.messageType !== "media") {
+          const instance = metaInstances.find((row) => row.id === instanceId);
+          await forwardToAiAgent(supabase, instance, conversationId, waId, contactName, parsed.text);
+        }
       }
 
       for (const s of statuses) {

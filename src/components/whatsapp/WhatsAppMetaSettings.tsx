@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
@@ -36,6 +37,9 @@ type MetaStatus = {
     meta_default_template?: string | null;
     meta_template_language?: string | null;
     is_active: boolean;
+    ai_enabled?: boolean | null;
+    ai_webhook_url?: string | null;
+    ai_webhook_secret?: string | null;
   }[];
   privacy_url?: string;
   terms_url?: string;
@@ -48,6 +52,9 @@ type MetaInstanceEditState = {
   waba_id: string;
   meta_default_template: string;
   meta_template_language: string;
+  ai_enabled: boolean;
+  ai_webhook_url: string;
+  ai_webhook_secret: string;
   saving: boolean;
   resolvingWaba: boolean;
 };
@@ -126,6 +133,9 @@ export default function WhatsAppMetaSettings() {
           waba_id: i.waba_id || "",
           meta_default_template: i.meta_default_template || "",
           meta_template_language: i.meta_template_language || "pt_BR",
+          ai_enabled: !!i.ai_enabled,
+          ai_webhook_url: i.ai_webhook_url || "",
+          ai_webhook_secret: i.ai_webhook_secret || "",
           saving: false,
           resolvingWaba: false,
         };
@@ -348,6 +358,9 @@ export default function WhatsAppMetaSettings() {
         waba_id: current.waba_id.trim() || null,
         meta_default_template: current.meta_default_template.trim() || null,
         meta_template_language: current.meta_template_language.trim() || "pt_BR",
+        ai_enabled: current.ai_enabled,
+        ai_webhook_url: current.ai_webhook_url.trim() || null,
+        ai_webhook_secret: current.ai_webhook_secret.trim() || null,
       });
       toast.success("Instância atualizada");
       await loadStatus();
@@ -726,6 +739,72 @@ export default function WhatsAppMetaSettings() {
                       placeholder="pt_BR"
                     />
                   </div>
+                </div>
+
+                <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">
+                      Agente de IA (n8n) neste número
+                    </Label>
+                    <Switch
+                      checked={instanceEdits[i.id]?.ai_enabled ?? false}
+                      onCheckedChange={(checked) =>
+                        setInstanceEdits((prev) => ({
+                          ...prev,
+                          [i.id]: { ...prev[i.id], ai_enabled: checked },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Webhook do workflow n8n</Label>
+                    <Input
+                      value={instanceEdits[i.id]?.ai_webhook_url ?? ""}
+                      onChange={(e) =>
+                        setInstanceEdits((prev) => ({
+                          ...prev,
+                          [i.id]: { ...prev[i.id], ai_webhook_url: e.target.value },
+                        }))
+                      }
+                      placeholder="https://seu-n8n.com/webhook/..."
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">Segredo compartilhado (autentica o callback)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={instanceEdits[i.id]?.ai_webhook_secret ?? ""}
+                        onChange={(e) =>
+                          setInstanceEdits((prev) => ({
+                            ...prev,
+                            [i.id]: { ...prev[i.id], ai_webhook_secret: e.target.value },
+                          }))
+                        }
+                        placeholder="gere uma string aleatória"
+                        className="font-mono text-xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() =>
+                          setInstanceEdits((prev) => ({
+                            ...prev,
+                            [i.id]: { ...prev[i.id], ai_webhook_secret: crypto.randomUUID() },
+                          }))
+                        }
+                      >
+                        Gerar
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    O CRM envia cada mensagem recebida nesse número para o webhook acima. O n8n deve chamar de
+                    volta a function <code className="font-mono">ai-agent-reply</code> com esse mesmo segredo no
+                    header <code className="font-mono">x-ai-agent-secret</code> para enviar a resposta.
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-2">

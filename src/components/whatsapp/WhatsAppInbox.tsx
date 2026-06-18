@@ -44,6 +44,7 @@ import {
   UserCheck,
   UserX,
   ArrowRightLeft,
+  Bot,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -82,6 +83,8 @@ type ConversationRow = {
   assigned_to: string | null;
   assigned_to_name: string | null;
   status: "pending" | "open" | "closed";
+  ai_active?: boolean;
+  ai_enabled?: boolean;
 };
 
 type MessageRow = {
@@ -268,7 +271,7 @@ export default function WhatsAppInbox() {
   const [deletingMsgId, setDeletingMsgId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const [conversationActionLoading, setConversationActionLoading] = useState<"accept" | "close" | "transfer" | null>(null);
+  const [conversationActionLoading, setConversationActionLoading] = useState<"accept" | "close" | "transfer" | "ai-on" | "ai-off" | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferUsers, setTransferUsers] = useState<{ user_id: string; full_name: string | null; email: string | null }[]>([]);
   const [transferUsersLoading, setTransferUsersLoading] = useState(false);
@@ -642,9 +645,11 @@ export default function WhatsAppInbox() {
         status: "open",
         assigned_to: user?.id ?? null,
         assigned_to_name: currentUserName,
+        ai_active: false,
       });
       setView("mine");
       toast.success("Atendimento aceito");
+      if (conversation.ai_enabled) toast.info("Agente de IA pausado nesta conversa.");
       void loadConversations();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao aceitar conversa");
@@ -653,6 +658,24 @@ export default function WhatsAppInbox() {
       setConversationActionLoading(null);
     }
   }, [conversation, applyConversationPatch, user?.id, currentUserName, loadConversations]);
+
+  const handleToggleAi = useCallback(async (active: boolean) => {
+    if (!conversation) return;
+    setConversationActionLoading(active ? "ai-on" : "ai-off");
+    try {
+      const { error } = await supabase.rpc("set_whatsapp_conversation_ai_active", {
+        p_conversation_id: conversation.id,
+        p_active: active,
+      });
+      if (error) throw error;
+      applyConversationPatch({ ...conversation, ai_active: active });
+      toast.success(active ? "IA reativada nesta conversa." : "IA pausada nesta conversa.");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao atualizar a IA");
+    } finally {
+      setConversationActionLoading(null);
+    }
+  }, [conversation, applyConversationPatch]);
 
   const handleCloseConversation = useCallback(async () => {
     if (!conversation) return;
@@ -1404,6 +1427,20 @@ export default function WhatsAppInbox() {
                   </Badge>
                 )}
 
+                {conversation.ai_enabled ? (
+                  conversation.ai_active ? (
+                    <Badge variant="secondary" className="gap-1 bg-violet-500/15 text-violet-800 dark:text-violet-200">
+                      <Bot className="h-3 w-3" />
+                      IA respondendo
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="gap-1 bg-muted text-muted-foreground">
+                      <Bot className="h-3 w-3" />
+                      IA pausada
+                    </Badge>
+                  )
+                ) : null}
+
                 <div className="flex w-full flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">
                     {conversation.status === "pending"
@@ -1415,6 +1452,20 @@ export default function WhatsAppInbox() {
                           : `Atendido por: ${conversation.assigned_to_name || "—"}`}
                   </p>
                   <div className="flex items-center gap-2">
+                    {conversation.ai_enabled &&
+                    conversation.status !== "pending" &&
+                    (conversation.assigned_to === user?.id || isPrivileged) ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 text-xs"
+                        disabled={conversationActionLoading !== null}
+                        onClick={() => void handleToggleAi(!conversation.ai_active)}
+                      >
+                        <Bot className="h-3.5 w-3.5" />
+                        {conversation.ai_active ? "Pausar IA" : "Reativar IA"}
+                      </Button>
+                    ) : null}
                     {conversation.status === "pending" ? (
                       <Button
                         size="sm"

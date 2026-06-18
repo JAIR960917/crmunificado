@@ -138,7 +138,7 @@ export default function CobrancaEditSheet(props: Props) {
     formValor, setFormValor, formCompanyId, setFormCompanyId,
     statuses, profiles, companies, saving, onSave, onCardUpdated, canReassign,
   } = props;
-  const { user, isAdmin, isFinanceiro } = useAuth();
+  const { user, isAdmin, isGerente, isFinanceiro } = useAuth();
 
   const [tab, setTab] = useState("atividade");
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -417,6 +417,47 @@ export default function CobrancaEditSheet(props: Props) {
     onSave(e);
   };
 
+  const [markingPaid, setMarkingPaid] = useState(false);
+
+  // Workaround para divergência entre o portal da SSótica (já mostra "Pago")
+  // e a API de integrações usada pelo sync (ainda retorna "Em atraso", sem
+  // valor_recebido/data_pagamento) — remove o card manualmente da cobrança.
+  const handleMarkAsPaid = async () => {
+    if (!cobrancaId) return;
+    if (
+      !confirm(
+        `Marcar "${formData.nome || "este cliente"}" como pago e remover da cobrança?\n\n` +
+          "Use isso quando o portal da SSótica já mostra a parcela como paga, mas o CRM ainda não atualizou.",
+      )
+    ) {
+      return;
+    }
+    setMarkingPaid(true);
+    try {
+      await supabase.from("crm_module_transition_logs").insert({
+        cliente_nome: formData.nome || "Cliente",
+        from_module: "cobranca",
+        to_module: "none",
+        to_status_key: null,
+        to_status_label: null,
+        source_record_id: cobrancaId,
+        ssotica_cliente_id: ssoticaClienteId ?? null,
+        company_id: formCompanyId || null,
+        triggered_by: user?.id ?? null,
+        trigger_source: "manual_marcado_pago",
+      });
+      const { error } = await supabase.from("crm_cobrancas").delete().eq("id", cobrancaId);
+      if (error) throw error;
+      toast.success("Cobrança marcada como paga e removida.");
+      onOpenChange(false);
+      onCardUpdated?.();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao marcar como paga");
+    } finally {
+      setMarkingPaid(false);
+    }
+  };
+
   const timeline = useMemo(() => {
     const items = [
       ...activities.map(a => ({ id: a.id, type: "activity" as const, date: a.scheduled_date, data: a })),
@@ -609,6 +650,18 @@ export default function CobrancaEditSheet(props: Props) {
               >
                 {saving ? "Salvando..." : isEditing ? "Atualizar" : "Criar"}
               </Button>
+              {isEditing && (isAdmin || isGerente || isFinanceiro) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-1.5 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
+                  disabled={markingPaid}
+                  onClick={() => void handleMarkAsPaid()}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {markingPaid ? "Removendo..." : "Marcar como paga (divergência SSótica)"}
+                </Button>
+              )}
             </form>
           </ScrollArea>
         </div>
