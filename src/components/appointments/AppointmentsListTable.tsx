@@ -143,7 +143,9 @@ export default function AppointmentsListTable({
               const consultaPagaLocked = cpaga === true && !isAdmin;
               const rescheduleNote = formatRescheduleNote(appt);
               const isSnapshot = !!appt.is_reschedule_snapshot;
-              const scheduledByName = getProfileName(appt.scheduled_by);
+              const scheduledByName = (appt.canal_agendamento || "").toLowerCase().includes("agente ia")
+                ? "Agente de IA"
+                : getProfileName(appt.scheduled_by);
               const nameTitle = [
                 appt.nome,
                 isSnapshot ? "Reagendado" : null,

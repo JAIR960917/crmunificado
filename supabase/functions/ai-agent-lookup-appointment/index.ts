@@ -33,10 +33,24 @@ function onlyDigits(s: string | null | undefined): string {
   return (s || "").replace(/\D/g, "");
 }
 
+/**
+ * Formata em horário de Brasília explicitamente — o runtime do Deno roda em
+ * UTC, então usar d.getHours()/d.getDate() direto retornaria o horário UTC
+ * (3h adiantado), não o horário real da loja.
+ */
 function formatDateTimeBR(iso: string): string {
   const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} às ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")}/${get("month")}/${get("year")} às ${get("hour")}:${get("minute")}`;
 }
 
 serve(async (req) => {
