@@ -52,6 +52,10 @@ function timeToMinutes(t: string): number {
   return h * 60 + m;
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") {
@@ -159,6 +163,56 @@ serve(async (req) => {
       }
     }
 
+    // Dia de exame realmente agendado para essa loja (tela "Dias de Exame").
+    // Sem isso, nao existe atendimento de exame de vista nessa data, mesmo
+    // que o horario de funcionamento generico esteja "aberto".
+    const examDateStr = `${dateParts.y}-${pad2(dateParts.m)}-${pad2(dateParts.d)}`;
+    const { data: examDay } = await admin
+      .from("company_eye_exam_days")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("exam_date", examDateStr)
+      .maybeSingle();
+    if (!examDay) {
+      return jsonResponse({
+        ok: false,
+        message:
+          "Não há atendimento de exame de vista agendado para essa data nessa loja. " +
+          "Peça pro cliente escolher outra data, ou avise que um atendente vai confirmar a próxima data disponível.",
+      }, 200);
+    }
+
+    const { data: dayAssignments } = await admin
+      .from("company_eye_exam_day_specialists")
+      .select("work_period, eye_exam_specialists!inner(name, active)")
+      .eq("eye_exam_day_id", examDay.id);
+    const activeAssignments = ((dayAssignments ?? []) as { work_period: string; eye_exam_specialists: { active: boolean } }[])
+      .filter((a) => a.eye_exam_specialists?.active !== false);
+
+    if (activeAssignments.length === 0) {
+      return jsonResponse({
+        ok: false,
+        message:
+          "Ainda não há especialista confirmado para essa data. " +
+          "Peça pro cliente escolher outra data ou avise que um atendente vai confirmar.",
+      }, 200);
+    }
+
+    const hasDiaTodo = activeAssignments.some((a) => a.work_period === "dia_todo");
+    const hasManha = hasDiaTodo || activeAssignments.some((a) => a.work_period === "manha");
+    const hasTarde = hasDiaTodo || activeAssignments.some((a) => a.work_period === "tarde");
+    const requestedPeriod: "manha" | "tarde" = timeParts.h < 12 ? "manha" : "tarde";
+    const periodCovered = requestedPeriod === "manha" ? hasManha : hasTarde;
+    if (!periodCovered) {
+      const periodosDisponiveis = [hasManha ? "manhã" : null, hasTarde ? "tarde" : null].filter(Boolean).join(" e ");
+      return jsonResponse({
+        ok: false,
+        message:
+          `Nessa data só tem especialista disponível na ${periodosDisponiveis || "—"}. ` +
+          "Peça pro cliente escolher um horário dentro desse período, ou outra data.",
+      }, 200);
+    }
+
     // Resolve quem fica responsavel pelo agendamento: vendedor da loja > gerente > algum admin.
     const { data: companyProfiles } = await admin
       .from("profiles")
@@ -183,9 +237,8 @@ serve(async (req) => {
       return jsonResponse({ ok: false, message: "Nenhum responsável disponível para agendar nessa loja." }, 200);
     }
 
-    const pad = (n: number) => String(n).padStart(2, "0");
     const scheduledDatetimeIso =
-      `${dateParts.y}-${pad(dateParts.m)}-${pad(dateParts.d)}T${pad(timeParts.h)}:${pad(timeParts.min)}:00-03:00`;
+      `${dateParts.y}-${pad2(dateParts.m)}-${pad2(dateParts.d)}T${pad2(timeParts.h)}:${pad2(timeParts.min)}:00-03:00`;
 
     // Evita dois agendamentos no mesmo horário (mesma loja).
     if (companyUserIds.length > 0) {
@@ -223,7 +276,7 @@ serve(async (req) => {
       .maybeSingle();
     if (insertErr) throw insertErr;
 
-    const dataFormatada = `${pad(dateParts.d)}/${pad(dateParts.m)}/${dateParts.y}`;
+    const dataFormatada = `${pad2(dateParts.d)}/${pad2(dateParts.m)}/${dateParts.y}`;
     return jsonResponse({
       ok: true,
       appointment_id: inserted?.id ?? null,
