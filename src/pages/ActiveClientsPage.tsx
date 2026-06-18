@@ -183,7 +183,10 @@ export default function ActiveClientsPage() {
       `data->>nome.ilike.%${safe}%`,
       `data->>telefone.ilike.%${safe}%`,
     ];
-    if (digits) parts.push(`data->>telefone.ilike.%${digits}%`);
+    // telefone_digits é uma coluna gerada (somente dígitos) — necessária
+    // porque o telefone no JSONB tem formatação variada (ex.: "(84) 9.2000-7039")
+    // e o ilike não consegue normalizar isso a partir de uma expressão JSON.
+    if (digits) parts.push(`telefone_digits.ilike.%${digits}%`);
     return parts.join(",");
   }, []);
 
