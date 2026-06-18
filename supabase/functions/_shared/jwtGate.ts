@@ -18,6 +18,7 @@ export const JWT_EXEMPT_SERVICES = new Set([
   "seed-admin",
   "submit-campanha-copa",
   "submit-site-form",
+  "ai-agent-reply",
 ]);
 
 /** Bloqueia uso da chave anon em funções que exigem usuário ou bootstrap. */
