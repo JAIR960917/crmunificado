@@ -162,8 +162,9 @@ Deno.serve(async (req) => {
 
     const start = new Date(`${startDate}T00:00:00`);
     const end = new Date(`${endDate}T00:00:00`);
-    // Janelas maiores (60 dias) para reduzir chamadas em períodos longos
-    const windows = buildWindows(start, end, 60);
+    // A API da SSótica tem limite de 30 dias por janela — usar mais que isso
+    // faz a chamada retornar vazio/falhar silenciosamente para o período.
+    const windows = buildWindows(start, end, 30);
 
     // Executa janelas em paralelo (limitado) para acelerar
     const results = await Promise.all(
