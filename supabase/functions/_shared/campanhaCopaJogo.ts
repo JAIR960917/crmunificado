@@ -54,7 +54,7 @@ export function parseJogoConfig(raw: string | null | undefined): CampanhaCopaJog
 }
 
 export function normalizeFlagCode(code: string): string {
-  return (code || "").trim().toLowerCase().replace(/[^a-z]/g, "").slice(0, 2);
+  return (code || "").trim().toLowerCase().replace(/[^a-z-]/g, "").slice(0, 6);
 }
 
 export async function loadCampanhaCopaJogoConfig(

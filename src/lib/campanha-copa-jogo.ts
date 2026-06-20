@@ -66,6 +66,6 @@ export function jogoConfigWithDerived(cfg: CampanhaCopaJogoConfig) {
 }
 
 export function flagUrl(code: string): string {
-  const c = (code || "xx").trim().toLowerCase().replace(/[^a-z]/g, "").slice(0, 2);
+  const c = (code || "xx").trim().toLowerCase().replace(/[^a-z-]/g, "").slice(0, 6);
   return `https://flagcdn.com/w40/${c}.png`;
 }

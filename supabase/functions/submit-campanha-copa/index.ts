@@ -7,6 +7,10 @@ import {
   loadCampanhaCopaPeriodoConfig,
 } from "../_shared/campanhaCopaPeriodo.ts";
 import { loadCampanhaCopaSuccessConfig } from "../_shared/campanhaCopaSuccess.ts";
+import {
+  applyUltimoExameVistaToLeadData,
+  loadLeadLastVisitFieldId,
+} from "../_shared/campanhaCopaExameVista.ts";
 
 const corsHeaders = internalCorsHeaders;
 
@@ -199,9 +203,10 @@ serve(async (req) => {
     const palpiteTexto = `${palpiteHome} x ${palpiteAway}`;
     const usaOculosNorm = usaOculos.toLowerCase().startsWith("s") ? "sim" : "nao";
 
-    // O lead só é criado na coluna "Campanha Copa" do CRM quando alguém da
-    // equipe acionar o envio manual na tela de Campanhas Copa
-    // (função campanha-copa-send-to-leads) — não automaticamente aqui.
+    // O palpite é registrado e o lead já é criado automaticamente na coluna
+    // "Participando da campanha atual" — o envio manual via Campanhas Copa
+    // (campanha-copa-send-to-leads) continua existindo só para inscrições
+    // antigas que ficaram sem lead vinculado.
     const { data: submission, error: subError } = await supabase
       .from("campanha_copa_submissions")
       .insert({
@@ -232,6 +237,53 @@ serve(async (req) => {
       }
       console.error("[submit-campanha-copa] submission insert:", subError);
       return jsonResponse({ error: "Inscrição parcial — contate o suporte." }, 500);
+    }
+
+    const lastVisitFieldId = await loadLeadLastVisitFieldId(supabase);
+    const leadData: Record<string, unknown> = {
+      origem_campanha: "copa",
+      nome_lead: nome,
+      cpf,
+      telefone,
+      idade,
+      cidade,
+      usa_oculos: usaOculosNorm,
+      sintomas,
+      doencas,
+      palpite_home: palpiteHome,
+      palpite_away: palpiteAway,
+      palpite_brasil: palpiteHome,
+      palpite_marrocos: palpiteAway,
+      palpite: palpiteTexto,
+      jogo: jogoKey,
+      jogo_label: jogoCfg.jogo_label,
+      team_home_name: jogoCfg.team_home_name,
+      team_away_name: jogoCfg.team_away_name,
+      consentimento_marketing: true,
+    };
+    applyUltimoExameVistaToLeadData(leadData, ultimoExame, lastVisitFieldId);
+
+    const { data: lead, error: leadErr } = await supabase
+      .from("crm_leads")
+      .insert({
+        data: leadData,
+        status: "participando_campanha_atual",
+        assigned_to: null,
+        created_by: null,
+      })
+      .select("id")
+      .single();
+
+    if (leadErr || !lead) {
+      console.error("[submit-campanha-copa] lead insert:", leadErr);
+    } else {
+      const { error: linkErr } = await supabase
+        .from("campanha_copa_submissions")
+        .update({ lead_id: lead.id })
+        .eq("id", submission.id);
+      if (linkErr) {
+        console.error("[submit-campanha-copa] vincular lead_id:", linkErr);
+      }
     }
 
     await supabase.from("campanha_copa_history").insert({

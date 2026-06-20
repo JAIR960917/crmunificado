@@ -63,7 +63,7 @@
   }
 
   function flagUrl(code) {
-    var c = (code || "xx").toLowerCase().replace(/[^a-z]/g, "").slice(0, 2);
+    var c = (code || "xx").toLowerCase().replace(/[^a-z-]/g, "").slice(0, 6);
     return "https://flagcdn.com/w40/" + c + ".png";
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { MapPin, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, MapPin, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,7 @@ export default function CampanhaCopaCidadeLojaConfigCard({ onSaved }: Props) {
   const [companyId, setCompanyId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -101,6 +102,9 @@ export default function CampanhaCopaCidadeLojaConfigCard({ onSaved }: Props) {
   };
 
   const companyOptions = useMemo(() => companies, [companies]);
+  const VISIBLE_LIMIT = 3;
+  const visibleRoutes = expanded ? routes : routes.slice(0, VISIBLE_LIMIT);
+  const hiddenCount = routes.length - visibleRoutes.length;
 
   return (
     <Card>
@@ -163,7 +167,7 @@ export default function CampanhaCopaCidadeLojaConfigCard({ onSaved }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {routes.map((r) => (
+                {visibleRoutes.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">{r.cidade_label}</TableCell>
                     <TableCell>{r.company_name}</TableCell>
@@ -181,6 +185,28 @@ export default function CampanhaCopaCidadeLojaConfigCard({ onSaved }: Props) {
                 ))}
               </TableBody>
             </Table>
+          </div>
+        )}
+
+        {!loading && routes.length > VISIBLE_LIMIT && (
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExpanded((prev) => !prev)}
+            >
+              {expanded ? (
+                <>
+                  <ChevronUp className="h-4 w-4 mr-1" />
+                  Ver menos
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-4 w-4 mr-1" />
+                  Ver todas ({hiddenCount} ocultas)
+                </>
+              )}
+            </Button>
           </div>
         )}
       </CardContent>

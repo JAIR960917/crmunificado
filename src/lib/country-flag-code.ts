@@ -75,8 +75,8 @@ const COUNTRY_FLAG_MAP: Record<string, string> = {
   italia: "it",
   italy: "it",
   portugal: "pt",
-  inglaterra: "gb",
-  england: "gb",
+  inglaterra: "gb-eng",
+  england: "gb-eng",
   "reino unido": "gb",
   "united kingdom": "gb",
   holanda: "nl",
@@ -105,10 +105,10 @@ const COUNTRY_FLAG_MAP: Record<string, string> = {
   norway: "no",
   irlanda: "ie",
   ireland: "ie",
-  escocia: "gb",
-  scotland: "gb",
-  gales: "gb",
-  wales: "gb",
+  escocia: "gb-sct",
+  scotland: "gb-sct",
+  gales: "gb-wls",
+  wales: "gb-wls",
   hungria: "hu",
   hungary: "hu",
   romenia: "ro",
@@ -187,8 +187,14 @@ const COUNTRY_FLAG_MAP: Record<string, string> = {
 
 const SORTED_KEYS = Object.keys(COUNTRY_FLAG_MAP).sort((a, b) => b.length - a.length);
 
+/** Caso o campo receba "Time A x Time B" (colado por engano), usa só o 1º nome. */
+function firstTeamSegment(name: string): string {
+  const raw = (name || "").trim();
+  return raw.split(/\s+(?:x|vs\.?|versus)\s+/i)[0] || raw;
+}
+
 export function resolveFlagCodeFromCountryName(name: string): string {
-  const normalized = normalizeCountryKey(name);
+  const normalized = normalizeCountryKey(firstTeamSegment(name));
   if (!normalized) return "xx";
 
   const exact = COUNTRY_FLAG_MAP[normalized];
@@ -199,7 +205,7 @@ export function resolveFlagCodeFromCountryName(name: string): string {
     if (normalized.startsWith(`${key} `) || normalized.endsWith(` ${key}`)) {
       return COUNTRY_FLAG_MAP[key];
     }
-    if (key.length >= 4 && normalized.includes(key)) {
+    if (key.length >= 4 && new RegExp(`\\b${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(normalized)) {
       return COUNTRY_FLAG_MAP[key];
     }
   }
