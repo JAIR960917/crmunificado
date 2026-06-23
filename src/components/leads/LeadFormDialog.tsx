@@ -979,9 +979,23 @@ export default function LeadFormDialog({
                       }
 
                       if (newStatus && newStatus !== previousStatus) {
+                        // A tratativa marcou data.tratativa_status_key = previousStatus
+                        // (ContactAttemptForm). Como o status mudou aqui, isso ficaria
+                        // desatualizado e o card pareceria "não tratado" na nova coluna
+                        // (sortKanbanByExamAndTratativa exige tratativa_status_key ===
+                        // status atual) — por isso atualizamos os dois juntos.
+                        const { data: curRow } = await supabase
+                          .from("crm_leads")
+                          .select("data")
+                          .eq("id", leadId)
+                          .maybeSingle();
+                        const curData = (curRow?.data as Record<string, unknown>) || {};
                         const { error: upErr } = await supabase
                           .from("crm_leads")
-                          .update({ status: newStatus })
+                          .update({
+                            status: newStatus,
+                            data: { ...curData, tratativa_status_key: newStatus },
+                          })
                           .eq("id", leadId);
                         if (!upErr) setFormStatus(newStatus);
                       }
