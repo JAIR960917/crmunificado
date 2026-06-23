@@ -26,6 +26,7 @@ import WhatsAppCreateLeadPanel from "@/components/whatsapp/WhatsAppCreateLeadPan
 import WhatsAppCobrancaPanel from "@/components/whatsapp/WhatsAppCobrancaPanel";
 import {
   AlertCircle,
+  ArrowLeft,
   Check,
   CheckCheck,
   Clock,
@@ -1191,8 +1192,13 @@ export default function WhatsAppInbox() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex min-h-0 flex-1 overflow-hidden border bg-card lg:rounded-xl lg:shadow-sm">
-        {/* Lista de conversas */}
-        <aside className="flex w-full max-w-[320px] flex-col border-r bg-muted/30 lg:max-w-[360px]">
+        {/* Lista de conversas — no mobile ocupa a tela toda e some quando uma conversa é aberta */}
+        <aside
+          className={cn(
+            "flex w-full flex-col border-r bg-muted/30 lg:max-w-[360px]",
+            conversation ? "hidden lg:flex" : "flex max-w-full lg:max-w-[360px]",
+          )}
+        >
           <div className="space-y-3 border-b p-3">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-primary" />
@@ -1376,8 +1382,8 @@ export default function WhatsAppInbox() {
           </ScrollArea>
         </aside>
 
-        {/* Thread + painel lateral */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        {/* Thread + painel lateral — no mobile só aparece depois de escolher a conversa */}
+        <div className={cn("flex min-w-0 flex-1 flex-col", !conversation && "hidden lg:flex")}>
           {!conversation ? (
             <div className="flex flex-1 items-center justify-center text-muted-foreground">
               <AlertCircle className="h-4 w-4 mr-2" />
@@ -1387,6 +1393,16 @@ export default function WhatsAppInbox() {
             <>
               {/* Cabeçalho da conversa */}
               <header className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="-ml-1 h-8 w-8 shrink-0 lg:hidden"
+                  onClick={() => setSelectedId(null)}
+                  title="Voltar para as conversas"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
                 <Avatar className="h-10 w-10">
                   <AvatarFallback>{initials(conversation.contact_name || conversation.wa_id)}</AvatarFallback>
                 </Avatar>
