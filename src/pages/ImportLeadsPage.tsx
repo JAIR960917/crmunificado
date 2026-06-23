@@ -129,21 +129,15 @@ export default function ImportLeadsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingAll, setDeletingAll] = useState(false);
 
-  const extractPhones = (data: Record<string, any>): string[] => {
-    const phones: string[] = [];
-    const walk = (v: any) => {
-      if (v == null) return;
-      if (typeof v === "string" || typeof v === "number") {
-        const digits = String(v).replace(/\D/g, "");
-        if (digits.length >= 8) phones.push(digits.slice(-8));
-      } else if (Array.isArray(v)) {
-        v.forEach(walk);
-      } else if (typeof v === "object") {
-        Object.values(v).forEach(walk);
-      }
-    };
-    walk(data);
-    return phones;
+  // ATENÇÃO: NÃO percorrer todos os campos do JSON procurando "qualquer string
+  // com 8+ dígitos" — isso confundia datas guardadas como AAAAMMDD (ex.:
+  // "20230623") com telefone e gerava falsos duplicados. Usamos só o
+  // telefone já resolvido (mesma lógica de is_phone_field/rótulo usada para
+  // exibir o lead), que é o único campo que legitimamente representa um
+  // telefone.
+  const phoneSuffix = (telefone: string): string | null => {
+    const digits = (telefone || "").replace(/\D/g, "");
+    return digits.length >= 8 ? digits.slice(-8) : null;
   };
 
   const scanDuplicates = async () => {
@@ -166,33 +160,26 @@ export default function ImportLeadsPage() {
       (renovsRes.data || []).forEach((r: any) => {
         const data = (r.data || {}) as Record<string, any>;
         const identity = resolveLeadIdentity(data, renovFields);
-        const phones = extractPhones(data);
-        phones.forEach((suffix) => {
-          if (!renovIndex.has(suffix)) {
-            renovIndex.set(suffix, { id: r.id, name: identity.nome || "Sem nome" });
-          }
-        });
+        const suffix = phoneSuffix(identity.telefone);
+        if (suffix && !renovIndex.has(suffix)) {
+          renovIndex.set(suffix, { id: r.id, name: identity.nome || "Sem nome" });
+        }
       });
 
       const matches: DuplicateMatch[] = [];
-      const seen = new Set<string>();
       (leadsRes.data || []).forEach((l: any) => {
         const data = (l.data || {}) as Record<string, any>;
         const identity = resolveLeadIdentity(data, leadFields);
-        const phones = extractPhones(data);
-        for (const suffix of phones) {
-          const ren = renovIndex.get(suffix);
-          if (ren && !seen.has(l.id)) {
-            seen.add(l.id);
-            matches.push({
-              leadId: l.id,
-              leadName: identity.nome || "Sem nome",
-              leadPhone: identity.telefone || suffix,
-              renovacaoId: ren.id,
-              renovacaoName: ren.name,
-            });
-            break;
-          }
+        const suffix = phoneSuffix(identity.telefone);
+        const ren = suffix ? renovIndex.get(suffix) : undefined;
+        if (ren) {
+          matches.push({
+            leadId: l.id,
+            leadName: identity.nome || "Sem nome",
+            leadPhone: identity.telefone || suffix || "",
+            renovacaoId: ren.id,
+            renovacaoName: ren.name,
+          });
         }
       });
 

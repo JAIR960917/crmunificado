@@ -38,7 +38,12 @@ export default class RootErrorBoundary extends Component<Props, State> {
     const msg = this.state.error.message || "Erro desconhecido";
     const isConfig = /backend ausente|runtime-config|VITE_SUPABASE/i.test(msg);
     const isDomRace = isRecoverableBootError(msg);
-    const isOfflineChunkError = NETWORK_ERROR_PATTERN.test(msg) && !navigator.onLine;
+    const isOffline = !navigator.onLine;
+    const isOfflineChunkError = NETWORK_ERROR_PATTERN.test(msg) && isOffline;
+    // Offline, limpar cache nunca ajuda (não há rede pra recarregar /login do
+    // zero) e destrói o shell que permite o app abrir sem internet — então
+    // "Tentar novamente" deve sempre ser um retry leve, nunca o hardRecover.
+    const allowHardRecoverButton = isDomRace && !isOffline;
 
     return (
       <div
@@ -58,9 +63,15 @@ export default class RootErrorBoundary extends Component<Props, State> {
               ? "A configuração do servidor não foi carregada. Peça ao administrador para rodar o deploy novamente."
               : "Ocorreu um erro ao iniciar o sistema no seu aparelho."}
         </p>
-        {isDomRace && !isOfflineChunkError && (
+        {isDomRace && !isOfflineChunkError && !isOffline && (
           <p style={{ fontSize: "0.85rem", opacity: 0.75, marginBottom: "12px", lineHeight: 1.5 }}>
             Isso costuma acontecer no primeiro acesso ou com cache antigo do app. Use o botão abaixo para limpar e tentar de novo.
+          </p>
+        )}
+        {isDomRace && isOffline && !isOfflineChunkError && (
+          <p style={{ fontSize: "0.85rem", opacity: 0.75, marginBottom: "12px", lineHeight: 1.5 }}>
+            Você está sem conexão — tentar novamente apenas continua o app sem apagar nada. Limpar o cache só
+            funciona com internet (precisa recarregar o app do zero).
           </p>
         )}
         <p style={{ fontSize: "0.85rem", opacity: 0.7, marginBottom: "20px", wordBreak: "break-word" }}>{msg}</p>
@@ -83,26 +94,28 @@ export default class RootErrorBoundary extends Component<Props, State> {
             </button>
           ) : (
             <>
+              {allowHardRecoverButton && (
+                <button
+                  type="button"
+                  disabled={this.state.recovering}
+                  onClick={() => void this.hardRecover()}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: "#dc2626",
+                    color: "#fff",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {this.state.recovering ? "Limpando cache..." : "Limpar cache e abrir de novo"}
+                </button>
+              )}
               <button
                 type="button"
                 disabled={this.state.recovering}
-                onClick={() => void this.hardRecover()}
-                style={{
-                  padding: "10px 16px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: "#dc2626",
-                  color: "#fff",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                {this.state.recovering ? "Limpando cache..." : "Limpar cache e abrir de novo"}
-              </button>
-              <button
-                type="button"
-                disabled={this.state.recovering}
-                onClick={() => (isDomRace ? void this.hardRecover() : this.setState({ error: null }))}
+                onClick={() => (allowHardRecoverButton ? void this.hardRecover() : this.setState({ error: null }))}
                 style={{
                   padding: "10px 16px",
                   borderRadius: "8px",
