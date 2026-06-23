@@ -1410,7 +1410,7 @@ export default function WhatsAppInbox() {
             </div>
             {!isAdmin ? (
               <p className="text-[10px] text-muted-foreground">
-                Exibindo apenas números atribuídos a você (WhatsApp → API Meta).
+                Exibindo números da sua empresa e/ou atribuídos a você (WhatsApp → API Meta).
               </p>
             ) : null}
             <div className="relative">
