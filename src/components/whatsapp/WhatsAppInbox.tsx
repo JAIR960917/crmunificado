@@ -39,6 +39,7 @@ import {
   Paperclip,
   Search,
   Send,
+  ShieldCheck,
   Smartphone,
   Square,
   Bell,
@@ -1370,6 +1371,13 @@ export default function WhatsAppInbox() {
             <div className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-primary" />
               <h1 className="text-lg font-semibold">Conversas</h1>
+              <Badge
+                variant="outline"
+                className="gap-1 border-emerald-600/50 text-[10px] text-emerald-700 dark:text-emerald-300"
+              >
+                <ShieldCheck className="h-3 w-3" />
+                API Oficial Meta
+              </Badge>
               {notifyPermission === "granted" ? (
                 <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
                   <Bell className="h-3.5 w-3.5" />
@@ -1451,18 +1459,18 @@ export default function WhatsAppInbox() {
                       type="button"
                       onClick={() => setSelectedId(c.id)}
                       className={cn(
-                        "relative flex w-full gap-3 overflow-visible rounded-lg border border-transparent p-3 text-left transition-colors",
+                        "relative flex w-full gap-2.5 overflow-visible rounded-lg border border-transparent p-2 text-left transition-colors",
                         active
                           ? "bg-primary/10"
                           : hasUnread
                             ? "border-green-500/20 bg-green-500/[0.08] hover:bg-green-500/[0.12]"
                             : "hover:bg-muted",
-                        hasUnread && !active && "pl-2.5 before:absolute before:bottom-2 before:left-0 before:top-2 before:w-[3px] before:rounded-full before:bg-green-500 before:content-['']",
+                        hasUnread && !active && "pl-2 before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-[3px] before:rounded-full before:bg-green-500 before:content-['']",
                       )}
                     >
                       <Avatar
                         className={cn(
-                          "h-11 w-11 shrink-0",
+                          "h-9 w-9 shrink-0",
                           hasUnread && !active && "ring-2 ring-green-500/45 ring-offset-2 ring-offset-background",
                         )}
                       >
@@ -1476,27 +1484,27 @@ export default function WhatsAppInbox() {
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1">
-                        <p className={cn("truncate", hasUnread ? "font-semibold text-foreground" : "font-medium")}>
+                        <p className={cn("truncate text-sm leading-tight", hasUnread ? "font-semibold text-foreground" : "font-medium")}>
                           {contact}
                         </p>
                         <p
                           className={cn(
-                            "mt-0.5 truncate text-xs",
+                            "mt-0.5 truncate text-xs leading-tight",
                             hasUnread ? "font-semibold text-foreground" : "text-muted-foreground",
                           )}
                         >
                           {c.last_preview || "—"}
                         </p>
                         {hasUnread && !active ? (
-                          <p className="mt-0.5 text-[10px] font-medium text-green-600 dark:text-green-400">
+                          <p className="mt-0.5 text-[10px] leading-tight font-medium text-green-600 dark:text-green-400">
                             Aguardando resposta
                           </p>
                         ) : null}
-                        <p className="mt-0.5 truncate text-[10px] font-medium text-sky-800 dark:text-sky-300">
+                        <p className="mt-0.5 truncate text-[10px] leading-tight font-medium text-sky-800 dark:text-sky-300">
                           <Smartphone className="mr-0.5 inline h-3 w-3 opacity-80" />
                           {instanceName} · {customerPhone}
                         </p>
-                        <div className="mt-1 flex items-center gap-1.5">
+                        <div className="mt-0.5 flex items-center gap-1.5">
                           <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", m.className)}>
                             {m.label}
                           </span>
