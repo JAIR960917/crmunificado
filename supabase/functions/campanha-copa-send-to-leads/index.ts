@@ -14,6 +14,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function normalizeDigits(s: string | null | undefined): string {
+  return String(s ?? "").replace(/\D/g, "");
+}
+
+function buildCopaNoteContent(sub: SubmissionRow): string {
+  const palpite = sub.palpite_texto
+    || (sub.palpite_brasil != null && sub.palpite_marrocos != null
+      ? `${sub.palpite_brasil} x ${sub.palpite_marrocos}`
+      : null);
+  const jogo = sub.jogo_label || "Campanha Copa";
+  return palpite
+    ? `🏆 Participou da Campanha Copa (${jogo}) — palpite: ${palpite}.`
+    : `🏆 Participou da Campanha Copa (${jogo}).`;
+}
+
 type SubmissionRow = {
   id: string;
   lead_id: string | null;
@@ -92,6 +107,47 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // Antes de criar um lead novo, verifica se já existe ALGUM lead (de
+      // qualquer origem) com o mesmo telefone — evita duplicar quem já está
+      // na tela de Leads. Se existir, só registra um comentário nele.
+      const phoneSuffix = normalizeDigits(sub.telefone).slice(-8);
+      let existingLeadId: string | null = null;
+      if (phoneSuffix.length === 8) {
+        const { data: matchRows, error: matchErr } = await admin.rpc(
+          "find_lead_by_phone_suffix",
+          { p_phone_suffix: phoneSuffix },
+        );
+        if (matchErr) {
+          console.error("[campanha-copa-send-to-leads] erro ao verificar duplicidade:", matchErr);
+        } else {
+          existingLeadId = (matchRows as { id: string }[] | null)?.[0]?.id ?? null;
+        }
+      }
+
+      if (existingLeadId) {
+        const { error: noteErr } = await admin.from("crm_lead_notes").insert({
+          lead_id: existingLeadId,
+          user_id: user!.id,
+          content: buildCopaNoteContent(sub),
+        });
+        if (noteErr) {
+          console.error("[campanha-copa-send-to-leads] erro ao registrar comentário:", noteErr);
+          results.push({ submissionId: id, status: "error", error: "Erro ao registrar comentário no lead existente" });
+          continue;
+        }
+
+        const { error: updErr } = await admin
+          .from("campanha_copa_submissions")
+          .update({ lead_id: existingLeadId })
+          .eq("id", id);
+        if (updErr) {
+          console.error("[campanha-copa-send-to-leads] erro ao vincular submission:", updErr);
+        }
+
+        results.push({ submissionId: id, status: "already_sent", leadId: existingLeadId });
+        continue;
+      }
+
       const leadData: Record<string, unknown> = {
         origem_campanha: "copa",
         nome_lead: sub.nome,
@@ -149,6 +205,15 @@ Deno.serve(async (req) => {
         console.error("[campanha-copa-send-to-leads] erro ao vincular submission:", updErr);
         results.push({ submissionId: id, status: "error", error: "Erro ao vincular inscrição" });
         continue;
+      }
+
+      const { error: noteErr } = await admin.from("crm_lead_notes").insert({
+        lead_id: lead.id,
+        user_id: user!.id,
+        content: buildCopaNoteContent(sub),
+      });
+      if (noteErr) {
+        console.error("[campanha-copa-send-to-leads] erro ao registrar comentário no lead novo:", noteErr);
       }
 
       results.push({ submissionId: id, status: "sent", leadId: lead.id as string });
