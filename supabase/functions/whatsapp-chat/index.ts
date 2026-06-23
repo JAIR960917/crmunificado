@@ -86,7 +86,7 @@ serve(async (req) => {
     async function assertConversationAccess(conversationId: string) {
       const { data: conv, error: convErr } = await admin
         .from("whatsapp_conversations")
-        .select("id, instance_id, wa_id")
+        .select("id, instance_id, wa_id, contact_name")
         .eq("id", conversationId.trim())
         .maybeSingle();
       if (convErr) throw convErr;
@@ -593,12 +593,20 @@ serve(async (req) => {
         });
       }
       isTemplate = true;
-      text = `[Template] ${metaTemplateName}`;
+      text = `📄 Template enviado: ${metaTemplateName}`;
     }
 
     const textForWhatsApp = action === "send-text"
       ? formatOutboundWhatsAppBody(sender.sent_by_name, text)
       : "";
+
+    // Envio manual de template pelo Inbox não tem um texto de origem no CRM
+    // para extrair variáveis ({nome}, etc.) — usamos o nome do contato salvo
+    // na conversa para que a Meta receba os parâmetros esperados e não rejeite
+    // o template com "Number of parameters does not match" (#132000).
+    const templateVars: Record<string, string> = isTemplate
+      ? { nome: (conv.contact_name || "").trim() || "Cliente" }
+      : {};
 
     console.log(
       `[whatsapp-chat] send ${action} provider=${target.provider} instance=${conv.instance_id} to=${to} pid=${target.phoneNumberId ?? "—"}`,
@@ -612,7 +620,8 @@ serve(async (req) => {
       metaAccessToken: accessToken,
       metaTemplateName,
       metaTemplateLanguage,
-      metaTemplateBodyParams: [],
+      metaTemplateVars: templateVars,
+      metaTemplateMessageSource: isTemplate ? "{nome}" : null,
       supabase: admin as any,
       conversationId: conv.id,
       forceTemplate: isTemplate,
@@ -630,7 +639,7 @@ serve(async (req) => {
     const saved = await insertWhatsAppMessageRow(admin, {
       conversation_id: conv.id,
       direction: "out",
-      body: action === "send-text" ? text : null,
+      body: text,
       wa_message_id: result.metaMessageId || null,
       status: "sent",
       is_template: isTemplate,
@@ -644,7 +653,7 @@ serve(async (req) => {
     }
     const convPatch: Record<string, unknown> = {
       last_message_at: now,
-      last_preview: (action === "send-text" ? text : `[Template] ${metaTemplateName}`).slice(0, 200),
+      last_preview: text.slice(0, 200),
       updated_at: now,
     };
     if (target.instanceId && !conv.instance_id) {
