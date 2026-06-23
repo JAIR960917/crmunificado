@@ -1701,21 +1701,12 @@ export default function WhatsAppInbox() {
                         const at = new Date(msg.created_at);
                         const canDelete = out && (isAdmin || isGerente || msg.sent_by === user?.id);
                         return (
-                          <div key={msg.id} className={cn("group flex min-w-0 items-end gap-1", out ? "justify-end" : "justify-start")}>
-                            {out && canDelete && (
-                              <button
-                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                title="Excluir mensagem"
-                                onClick={() => setDeletingMsgId(msg.id)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            )}
+                          <div key={msg.id} className={cn("group flex min-w-0 items-end", out ? "justify-end" : "justify-start")}>
                             <div
                               className={cn(
                                 "relative min-w-0 max-w-[85%] break-words rounded-lg px-3 py-2 text-sm shadow-sm",
                                 out
-                                  ? "rounded-br-none bg-[#d9fdd3] text-foreground dark:bg-emerald-900/50"
+                                  ? "mr-7 rounded-br-none bg-[#d9fdd3] text-foreground dark:bg-emerald-900/50"
                                   : "rounded-bl-none bg-white dark:bg-card",
                               )}
                             >
@@ -1741,6 +1732,15 @@ export default function WhatsAppInbox() {
                                 <span>{format(at, "HH:mm", { locale: ptBR })}</span>
                                 {out && <StatusIcon status={msg.status} />}
                               </div>
+                              {canDelete && (
+                                <button
+                                  className="absolute -right-7 top-1 opacity-0 group-hover:opacity-100 transition-opacity rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  title="Excluir mensagem"
+                                  onClick={() => setDeletingMsgId(msg.id)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
