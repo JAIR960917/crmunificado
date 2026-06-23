@@ -470,23 +470,38 @@ export default function CampanhasCopaPage() {
     }
   };
 
+  // Enviar tudo numa chamada só passa do tempo limite da edge function quando
+  // há centenas/milhares de inscrições (cada uma faz algumas idas ao banco).
+  // Divide em lotes pequenos e chama a function várias vezes em sequência.
+  const SEND_TO_LEADS_BATCH_SIZE = 50;
+
   const sendToLeads = async (ids: string[]) => {
     const targets = ids.filter((id) => !sendingIds.has(id));
     if (targets.length === 0) return;
 
     setSendingIds((prev) => new Set([...prev, ...targets]));
     try {
-      const { data, error } = await supabase.functions.invoke("campanha-copa-send-to-leads", {
-        body: { submissionIds: targets },
-      });
-      if (error) throw error;
-
-      const results = (data?.results ?? []) as {
+      type SendResult = {
         submissionId: string;
         status: "sent" | "already_sent" | "error";
         leadId?: string;
         error?: string;
-      }[];
+      };
+      const results: SendResult[] = [];
+      for (let i = 0; i < targets.length; i += SEND_TO_LEADS_BATCH_SIZE) {
+        const batch = targets.slice(i, i + SEND_TO_LEADS_BATCH_SIZE);
+        const { data, error } = await supabase.functions.invoke("campanha-copa-send-to-leads", {
+          body: { submissionIds: batch },
+        });
+        if (error) {
+          batch.forEach((id) =>
+            results.push({ submissionId: id, status: "error", error: error.message }),
+          );
+          continue;
+        }
+        results.push(...((data?.results ?? []) as SendResult[]));
+      }
+
       const sent = results.filter((r) => r.status === "sent");
       const errors = results.filter((r) => r.status === "error");
 
