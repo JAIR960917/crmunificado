@@ -403,6 +403,10 @@ export default function WhatsAppInbox() {
     return conversations.filter((c) => {
       if (view === "pending" && !(c.status === "pending" && c.last_message_direction === "in")) return false;
       if (view === "mine" && !(c.status === "open" && c.assigned_to === user?.id)) return false;
+      // "Todos" = conversas que eu mesmo fechei. Conversas que eu encaminhei
+      // para outra empresa não entram aqui — ao encaminhar, assigned_to deixa
+      // de ser eu e o status volta para "pending" (não "closed").
+      if (view === "all" && !(c.status === "closed" && c.assigned_to === user?.id)) return false;
       if (!q) return true;
       const name = (c.contact_name || "").toLowerCase();
       const wa = (c.wa_id || "").toLowerCase();
@@ -421,14 +425,16 @@ export default function WhatsAppInbox() {
     [conversations, user?.id],
   );
 
-  const inboxTabs = useMemo((): { key: "pending" | "mine" | "all"; label: string }[] => {
-    const tabs: { key: "pending" | "mine" | "all"; label: string }[] = [
-      { key: "pending", label: pendingConversationsCount > 0 ? `Pendentes (${pendingConversationsCount})` : "Pendentes" },
-      { key: "mine", label: mineConversationsCount > 0 ? `Ativos (${mineConversationsCount})` : "Ativos" },
-    ];
-    if (isPrivileged) tabs.push({ key: "all", label: "Todas" });
-    return tabs;
-  }, [pendingConversationsCount, mineConversationsCount, isPrivileged]);
+  const closedMineConversationsCount = useMemo(
+    () => conversations.filter((c) => c.status === "closed" && c.assigned_to === user?.id).length,
+    [conversations, user?.id],
+  );
+
+  const inboxTabs = useMemo((): { key: "pending" | "mine" | "all"; label: string }[] => [
+    { key: "pending", label: pendingConversationsCount > 0 ? `Pendentes (${pendingConversationsCount})` : "Pendentes" },
+    { key: "mine", label: mineConversationsCount > 0 ? `Ativos (${mineConversationsCount})` : "Ativos" },
+    { key: "all", label: closedMineConversationsCount > 0 ? `Todos (${closedMineConversationsCount})` : "Todos" },
+  ], [pendingConversationsCount, mineConversationsCount, closedMineConversationsCount]);
 
   const loadInstances = useCallback(async () => {
     const { data, error } = await supabase.rpc("list_whatsapp_instances_for_inbox");
@@ -671,6 +677,31 @@ export default function WhatsAppInbox() {
       void loadConversations();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Erro ao aceitar conversa");
+      void loadConversations();
+    } finally {
+      setConversationActionLoading(null);
+    }
+  }, [conversation, applyConversationPatch, user?.id, currentUserName, loadConversations]);
+
+  const handleReopenConversation = useCallback(async () => {
+    if (!conversation) return;
+    setConversationActionLoading("accept");
+    try {
+      const { error } = await supabase.rpc("reopen_whatsapp_conversation", {
+        p_conversation_id: conversation.id,
+      });
+      if (error) throw error;
+      applyConversationPatch({
+        ...conversation,
+        status: "open",
+        assigned_to: user?.id ?? null,
+        assigned_to_name: currentUserName,
+      });
+      setView("mine");
+      toast.success("Atendimento reaberto");
+      void loadConversations();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao reabrir conversa");
       void loadConversations();
     } finally {
       setConversationActionLoading(null);
@@ -1770,10 +1801,28 @@ export default function WhatsAppInbox() {
                             </Button>
                           </div>
                         ) : conversation.status === "closed" ? (
-                          <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                            Conversa encerrada — ela some das listas e volta para Pendentes se o cliente
-                            responder novamente.
-                          </div>
+                          windowOpen && conversation.assigned_to === user?.id ? (
+                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-950 dark:text-emerald-100">
+                              <span>
+                                Conversa encerrada, mas o cliente ainda está dentro da janela de 24h —
+                                você pode continuar o atendimento sem esperar ele responder.
+                              </span>
+                              <Button
+                                size="sm"
+                                className="h-7 gap-1.5 text-xs"
+                                disabled={conversationActionLoading !== null}
+                                onClick={() => void handleReopenConversation()}
+                              >
+                                <UserCheck className="h-3.5 w-3.5" />
+                                Reabrir atendimento
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                              Conversa encerrada — ela some das listas e volta para Pendentes se o cliente
+                              responder novamente.
+                            </div>
+                          )
                         ) : (
                           <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                             Atendido por {conversation.assigned_to_name || "outro atendente"} — somente leitura.
