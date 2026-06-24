@@ -81,7 +81,15 @@ serve(async (req) => {
       });
     }
 
-    const isPrivileged = roles.some((r) => r === "admin" || r === "gerente");
+    // Só admin tem bypass total de empresa pra ACESSAR/responder uma
+    // conversa. "gerente" entrou aqui numa correção anterior e isso deixava
+    // ele mandar mensagem em QUALQUER conversa do sistema (inclusive em
+    // números de Marketing sem relação com a empresa dele) — o controle por
+    // empresa (hasInboxAccess/isMyCompany) já cobre o caso de gerente de
+    // verdade. Gerente continua podendo excluir qualquer mensagem (moderação),
+    // isso é independente do acesso à conversa.
+    const isPrivileged = roles.some((r) => r === "admin");
+    const canModerateMessages = roles.some((r) => r === "admin" || r === "gerente");
 
     async function isMyCompany(companyId: string): Promise<boolean> {
       const { data: profile } = await admin
@@ -295,7 +303,7 @@ serve(async (req) => {
         });
       }
 
-      const canDelete = isPrivileged || msg.sent_by === user.id;
+      const canDelete = canModerateMessages || msg.sent_by === user.id;
       if (!canDelete) {
         return new Response(JSON.stringify({ error: "Você só pode excluir suas próprias mensagens" }), {
           status: 403,
