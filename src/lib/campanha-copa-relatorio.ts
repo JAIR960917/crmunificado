@@ -167,7 +167,7 @@ function cpfDigits(value: string | null | undefined): string {
   return (value ?? "").replace(/\D/g, "");
 }
 
-function normalizePhoneDigits(raw: string | null | undefined): string {
+export function normalizePhoneDigits(raw: string | null | undefined): string {
   let d = (raw ?? "").replace(/\D/g, "");
   if (d.length >= 12 && d.startsWith("55")) d = d.slice(2);
   if (d.length === 10 && d[2] !== "9") d = `${d.slice(0, 2)}9${d.slice(2)}`;
@@ -438,6 +438,21 @@ async function lookupLeadsPhones(
     }
   }
   return { leadsExternos, leadsViaCopa };
+}
+
+export type LeadMatch = { lead_id: string; phone_digits: string; origem_campanha: string | null };
+
+/** Leads (id, telefone normalizado, origem) que batem com uma lista de telefones. */
+export async function lookupLeadsByPhones(phones: string[]): Promise<LeadMatch[]> {
+  if (phones.length === 0) return [];
+
+  const { data, error } = await supabase.rpc("campanha_copa_lookup_leads" as never, {
+    p_phones: phones,
+  } as never);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []) as LeadMatch[];
 }
 
 export async function fetchCampanhaCopaRelatorio(

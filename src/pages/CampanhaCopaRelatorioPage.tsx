@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Loader2,
   RefreshCw,
+  Search,
   Trophy,
   UserCheck,
   Users,
@@ -46,6 +47,8 @@ import {
   exportCampanhaCopaUnmappedCsv,
   fetchCampanhaCopaRelatorio,
   fetchCampanhaCopaRelatorioMeta,
+  lookupLeadsByPhones,
+  normalizePhoneDigits,
   normalizePlacarInput,
   renovacaoMatchLabel,
   type CampanhaCopaRelatorioFilters,
@@ -63,6 +66,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Trash2 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
@@ -277,6 +281,99 @@ export default function CampanhaCopaRelatorioPage() {
     void loadReport();
   }, [rows, loadReport]);
 
+  // Leads que já estão em Renovação não deveriam continuar existindo como
+  // card em Leads — uma pessoa não pode estar em Renovação E em Leads ao
+  // mesmo tempo. Varre as inscrições com renovacao_match != "nao" (em
+  // renovação na própria loja OU em outra loja), descobre os leads cujo
+  // telefone bate, e permite excluir esses leads (exportando antes).
+  type RenLeadMatch = { lead_id: string; nome: string; telefone: string; cidade: string };
+  const [renLeadsDialogOpen, setRenLeadsDialogOpen] = useState(false);
+  const [renLeadsScanning, setRenLeadsScanning] = useState(false);
+  const [renLeadsResults, setRenLeadsResults] = useState<RenLeadMatch[] | null>(null);
+  const [renLeadsExported, setRenLeadsExported] = useState(false);
+  const [renLeadsDeletingAll, setRenLeadsDeletingAll] = useState(false);
+
+  const scanLeadsEmRenovacao = useCallback(async () => {
+    setRenLeadsScanning(true);
+    setRenLeadsExported(false);
+    try {
+      const candidateRows = rows.filter((r) => r.renovacao_match !== "nao");
+      const phoneToRow = new Map<string, CampanhaCopaRelatorioRow>();
+      for (const row of candidateRows) {
+        const phone = normalizePhoneDigits(row.telefone);
+        if (phone.length >= 10) phoneToRow.set(phone, row);
+      }
+      const matches = await lookupLeadsByPhones([...phoneToRow.keys()]);
+      const byLeadId = new Map<string, RenLeadMatch>();
+      for (const m of matches) {
+        if (byLeadId.has(m.lead_id)) continue;
+        const row = phoneToRow.get(m.phone_digits);
+        byLeadId.set(m.lead_id, {
+          lead_id: m.lead_id,
+          nome: row?.nome || "—",
+          telefone: row?.telefone || m.phone_digits,
+          cidade: row?.cidade || "—",
+        });
+      }
+      const results = [...byLeadId.values()];
+      setRenLeadsResults(results);
+      toast.success(`${results.length} lead(s) encontrado(s) já em Renovação.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao verificar");
+    } finally {
+      setRenLeadsScanning(false);
+    }
+  }, [rows]);
+
+  const exportRenLeadsCsv = useCallback(() => {
+    if (!renLeadsResults || renLeadsResults.length === 0) return;
+    const header = ["Nome", "Telefone", "Cidade"];
+    const lines = renLeadsResults.map((r) =>
+      [r.nome, r.telefone, r.cidade].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";"),
+    );
+    const csv = [header.join(";"), ...lines].join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leads_ja_em_renovacao_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setRenLeadsExported(true);
+    toast.success("CSV exportado. Agora você pode excluir esses leads.");
+  }, [renLeadsResults]);
+
+  const deleteAllLeadsEmRenovacao = useCallback(async () => {
+    if (!renLeadsResults || renLeadsResults.length === 0) return;
+    setRenLeadsDeletingAll(true);
+    let okCount = 0;
+    let errCount = 0;
+    for (const r of renLeadsResults) {
+      try {
+        await Promise.all([
+          supabase.from("crm_lead_notes").delete().eq("lead_id", r.lead_id),
+          supabase.from("lead_activities").delete().eq("lead_id", r.lead_id),
+          supabase.from("crm_appointments").delete().eq("lead_id", r.lead_id),
+          supabase.from("notifications").delete().eq("lead_id", r.lead_id),
+          supabase.from("scheduled_whatsapp_messages").delete().eq("lead_id", r.lead_id),
+        ]);
+        const { error } = await supabase.from("crm_leads").delete().eq("id", r.lead_id);
+        if (error) throw error;
+        okCount++;
+      } catch {
+        errCount++;
+      }
+    }
+    setRenLeadsDeletingAll(false);
+    setRenLeadsResults(null);
+    setRenLeadsExported(false);
+    if (errCount === 0) {
+      toast.success(`${okCount} lead(s) já em Renovação excluído(s).`);
+    } else {
+      toast.error(`${okCount} excluído(s), ${errCount} falharam. Tente novamente para os restantes.`);
+    }
+  }, [renLeadsResults]);
+
   const empresaBase = Math.max(1, metrics.total);
   const exameBase = Math.max(1, metrics.total);
 
@@ -303,6 +400,16 @@ export default function CampanhaCopaRelatorioPage() {
                 <Trophy className="h-4 w-4 mr-2" />
                 Campanhas Copa
               </Link>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRenLeadsDialogOpen(true);
+                void scanLeadsEmRenovacao();
+              }}
+            >
+              <Search className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Leads já em Renovação</span>
             </Button>
             <Button variant="outline" onClick={() => void loadReport()} disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -807,6 +914,75 @@ export default function CampanhaCopaRelatorioPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={renLeadsDialogOpen} onOpenChange={setRenLeadsDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Leads que já estão em Renovação</DialogTitle>
+            <DialogDescription>
+              Uma pessoa já cliente ativo em Renovação não deveria continuar com um card na tela de Leads.
+              Exporte o CSV antes de excluir.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Button size="sm" variant="secondary" onClick={() => void scanLeadsEmRenovacao()} disabled={renLeadsScanning}>
+                {renLeadsScanning ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verificando...</>
+                ) : (
+                  <><Search className="mr-2 h-4 w-4" />Verificar agora</>
+                )}
+              </Button>
+              {renLeadsResults && renLeadsResults.length > 0 && (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={exportRenLeadsCsv}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar CSV ({renLeadsResults.length})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={!renLeadsExported || renLeadsDeletingAll}
+                    title={!renLeadsExported ? "Exporte o CSV primeiro" : undefined}
+                    onClick={() => void deleteAllLeadsEmRenovacao()}
+                  >
+                    {renLeadsDeletingAll ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Excluindo...</>
+                    ) : (
+                      <><Trash2 className="mr-2 h-4 w-4" />Excluir todos ({renLeadsResults.length})</>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+            {renLeadsResults && renLeadsResults.length === 0 && (
+              <p className="text-sm text-muted-foreground">Nenhum lead encontrado já em Renovação.</p>
+            )}
+            {renLeadsResults && renLeadsResults.length > 0 && (
+              <div className="max-h-[400px] overflow-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Telefone</TableHead>
+                      <TableHead>Cidade</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {renLeadsResults.map((r) => (
+                      <TableRow key={r.lead_id}>
+                        <TableCell className="text-xs">{r.nome}</TableCell>
+                        <TableCell className="text-xs">{r.telefone}</TableCell>
+                        <TableCell className="text-xs">{r.cidade}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
