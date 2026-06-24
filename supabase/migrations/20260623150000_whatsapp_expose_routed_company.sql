@@ -2,6 +2,11 @@
 -- destacar (verde, "precisa de tratativa") uma conversa que acabou de ser
 -- encaminhada para a empresa do usuário, mesmo que a última mensagem tenha
 -- sido enviada pela empresa de origem (não pelo cliente).
+--
+-- Adicionar uma coluna nova já conta como "mudar o tipo de retorno" pro
+-- Postgres (não só remover/reordenar) — precisa DROP antes do CREATE.
+DROP FUNCTION IF EXISTS public.list_whatsapp_inbox_conversations(int);
+
 CREATE OR REPLACE FUNCTION public.list_whatsapp_inbox_conversations(p_limit int DEFAULT 200)
 RETURNS TABLE (
   id uuid,
@@ -76,5 +81,10 @@ AS $$
   ORDER BY c.last_message_at DESC NULLS LAST
   LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 200), 500));
 $$;
+
+-- DROP FUNCTION acima limpa os privilégios — restaura o mesmo endurecimento
+-- (sem isso, a função fica acessível a PUBLIC, não só authenticated).
+REVOKE ALL ON FUNCTION public.list_whatsapp_inbox_conversations(int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.list_whatsapp_inbox_conversations(int) TO authenticated;
 
 NOTIFY pgrst, 'reload schema';
