@@ -42,6 +42,7 @@ import {
 import {
   EXAME_VISTA_OPTIONS,
   exportCampanhaCopaPlacarCsv,
+  exportCampanhaCopaUnmappedCsv,
   fetchCampanhaCopaRelatorio,
   fetchCampanhaCopaRelatorioMeta,
   normalizePlacarInput,
@@ -51,6 +52,17 @@ import {
   type RenovacaoMatch,
   NO_COMPANY_FILTER,
 } from "@/lib/campanha-copa-relatorio";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 const ALL = "__all__";
@@ -149,6 +161,10 @@ export default function CampanhaCopaRelatorioPage() {
     [placarHome, placarAway],
   );
 
+  const [unmappedExported, setUnmappedExported] = useState(false);
+  const [unmappedDeleting, setUnmappedDeleting] = useState(false);
+  const [unmappedDeleteOpen, setUnmappedDeleteOpen] = useState(false);
+
   const filters = useMemo((): CampanhaCopaRelatorioFilters => ({
     ultimo_exame: ultimoExame === ALL ? null : ultimoExame,
     cidade: cidade.trim() || null,
@@ -197,6 +213,10 @@ export default function CampanhaCopaRelatorioPage() {
     void loadReport();
   }, [isAdmin, loadReport]);
 
+  useEffect(() => {
+    setUnmappedExported(false);
+  }, [rows]);
+
   const profileName = useCallback(
     (id: string | null) => {
       if (!id) return "Sem responsável";
@@ -205,6 +225,47 @@ export default function CampanhaCopaRelatorioPage() {
     },
     [profiles],
   );
+
+  const isUnmappedFilter = empresa === NO_COMPANY;
+
+  const exportUnmappedCsv = useCallback(() => {
+    if (rows.length === 0) return;
+    exportCampanhaCopaUnmappedCsv(rows, profileName);
+    setUnmappedExported(true);
+    toast.success("CSV exportado. Agora você pode excluir essas inscrições.");
+  }, [rows, profileName]);
+
+  const deleteAllUnmapped = useCallback(async () => {
+    if (rows.length === 0) return;
+    setUnmappedDeleting(true);
+    let okCount = 0;
+    let errCount = 0;
+    for (const row of rows) {
+      try {
+        const { error: subErr } = await supabase
+          .from("campanha_copa_submissions")
+          .delete()
+          .eq("id", row.id);
+        if (subErr) throw subErr;
+        if (row.lead_id) {
+          const { error: leadErr } = await supabase.from("crm_leads").delete().eq("id", row.lead_id);
+          if (leadErr) throw leadErr;
+        }
+        okCount++;
+      } catch {
+        errCount++;
+      }
+    }
+    setUnmappedDeleting(false);
+    setUnmappedDeleteOpen(false);
+    setUnmappedExported(false);
+    if (errCount === 0) {
+      toast.success(`${okCount} inscrição(ões) sem empresa mapeada excluída(s).`);
+    } else {
+      toast.error(`${okCount} excluída(s), ${errCount} falharam. Tente novamente para as restantes.`);
+    }
+    void loadReport();
+  }, [rows, loadReport]);
 
   const empresaBase = Math.max(1, metrics.total);
   const exameBase = Math.max(1, metrics.total);
@@ -580,6 +641,24 @@ export default function CampanhaCopaRelatorioPage() {
                   Exportar CSV ({rows.length}) — placar {placarFiltro}
                 </Button>
               )}
+              {isUnmappedFilter && rows.length > 0 && (
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  <Button variant="secondary" size="sm" onClick={exportUnmappedCsv}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Exportar CSV ({rows.length}) — sem empresa mapeada
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={!unmappedExported || unmappedDeleting}
+                    title={!unmappedExported ? "Exporte o CSV primeiro" : undefined}
+                    onClick={() => setUnmappedDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir todos ({rows.length})
+                  </Button>
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -675,6 +754,32 @@ export default function CampanhaCopaRelatorioPage() {
           <strong>Prospect</strong> = não encontrado na loja (inclui clientes de outras unidades da rede).
         </p>
       </div>
+
+      <AlertDialog open={unmappedDeleteOpen} onOpenChange={setUnmappedDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir todas as inscrições sem empresa mapeada?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso excluirá permanentemente {rows.length} inscrição(ões) da Campanha Copa (e o lead
+              vinculado, quando houver) que não têm empresa mapeada pela cidade. Essa ação não pode ser
+              desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unmappedDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void deleteAllUnmapped();
+              }}
+              disabled={unmappedDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {unmappedDeleting ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

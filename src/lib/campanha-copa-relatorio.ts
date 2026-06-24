@@ -645,6 +645,53 @@ export function exportCampanhaCopaPlacarCsv(
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+export function exportCampanhaCopaUnmappedCsv(
+  rows: CampanhaCopaRelatorioRow[],
+  profileName: (id: string | null) => string,
+) {
+  const headers = [
+    "Nome",
+    "CPF",
+    "Telefone",
+    "Cidade",
+    "Idade",
+    "Ultimo exame",
+    "Em Renovacao",
+    "Responsavel",
+    "Data inscricao",
+  ];
+
+  const lines = [
+    headers.join(CSV_DELIMITER),
+    ...rows.map((row) =>
+      [
+        csvEscape(row.nome),
+        csvTextCell(row.cpf),
+        csvTextCell(row.telefone),
+        csvEscape(row.cidade),
+        csvEscape(row.idade),
+        csvEscape(row.ultimo_exame_vista),
+        csvEscape(renovacaoMatchLabel(row.renovacao_match)),
+        csvEscape(profileName(row.assigned_to)),
+        csvEscape(formatCsvDate(row.created_at)),
+      ].join(CSV_DELIMITER),
+    ),
+  ];
+
+  const blob = new Blob(["﻿" + lines.join("\r\n") + "\r\n"], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `campanha-copa-sem-empresa-mapeada-${new Date().toISOString().slice(0, 10)}.csv`;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function renovacaoMatchLabel(match: RenovacaoMatch): string {
   switch (match) {
     case "sim":
