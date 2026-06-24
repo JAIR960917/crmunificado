@@ -261,6 +261,7 @@ async function upsertConversationMessage(
     p_contact_name: contactName,
     p_instance_id: instanceId,
     p_increment_unread: false,
+    p_is_inbound: direction === "in",
   });
   if (metaErr) {
     console.error("[whatsapp-webhook] erro ao atualizar conversa:", metaErr.message);
