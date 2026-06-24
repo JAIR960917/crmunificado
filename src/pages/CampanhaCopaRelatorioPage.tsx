@@ -601,7 +601,7 @@ export default function CampanhaCopaRelatorioPage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Total de inscrições</CardDescription>
@@ -659,23 +659,6 @@ export default function CampanhaCopaRelatorioPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription className="flex items-center gap-1">
-                <LayoutDashboard className="h-3.5 w-3.5" />
-                Entrou em Leads pela Campanha
-              </CardDescription>
-              <CardTitle className="text-3xl text-cyan-600">
-                {metrics.em_leads_via_copa}
-                <span className="text-base font-normal text-muted-foreground ml-2">
-                  ({metrics.pct_leads_via_copa}%)
-                </span>
-              </CardTitle>
-              <p className="text-xs text-muted-foreground pt-1">
-                Card em Leads veio da própria campanha, e a pessoa não está em Renovação nem tinha lead prévio
-              </p>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1">
                 <Users className="h-3.5 w-3.5" />
                 Prospect (sem Renovação nem Leads prévios)
               </CardDescription>
@@ -686,7 +669,7 @@ export default function CampanhaCopaRelatorioPage() {
                 </span>
               </CardTitle>
               <p className="text-xs text-muted-foreground pt-1">
-                Mesmo grupo de "Entrou em Leads pela Campanha" — visão como prospect convertido
+                Card em Leads veio da própria campanha, e a pessoa não está em Renovação nem tinha lead prévio
               </p>
             </CardHeader>
           </Card>
