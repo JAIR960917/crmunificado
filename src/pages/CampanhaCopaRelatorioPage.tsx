@@ -420,9 +420,12 @@ export default function CampanhaCopaRelatorioPage() {
     [despesas],
   );
 
+  // "Leads totais" pro CPL = Prospect + Já estava em Leads — quem está em
+  // Renovação não é "lead", é cliente, então não entra nessa base.
+  const leadsTotaisCount = metrics.prospect + metrics.em_leads_externo;
   const geralMetrics = useMemo(
-    () => buildGeralMetrics(rows, despesasTotal, uniqueLeadsCount, metrics.prospect),
-    [rows, despesasTotal, uniqueLeadsCount, metrics.prospect],
+    () => buildGeralMetrics(rows, despesasTotal, leadsTotaisCount, metrics.prospect),
+    [rows, despesasTotal, leadsTotaisCount, metrics.prospect],
   );
 
   const handleAddDespesa = useCallback(async () => {
@@ -906,7 +909,7 @@ export default function CampanhaCopaRelatorioPage() {
                     CPL Leads totais
                   </CardDescription>
                   <CardTitle className="text-2xl">{formatBRL(geralMetrics.cplLeadsTotais)}</CardTitle>
-                  <p className="text-xs text-muted-foreground pt-1">Despesas ÷ Leads únicos (CPF)</p>
+                  <p className="text-xs text-muted-foreground pt-1">Despesas ÷ (Prospect + Já estava em Leads)</p>
                 </CardHeader>
               </Card>
               <Card>
