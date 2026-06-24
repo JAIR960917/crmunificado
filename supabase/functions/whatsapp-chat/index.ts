@@ -108,11 +108,13 @@ serve(async (req) => {
       return !!mgr?.company_id;
     }
 
-    // Mesma regra de public.user_has_whatsapp_inbox_access(), mas usando
-    // user.id diretamente (não dá para chamar a RPC com o client de service
-    // role porque auth.uid() ficaria nulo) — vínculo manual, OU empresa da
-    // instância igual à do usuário, OU já é o responsável por esta conversa
-    // nesta instância (cobre transferência entre empresas).
+    // Mesma regra de public.user_has_whatsapp_inbox_access(): vínculo manual,
+    // OU empresa da instância igual à do usuário. NÃO inclui "já foi
+    // responsável por alguma conversa nessa instância" — isso vazava acesso
+    // à instância INTEIRA pra sempre por causa de uma única conversa antiga
+    // (até fechada), mesmo depois do usuário mudar de empresa. O acesso à
+    // conversa ESPECÍFICA que é (ou foi) atribuída ao usuário já é coberto
+    // direto em assertConversationAccess via conv.assigned_to === user.id.
     async function hasInboxAccess(instanceId: string): Promise<boolean> {
       const { data: assignment } = await admin
         .from("whatsapp_instance_assignments")
@@ -127,16 +129,7 @@ serve(async (req) => {
         .select("company_id")
         .eq("id", instanceId)
         .maybeSingle();
-      if (instance?.company_id && (await isMyCompany(instance.company_id))) return true;
-
-      const { data: assignedConv } = await admin
-        .from("whatsapp_conversations")
-        .select("id")
-        .eq("instance_id", instanceId)
-        .eq("assigned_to", user.id)
-        .limit(1)
-        .maybeSingle();
-      return !!assignedConv?.id;
+      return !!(instance?.company_id && (await isMyCompany(instance.company_id)));
     }
 
     async function assertConversationAccess(conversationId: string) {
