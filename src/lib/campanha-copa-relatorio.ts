@@ -315,21 +315,24 @@ export function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRela
   const uniquePeople = dedupeRowsByCpf(rows);
   // Os 3 buckets abaixo são MUTUAMENTE EXCLUSIVOS e cobrem todo mundo —
   // a soma dos três sempre bate com "Leads únicos (CPF)". Prioridade:
-  // 1) Em Renovação (própria loja OU outra loja) — se está em Renovação em
-  //    qualquer lugar, conta aqui, mesmo que também tenha um lead antigo.
+  // 1) Em Renovação (própria loja OU outra loja) — MAS só quem JÁ estava
+  //    em Renovação ANTES de participar. Quem só está em Renovação porque
+  //    comprou DEPOIS de se inscrever (cliente_novo_pos_campanha &&
+  //    converteu_apos_campanha) é um resultado da campanha, não alguém que
+  //    "já estava" — cai no bucket de Prospect (sem Renovação/Leads prévios).
   // 2) Já estava em Leads (só quem NÃO está em Renovação, senão dobraria).
-  // 3) Prospect — resto: nunca esteve em Renovação nem tinha lead externo.
+  // 3) Prospect — resíduo: todo mundo que não caiu em (1) ou (2), incluindo
+  //    quem converteu para Renovação ou para Leads através da própria campanha.
+  const convertedViaCampanha = (r: CampanhaCopaRelatorioRow) =>
+    r.cliente_novo_pos_campanha && r.converteu_apos_campanha;
   const em_renovacao = uniquePeople.filter(
-    (r) => r.renovacao_match === "sim" || r.renovacao_match === "outra_loja",
+    (r) => (r.renovacao_match === "sim" || r.renovacao_match === "outra_loja") && !convertedViaCampanha(r),
   ).length;
   const em_leads_externo = uniquePeople.filter(
     (r) => r.renovacao_match === "nao" && r.em_leads_externo,
   ).length;
-  const novoViaCampanha = uniquePeople.filter(
-    (r) => r.renovacao_match === "nao" && !r.em_leads_externo,
-  );
-  const em_leads_via_copa = novoViaCampanha.length;
-  const prospect = novoViaCampanha.length;
+  const prospect = uniquePeople.length - em_renovacao - em_leads_externo;
+  const em_leads_via_copa = prospect;
   const outra_loja = 0;
   const consentimento_marketing = rows.filter((r) => r.consentimento_marketing).length;
   // Comprou APÓS a data da inscrição na campanha (última compra >= data do
