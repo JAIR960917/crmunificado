@@ -42,16 +42,25 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { data: roleRows } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
-    const isAdmin = (roleRows || []).some((r) => r.role === "admin");
-    if (!isAdmin) {
+    const roles = (roleRows || []).map((r) => r.role);
+    const isAdmin = roles.includes("admin");
+
+    const body = await req.json().catch(() => ({}));
+    const { action } = body as { action?: string };
+
+    // list-templates só LÊ os templates aprovados na Meta (sem expor
+    // token/config) — qualquer usuário com acesso ao Inbox WhatsApp precisa
+    // disso pra mandar template, não só admin. As demais ações (config da
+    // WABA, tokens, etc.) continuam só pra admin.
+    const STAFF_ROLES = new Set(["admin", "gerente", "vendedor", "financeiro"]);
+    const isStaff = roles.some((r) => STAFF_ROLES.has(r));
+    const allowed = action === "list-templates" ? isStaff : isAdmin;
+    if (!allowed) {
       return new Response(JSON.stringify({ error: "Apenas administradores" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const body = await req.json().catch(() => ({}));
-    const { action } = body as { action?: string };
 
     const publicUrl = Deno.env.get("SUPABASE_PUBLIC_URL") || Deno.env.get("SITE_URL") || "";
     const webhookUrl = publicUrl
