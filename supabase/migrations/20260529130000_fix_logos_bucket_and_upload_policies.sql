@@ -1,8 +1,26 @@
 -- Garante bucket logos público e políticas de leitura/escrita consistentes.
-
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('logos', 'logos', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
+-- storage.buckets nem sempre tem a coluna "public" (depende da versão do
+-- storage-api self-hosted) — verifica antes de usá-la.
+DO $do$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'storage' AND table_name = 'buckets' AND column_name = 'public'
+  ) THEN
+    EXECUTE $sql$
+      INSERT INTO storage.buckets (id, name, public)
+      VALUES ('logos', 'logos', true)
+      ON CONFLICT (id) DO UPDATE SET public = true
+    $sql$;
+  ELSE
+    EXECUTE $sql$
+      INSERT INTO storage.buckets (id, name)
+      VALUES ('logos', 'logos')
+      ON CONFLICT (id) DO NOTHING
+    $sql$;
+  END IF;
+END;
+$do$;
 
 DROP POLICY IF EXISTS "Anyone can view logos" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated can read logos" ON storage.objects;

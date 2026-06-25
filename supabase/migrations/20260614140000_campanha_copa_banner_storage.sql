@@ -10,7 +10,16 @@ CREATE POLICY "Anyone can view whatsapp media"
   FOR SELECT
   USING (bucket_id = 'whatsapp-media');
 
-UPDATE storage.buckets SET public = true WHERE id = 'whatsapp-media';
+DO $do$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'storage' AND table_name = 'buckets' AND column_name = 'public'
+  ) THEN
+    EXECUTE $sql$ UPDATE storage.buckets SET public = true WHERE id = 'whatsapp-media' $sql$;
+  END IF;
+END;
+$do$;
 
 -- logos/campanha-copa: arte promocional do formulário público
 DROP POLICY IF EXISTS "Campanha copa managers upload banner" ON storage.objects;
