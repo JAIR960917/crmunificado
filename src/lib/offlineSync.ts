@@ -78,7 +78,21 @@ function removeFromAppointmentQueue(id: string) {
   localStorage.setItem(APPT_QUEUE_KEY, JSON.stringify(queue));
 }
 
+// Varias telas chamam syncOfflineQueue ao mesmo tempo (montagem da página,
+// evento "online", polling a cada 30s) — sem essa trava, duas chamadas
+// concorrentes podiam ler a mesma fila antes da primeira terminar de
+// remover os itens já sincronizados, inserindo o MESMO lead duas vezes.
+let syncInFlight: Promise<string[]> | null = null;
+
 export async function syncOfflineQueue(): Promise<string[]> {
+  if (syncInFlight) return syncInFlight;
+  syncInFlight = syncOfflineQueueInternal().finally(() => {
+    syncInFlight = null;
+  });
+  return syncInFlight;
+}
+
+async function syncOfflineQueueInternal(): Promise<string[]> {
   const queue = getOfflineQueue();
   const apptQueue = getOfflineAppointmentQueue();
   const syncedIds: string[] = [];
