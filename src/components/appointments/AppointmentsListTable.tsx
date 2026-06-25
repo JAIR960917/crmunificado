@@ -9,7 +9,6 @@ import {
   FORMAS_PAGAMENTO_CONSULTA,
   formatRescheduleNote,
   getAppointmentRowColor,
-  getAppointmentRowColorSolid,
   glassesPaymentLabel,
 } from "@/lib/appointmentUtils";
 
@@ -141,7 +140,6 @@ export default function AppointmentsListTable({
               const dtFormatted = formatApptDateTime(appt.scheduled_datetime);
               const cpaga = appt.consulta_paga;
               const rowColor = getAppointmentRowColor(appt);
-              const rowColorSolid = getAppointmentRowColorSolid(appt);
               const consultaPagaLocked = cpaga === true && !isAdmin;
               const rescheduleNote = formatRescheduleNote(appt);
               const isSnapshot = !!appt.is_reschedule_snapshot;
@@ -170,13 +168,15 @@ export default function AppointmentsListTable({
                   )}
                 >
                   <td
-                    className={cn(
-                      "px-2 py-1.5 align-middle whitespace-nowrap sticky left-0 z-10 border-r text-white",
-                      rowColorSolid,
-                    )}
+                    className="p-0 align-middle relative sticky left-0 z-10 border-r bg-background"
                     title={nameTitle}
                   >
-                    <div className="flex items-center gap-1">
+                    {/* Camada sólida (bg-background) + camada com a MESMA cor translúcida da
+                        linha, as duas confinadas dentro da própria célula — fica idêntica ao
+                        resto da linha (mesmo tom), mas sem deixar o conteúdo que passa por
+                        baixo "vazar" através dela ao rolar a tabela (célula fixa). */}
+                    <div className={cn("absolute inset-0", rowColor)} />
+                    <div className="relative px-2 py-1.5 whitespace-nowrap flex items-center gap-1">
                       {isSnapshot && <span className="text-violet-400 shrink-0">↪</span>}
                       <span>{appt.nome || "—"}</span>
                     </div>

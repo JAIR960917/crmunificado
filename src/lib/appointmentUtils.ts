@@ -199,23 +199,6 @@ export function getAppointmentRowColor(appt: AppointmentColorInput): string {
   return "bg-green-700/40 hover:bg-green-700/50";
 }
 
-/**
- * Mesmas categorias de getAppointmentRowColor, mas em cor SÓLIDA (sem
- * opacidade) — usado na coluna Nome quando ela fica fixa (sticky) ao rolar a
- * tabela na horizontal. Translúcida, o texto das colunas que passam por
- * baixo aparece "vazando" através da célula fixa; sólida, cobre de verdade.
- */
-export function getAppointmentRowColorSolid(appt: AppointmentColorInput): string {
-  if (appt.is_reschedule_snapshot) return "bg-violet-900";
-  if (isFormaConsultaReavaliacao(appt.forma_pagamento_consulta)) return "bg-indigo-900";
-  if (isFormaConsultaCortesia(appt.forma_pagamento_consulta)) return "bg-amber-900";
-  if (appt.consulta_paga !== true) return "bg-red-950";
-  const paidAt = appt.consulta_paga_em || new Date().toISOString();
-  if (isSameCalendarDay(paidAt, appt.created_at)) return "bg-emerald-900";
-  if (isSameCalendarDay(paidAt, appt.scheduled_datetime)) return "bg-cyan-900";
-  return "bg-emerald-900";
-}
-
 /** Cores sólidas no calendário — evita transparência misturando eventos lado a lado */
 export function getAppointmentCalendarColor(appt: AppointmentColorInput): string {
   if (isAppointmentCalendarMuted(appt)) {
