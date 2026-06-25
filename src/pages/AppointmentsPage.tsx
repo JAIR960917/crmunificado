@@ -807,6 +807,23 @@ export default function AppointmentsPage() {
 
   const calendarLabel = getCalendarQueryRange(focusDate, calendarView).label;
 
+  // Explica por que o botão Salvar está desabilitado — sem isso, um
+  // agendamento sem "forma de pagamento da consulta" preenchida travava o
+  // botão pra QUALQUER edição (até só corrigir o nome) sem nenhuma mensagem
+  // visível explicando o motivo.
+  const saveBlockedReason = (): string | null => {
+    if (editingAppt?.is_reschedule_snapshot) return null;
+    if (editingAppt && isAppointmentInactive(editingAppt)) return null;
+    if (!formNome) return "Preencha o nome do cliente.";
+    if (!formDate) return "Preencha a data do agendamento.";
+    if (!formPagamentoOculos) return "Selecione a forma de pagamento dos óculos.";
+    if (!editingAppt && !formConsultaPaga) return "Informe se a consulta foi paga.";
+    if (formConsultaPaga === "sim" && !formPagamentoConsulta) {
+      return "Selecione a forma de pagamento da consulta para poder salvar.";
+    }
+    return null;
+  };
+
   const openEdit = (appt: Appointment) => {
     setEditingAppt(appt);
     setFormNome(appt.nome); setFormTelefone(appt.telefone); setFormIdade(appt.idade);
@@ -836,7 +853,7 @@ export default function AppointmentsPage() {
       toast.error("Informe se a consulta foi paga (Sim ou Não).");
       return;
     }
-    const pagamentoConsultaNeeded = !!editingAppt || formConsultaPaga === "sim";
+    const pagamentoConsultaNeeded = formConsultaPaga === "sim";
     if (pagamentoConsultaNeeded && !formPagamentoConsulta) {
       toast.error("Informe a forma de pagamento da consulta.");
       return;
@@ -1546,7 +1563,10 @@ export default function AppointmentsPage() {
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={saving || !formDate || !formPagamentoOculos || !formNome || (!editingAppt && !formConsultaPaga) || ((!!editingAppt || formConsultaPaga === "sim") && !formPagamentoConsulta) || !!editingAppt?.is_reschedule_snapshot || !!(editingAppt && isAppointmentInactive(editingAppt))}>
+            {!saving && saveBlockedReason() && (
+              <p className="text-xs text-destructive">{saveBlockedReason()}</p>
+            )}
+            <Button type="submit" className="w-full" disabled={saving || !formDate || !formPagamentoOculos || !formNome || (!editingAppt && !formConsultaPaga) || (formConsultaPaga === "sim" && !formPagamentoConsulta) || !!editingAppt?.is_reschedule_snapshot || !!(editingAppt && isAppointmentInactive(editingAppt))}>
               {saving ? "Salvando..." : editingAppt ? (isAppointmentInactive(editingAppt) ? "Somente leitura" : "Atualizar") : "Criar Agendamento"}
             </Button>
             </>
