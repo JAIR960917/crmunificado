@@ -24,12 +24,20 @@ BEGIN
 
   _db := current_database();
 
-  -- Persiste como setting de banco independente
-  EXECUTE format(
-    'ALTER DATABASE %I SET "app.settings.ssotica_encryption_key" TO %L',
-    _db,
-    _current_key
-  );
+  -- Persiste como setting de banco independente. Em alguns ambientes
+  -- self-hosted o usuário de deploy não tem privilégio para ALTER DATABASE
+  -- ... SET de parâmetros customizados (ex.: postgres não é mais superuser
+  -- em imagens recentes do Supabase). Não é fatal: _get_encryption_key()
+  -- já tem fallback que deriva o MESMO valor a partir de jwt_secret.
+  BEGIN
+    EXECUTE format(
+      'ALTER DATABASE %I SET "app.settings.ssotica_encryption_key" TO %L',
+      _db,
+      _current_key
+    );
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE NOTICE 'Sem privilégio para ALTER DATABASE ... SET app.settings.ssotica_encryption_key; seguindo com fallback via jwt_secret em _get_encryption_key().';
+  END;
 END;
 $$;
 
