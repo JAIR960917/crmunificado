@@ -17,13 +17,15 @@ export const EXAME_VISTA_OPTIONS = [
 
 export type RenovacaoMatch = "sim" | "nao" | "outra_loja";
 
+export type LeadsStatusFilter = "em_renovacao" | "em_leads" | "prospect";
+
 export type CampanhaCopaRelatorioFilters = {
   ultimo_exame?: string | null;
   cidade?: string | null;
   jogo?: string | null;
   data_inicio?: string | null;
   data_fim?: string | null;
-  renovacao_filtro?: RenovacaoMatch | null;
+  leads_status_filtro?: LeadsStatusFilter | null;
   assigned_to?: string | null;
   placar?: string | null;
   company_id?: string | null;
@@ -307,30 +309,38 @@ export function dedupeRowsByCpf(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaR
   return [...byCpf.values(), ...withoutCpf];
 }
 
+/**
+ * Classifica uma inscrição em 1 dos 3 buckets MUTUAMENTE EXCLUSIVOS do
+ * relatório — usado tanto pelas métricas quanto pelo filtro "Leads".
+ * Prioridade:
+ * 1) Em Renovação (própria loja OU outra loja) — MAS só quem JÁ estava em
+ *    Renovação ANTES de participar. Quem só está em Renovação porque
+ *    comprou DEPOIS de se inscrever (cliente_novo_pos_campanha &&
+ *    converteu_apos_campanha) é um resultado da campanha, não alguém que
+ *    "já estava" — cai no bucket de Prospect.
+ * 2) Em Leads (só quem NÃO está em Renovação, senão dobraria).
+ * 3) Prospect — resíduo: todo mundo que não caiu em (1) ou (2), incluindo
+ *    quem converteu para Renovação ou para Leads através da própria campanha.
+ */
+export function classifyLeadsStatus(row: CampanhaCopaRelatorioRow): LeadsStatusFilter {
+  const convertedViaCampanha = row.cliente_novo_pos_campanha && row.converteu_apos_campanha;
+  const emRenovacao =
+    (row.renovacao_match === "sim" || row.renovacao_match === "outra_loja") && !convertedViaCampanha;
+  if (emRenovacao) return "em_renovacao";
+  if (row.renovacao_match === "nao" && row.em_leads_externo) return "em_leads";
+  return "prospect";
+}
+
 export function buildMetrics(rows: CampanhaCopaRelatorioRow[]): CampanhaCopaRelatorioMetrics {
   const total = rows.length;
   // Quem participou de mais de uma campanha/jogo com o mesmo CPF não pode
   // ser contado mais de uma vez nesses cards — mesma regra de "Leads
   // únicos (CPF)". Mantém a inscrição mais recente de cada pessoa.
   const uniquePeople = dedupeRowsByCpf(rows);
-  // Os 3 buckets abaixo são MUTUAMENTE EXCLUSIVOS e cobrem todo mundo —
-  // a soma dos três sempre bate com "Leads únicos (CPF)". Prioridade:
-  // 1) Em Renovação (própria loja OU outra loja) — MAS só quem JÁ estava
-  //    em Renovação ANTES de participar. Quem só está em Renovação porque
-  //    comprou DEPOIS de se inscrever (cliente_novo_pos_campanha &&
-  //    converteu_apos_campanha) é um resultado da campanha, não alguém que
-  //    "já estava" — cai no bucket de Prospect (sem Renovação/Leads prévios).
-  // 2) Já estava em Leads (só quem NÃO está em Renovação, senão dobraria).
-  // 3) Prospect — resíduo: todo mundo que não caiu em (1) ou (2), incluindo
-  //    quem converteu para Renovação ou para Leads através da própria campanha.
-  const convertedViaCampanha = (r: CampanhaCopaRelatorioRow) =>
-    r.cliente_novo_pos_campanha && r.converteu_apos_campanha;
-  const em_renovacao = uniquePeople.filter(
-    (r) => (r.renovacao_match === "sim" || r.renovacao_match === "outra_loja") && !convertedViaCampanha(r),
-  ).length;
-  const em_leads_externo = uniquePeople.filter(
-    (r) => r.renovacao_match === "nao" && r.em_leads_externo,
-  ).length;
+  // Os 3 buckets abaixo são mutuamente exclusivos e cobrem todo mundo — a
+  // soma dos três sempre bate com "Leads únicos (CPF)" (ver classifyLeadsStatus).
+  const em_renovacao = uniquePeople.filter((r) => classifyLeadsStatus(r) === "em_renovacao").length;
+  const em_leads_externo = uniquePeople.filter((r) => classifyLeadsStatus(r) === "em_leads").length;
   const prospect = uniquePeople.length - em_renovacao - em_leads_externo;
   const em_leads_via_copa = prospect;
   const outra_loja = 0;
@@ -604,8 +614,8 @@ export async function fetchCampanhaCopaRelatorio(
     };
   });
 
-  if (filters.renovacao_filtro) {
-    rows = rows.filter((r) => r.renovacao_match === filters.renovacao_filtro);
+  if (filters.leads_status_filtro) {
+    rows = rows.filter((r) => classifyLeadsStatus(r) === filters.leads_status_filtro);
   }
 
   if (filters.company_id === NO_COMPANY_FILTER) {

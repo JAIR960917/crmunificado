@@ -67,6 +67,7 @@ import {
   type CampanhaCopaDespesa,
   type CampanhaCopaRelatorioFilters,
   type CampanhaCopaRelatorioRow,
+  type LeadsStatusFilter,
   type RenovacaoMatch,
   NO_COMPANY_FILTER,
 } from "@/lib/campanha-copa-relatorio";
@@ -168,7 +169,7 @@ export default function CampanhaCopaRelatorioPage() {
   const [jogo, setJogo] = useState(ALL);
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
-  const [renovacaoFiltro, setRenovacaoFiltro] = useState(ALL);
+  const [leadsFiltro, setLeadsFiltro] = useState(ALL);
   const [assignedTo, setAssignedTo] = useState(ALL);
   const [placarHome, setPlacarHome] = useState("");
   const [placarAway, setPlacarAway] = useState("");
@@ -199,12 +200,12 @@ export default function CampanhaCopaRelatorioPage() {
     jogo: jogo === ALL ? null : jogo,
     data_inicio: dataInicio || null,
     data_fim: dataFim || null,
-    renovacao_filtro: renovacaoFiltro === ALL ? null : (renovacaoFiltro as RenovacaoMatch),
+    leads_status_filtro: leadsFiltro === ALL ? null : (leadsFiltro as LeadsStatusFilter),
     assigned_to: assignedTo === ALL ? null : assignedTo,
     placar: placarFiltro,
     company_id: empresa === ALL ? null : empresa === NO_COMPANY ? NO_COMPANY : empresa,
     converteu: converteu === ALL ? null : converteu === "sim",
-  }), [ultimoExame, cidade, jogo, dataInicio, dataFim, renovacaoFiltro, assignedTo, placarFiltro, empresa, converteu]);
+  }), [ultimoExame, cidade, jogo, dataInicio, dataFim, leadsFiltro, assignedTo, placarFiltro, empresa, converteu]);
 
   const loadMeta = useCallback(async () => {
     const [profRes, meta] = await Promise.all([
@@ -511,7 +512,7 @@ export default function CampanhaCopaRelatorioPage() {
               Filtros
             </CardTitle>
             <CardDescription>
-              Refine por último exame, cidade, jogo, placar, período, status na Renovação, responsável e empresa.
+              Refine por último exame, cidade, jogo, placar, período, status em Leads/Renovação, responsável e empresa.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -571,15 +572,16 @@ export default function CampanhaCopaRelatorioPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Em Renovação?</Label>
-                <Select value={renovacaoFiltro} onValueChange={setRenovacaoFiltro}>
+                <Label>Leads</Label>
+                <Select value={leadsFiltro} onValueChange={setLeadsFiltro}>
                   <SelectTrigger>
                     <SelectValue placeholder="Todos" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={ALL}>Todos</SelectItem>
-                    <SelectItem value="sim">Sim — na loja da cidade</SelectItem>
-                    <SelectItem value="nao">Não — prospect</SelectItem>
+                    <SelectItem value="em_renovacao">Em renovação</SelectItem>
+                    <SelectItem value="em_leads">Em leads</SelectItem>
+                    <SelectItem value="prospect">Prospect</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
