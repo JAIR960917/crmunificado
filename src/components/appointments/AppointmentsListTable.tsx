@@ -118,7 +118,7 @@ export default function AppointmentsListTable({
         <table className="text-xs w-max border-collapse">
           <thead>
             <tr className="bg-muted/70 border-b">
-              <th className={cn(TH, "min-w-[120px]")}>Nome</th>
+              <th className={cn(TH, "min-w-[120px] sticky left-0 z-20 bg-muted/70 border-r")}>Nome</th>
               <th className={cn(TH, "min-w-[105px]")}>Telefone</th>
               <th className={cn(TH, "min-w-[44px]")}>Idade</th>
               <th className={cn(TH, "min-w-[128px]")}>Horário</th>
@@ -167,7 +167,13 @@ export default function AppointmentsListTable({
                     isSnapshot && "border-dashed",
                   )}
                 >
-                  <td className="px-2 py-1.5 align-middle whitespace-nowrap" title={nameTitle}>
+                  <td
+                    className={cn(
+                      "px-2 py-1.5 align-middle whitespace-nowrap sticky left-0 z-10 border-r",
+                      rowColor,
+                    )}
+                    title={nameTitle}
+                  >
                     <div className="flex items-center gap-1">
                       {isSnapshot && <span className="text-violet-400 shrink-0">↪</span>}
                       <span>{appt.nome || "—"}</span>
