@@ -7,7 +7,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Plus, Filter, X, Search, ArrowRightLeft, Users, Copy, Trash2, Loader2 } from "lucide-react";
+import { Plus, Filter, X, Search, ArrowRightLeft, Users, Copy, Trash2, Loader2, MoreVertical, FolderInput } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -628,6 +629,10 @@ export default function LeadsPage() {
   // 8+ dígitos" — isso confunde datas guardadas como AAAAMMDD com telefone.
   type DuplicateGroup = { phoneSuffix: string; phone: string; leads: Lead[]; samePhone: boolean };
   const [duplicatesDialogOpen, setDuplicatesDialogOpen] = useState(false);
+  // Mover todos os cards de uma coluna pra outra de uma vez (admin).
+  const [moveColumnSource, setMoveColumnSource] = useState<{ key: string; label: string } | null>(null);
+  const [moveColumnDest, setMoveColumnDest] = useState("");
+  const [movingColumn, setMovingColumn] = useState(false);
   const [scanningDuplicates, setScanningDuplicates] = useState(false);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
   const [deletingAllDuplicates, setDeletingAllDuplicates] = useState(false);
@@ -719,6 +724,29 @@ export default function LeadsPage() {
       await scanDuplicateLeads();
     } finally {
       setDeletingAllDuplicates(false);
+    }
+  };
+
+  // Move TODOS os leads de uma coluna pra outra de uma vez — uma única
+  // atualização no banco (não respeita os filtros da tela; pega literalmente
+  // todo lead com o status de origem, igual o usuário pediu).
+  const confirmMoveColumn = async () => {
+    if (!moveColumnSource || !moveColumnDest) return;
+    setMovingColumn(true);
+    try {
+      const { error } = await supabase
+        .from("crm_leads")
+        .update({ status: moveColumnDest })
+        .eq("status", moveColumnSource.key);
+      if (error) throw error;
+      toast.success(`Leads movidos de "${moveColumnSource.label}" para "${statusLabels[moveColumnDest]}".`);
+      setMoveColumnSource(null);
+      setMoveColumnDest("");
+      setRefreshKey((k) => k + 1);
+    } catch (err: any) {
+      toast.error(`Erro ao mover coluna: ${err.message || err}`);
+    } finally {
+      setMovingColumn(false);
     }
   };
 
@@ -1269,10 +1297,25 @@ export default function LeadsPage() {
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
                 <div className="flex items-center gap-2 mb-2 px-1 flex-shrink-0">
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
-                  <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
+                  <h3 className="font-semibold text-sm text-foreground truncate">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
                     {colState.total}
                   </span>
+                  {isAdmin && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => { setMoveColumnSource({ key: status.key, label: status.label }); setMoveColumnDest(""); }}>
+                          <FolderInput className="mr-2 h-4 w-4" />
+                          Mover todos para outra coluna
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
 
                 <Droppable droppableId={status.key}>
@@ -1569,6 +1612,38 @@ export default function LeadsPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deletingAllDuplicates ? "Excluindo..." : "Excluir duplicados"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!moveColumnSource} onOpenChange={(open) => !open && !movingColumn && setMoveColumnSource(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mover todos os leads de "{moveColumnSource?.label}"</AlertDialogTitle>
+            <AlertDialogDescription>
+              Move TODOS os leads dessa coluna pra outra de uma vez (independente dos filtros aplicados na tela).
+              Não dá pra desfazer em massa — só manualmente, lead por lead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2 space-y-1.5">
+            <Label>Coluna de destino</Label>
+            <Select value={moveColumnDest} onValueChange={setMoveColumnDest}>
+              <SelectTrigger><SelectValue placeholder="Selecione a coluna" /></SelectTrigger>
+              <SelectContent>
+                {visibleStatuses.filter((s) => s.key !== moveColumnSource?.key).map((s) => (
+                  <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={movingColumn}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); void confirmMoveColumn(); }}
+              disabled={movingColumn || !moveColumnDest}
+            >
+              {movingColumn ? "Movendo..." : "Mover todos"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
