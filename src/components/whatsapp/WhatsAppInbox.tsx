@@ -443,6 +443,17 @@ export default function WhatsAppInbox() {
     });
   }, [conversations, view, search, user?.id, isAdmin]);
 
+  // Renderizar as ~1900 linhas de "Todos" de uma vez (cada uma com ícones,
+  // badges, formatação de data) deixa a tela lenta/travando o tempo de tela
+  // (DOM grande, sem virtualização) — mostra só um lote por vez, com botão
+  // pra carregar mais. Reinicia o lote ao trocar de aba ou buscar.
+  const PAGE_SIZE = 150;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [view, search]);
+  const visibleList = useMemo(() => filteredList.slice(0, visibleCount), [filteredList, visibleCount]);
+
   const pendingConversationsCount = useMemo(
     () => conversations.filter((c) => c.status === "pending" && c.last_message_direction === "in").length,
     [conversations],
@@ -1499,7 +1510,7 @@ export default function WhatsAppInbox() {
 
           <ScrollArea className="flex-1">
             <ul className="p-1">
-              {filteredList.map((c) => {
+              {visibleList.map((c) => {
                 const active = c.id === selectedId;
                 const inst = resolveInstanceForDisplay(c, instancesById);
                 const m = MODULE_STYLES[inboxDisplayModuleForConversation({
@@ -1621,6 +1632,19 @@ export default function WhatsAppInbox() {
                   Nenhuma conversa encontrada
                 </li>
               ) : null}
+              {filteredList.length > visibleCount && (
+                <li className="p-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                  >
+                    Carregar mais ({filteredList.length - visibleCount} restantes)
+                  </Button>
+                </li>
+              )}
             </ul>
           </ScrollArea>
         </aside>
