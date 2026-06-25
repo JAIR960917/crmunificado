@@ -139,6 +139,785 @@ export type Database = {
         }
         Relationships: []
       }
+      crediario_codigos_autorizacao: {
+        Row: {
+          codigo: string
+          criado_em: string
+          criado_por: string
+          empresa_nome: string | null
+          id: string
+          usado_em: string | null
+          usado_por: string | null
+          venda_cpf: string | null
+          venda_id: string | null
+          venda_nome: string | null
+        }
+        Insert: {
+          codigo: string
+          criado_em?: string
+          criado_por: string
+          empresa_nome?: string | null
+          id?: string
+          usado_em?: string | null
+          usado_por?: string | null
+          venda_cpf?: string | null
+          venda_id?: string | null
+          venda_nome?: string | null
+        }
+        Update: {
+          codigo?: string
+          criado_em?: string
+          criado_por?: string
+          empresa_nome?: string | null
+          id?: string
+          usado_em?: string | null
+          usado_por?: string | null
+          venda_cpf?: string | null
+          venda_id?: string | null
+          venda_nome?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crediario_codigos_autorizacao_venda_id_fkey"
+            columns: ["venda_id"]
+            isOneToOne: false
+            referencedRelation: "crediario_vendas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crediario_company_credentials: {
+        Row: {
+          company_id: string
+          cora_certificate: string | null
+          cora_client_id: string | null
+          cora_private_key: string | null
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          cora_certificate?: string | null
+          cora_client_id?: string | null
+          cora_private_key?: string | null
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          cora_certificate?: string | null
+          cora_client_id?: string | null
+          cora_private_key?: string | null
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crediario_company_credentials_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crediario_consultas: {
+        Row: {
+          cidade: string
+          company_id: string | null
+          cpf: string
+          created_at: string
+          id: string
+          nome: string | null
+          raw: Json | null
+          score: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          cidade?: string
+          company_id?: string | null
+          cpf: string
+          created_at?: string
+          id?: string
+          nome?: string | null
+          raw?: Json | null
+          score?: number | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          cidade?: string
+          company_id?: string | null
+          cpf?: string
+          created_at?: string
+          id?: string
+          nome?: string | null
+          raw?: Json | null
+          score?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crediario_consultas_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crediario_consultas_cache: {
+        Row: {
+          consultado_em: string
+          cpf: string
+          created_at: string
+          data_nascimento: string | null
+          expira_em: string
+          id: string
+          nome: string | null
+          pendencias: Json | null
+          raw: Json | null
+          score: number | null
+          soma_pendencias: number | null
+          total_pendencias: number | null
+          updated_at: string
+        }
+        Insert: {
+          consultado_em?: string
+          cpf: string
+          created_at?: string
+          data_nascimento?: string | null
+          expira_em?: string
+          id?: string
+          nome?: string | null
+          pendencias?: Json | null
+          raw?: Json | null
+          score?: number | null
+          soma_pendencias?: number | null
+          total_pendencias?: number | null
+          updated_at?: string
+        }
+        Update: {
+          consultado_em?: string
+          cpf?: string
+          created_at?: string
+          data_nascimento?: string | null
+          expira_em?: string
+          id?: string
+          nome?: string | null
+          pendencias?: Json | null
+          raw?: Json | null
+          score?: number | null
+          soma_pendencias?: number | null
+          total_pendencias?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      crediario_consultas_pg_entrega: {
+        Row: {
+          cidade: string
+          company_id: string | null
+          cpf: string
+          created_at: string
+          id: string
+          nome: string | null
+          raw: Json | null
+          user_id: string
+        }
+        Insert: {
+          cidade?: string
+          company_id?: string | null
+          cpf: string
+          created_at?: string
+          id?: string
+          nome?: string | null
+          raw?: Json | null
+          user_id: string
+        }
+        Update: {
+          cidade?: string
+          company_id?: string | null
+          cpf?: string
+          created_at?: string
+          id?: string
+          nome?: string | null
+          raw?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crediario_consultas_pg_entrega_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crediario_consultas_renegociacao: {
+        Row: {
+          cidade: string
+          company_id: string | null
+          cpf: string
+          created_at: string
+          id: string
+          nome: string | null
+          raw: Json | null
+          user_id: string
+        }
+        Insert: {
+          cidade?: string
+          company_id?: string | null
+          cpf: string
+          created_at?: string
+          id?: string
+          nome?: string | null
+          raw?: Json | null
+          user_id: string
+        }
+        Update: {
+          cidade?: string
+          company_id?: string | null
+          cpf?: string
+          created_at?: string
+          id?: string
+          nome?: string | null
+          raw?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crediario_consultas_renegociacao_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crediario_contract_template: {
+        Row: {
+          company_address: string
+          company_cnpj: string
+          company_name: string
+          content: string
+          id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          company_address?: string
+          company_cnpj?: string
+          company_name?: string
+          content?: string
+          id?: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          company_address?: string
+          company_cnpj?: string
+          company_name?: string
+          content?: string
+          id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      crediario_contracts: {
+        Row: {
+          cidade: string
+          company_id: string | null
+          consulta_id: string | null
+          content: string
+          cpf: string
+          created_at: string
+          endereco: string
+          id: string
+          nome: string
+          signature_data: Json | null
+          signature_external_id: string | null
+          signature_provider: string | null
+          signature_url: string | null
+          signed_at: string | null
+          status: string
+          telefone: string
+          updated_at: string
+          user_id: string
+          venda_id: string | null
+        }
+        Insert: {
+          cidade?: string
+          company_id?: string | null
+          consulta_id?: string | null
+          content: string
+          cpf: string
+          created_at?: string
+          endereco: string
+          id?: string
+          nome: string
+          signature_data?: Json | null
+          signature_external_id?: string | null
+          signature_provider?: string | null
+          signature_url?: string | null
+          signed_at?: string | null
+          status?: string
+          telefone: string
+          updated_at?: string
+          user_id: string
+          venda_id?: string | null
+        }
+        Update: {
+          cidade?: string
+          company_id?: string | null
+          consulta_id?: string | null
+          content?: string
+          cpf?: string
+          created_at?: string
+          endereco?: string
+          id?: string
+          nome?: string
+          signature_data?: Json | null
+          signature_external_id?: string | null
+          signature_provider?: string | null
+          signature_url?: string | null
+          signed_at?: string | null
+          status?: string
+          telefone?: string
+          updated_at?: string
+          user_id?: string
+          venda_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crediario_contracts_consulta_id_fkey"
+            columns: ["consulta_id"]
+            isOneToOne: false
+            referencedRelation: "crediario_consultas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crediario_contracts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crediario_contracts_venda_id_fkey"
+            columns: ["venda_id"]
+            isOneToOne: false
+            referencedRelation: "crediario_vendas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crediario_contratos_assertiva: {
+        Row: {
+          cpf: string | null
+          data_assinatura: string | null
+          envelope_id: string
+          id: string
+          imported_at: string
+          nome: string | null
+          pdf_path: string | null
+          raw: Json | null
+          status: string | null
+        }
+        Insert: {
+          cpf?: string | null
+          data_assinatura?: string | null
+          envelope_id: string
+          id?: string
+          imported_at?: string
+          nome?: string | null
+          pdf_path?: string | null
+          raw?: Json | null
+          status?: string | null
+        }
+        Update: {
+          cpf?: string | null
+          data_assinatura?: string | null
+          envelope_id?: string
+          id?: string
+          imported_at?: string
+          nome?: string | null
+          pdf_path?: string | null
+          raw?: Json | null
+          status?: string | null
+        }
+        Relationships: []
+      }
+      crediario_cora_webhook_logs: {
+        Row: {
+          cora_invoice_id: string | null
+          created_at: string
+          error_message: string | null
+          event_type: string
+          id: string
+          payload: Json
+          processed: boolean
+        }
+        Insert: {
+          cora_invoice_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          event_type: string
+          id?: string
+          payload: Json
+          processed?: boolean
+        }
+        Update: {
+          cora_invoice_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed?: boolean
+        }
+        Relationships: []
+      }
+      crediario_global_credentials: {
+        Row: {
+          created_at: string
+          id: string
+          updated_at: string
+          zapsign_api_token: string | null
+          zapsign_env: string | null
+          zapsign_template_id: string | null
+          zapsign_webhook_secret: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          zapsign_api_token?: string | null
+          zapsign_env?: string | null
+          zapsign_template_id?: string | null
+          zapsign_webhook_secret?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          zapsign_api_token?: string | null
+          zapsign_env?: string | null
+          zapsign_template_id?: string | null
+          zapsign_webhook_secret?: string | null
+        }
+        Relationships: []
+      }
+      crediario_parcelas: {
+        Row: {
+          codigo_barras: string | null
+          company_id: string | null
+          contrato_id: string | null
+          cora_invoice_id: string | null
+          created_at: string
+          emitido_em: string | null
+          erro_mensagem: string | null
+          id: string
+          linha_digitavel: string | null
+          numero_parcela: number
+          pago_em: string | null
+          pdf_url: string | null
+          pix_emv: string | null
+          pix_qrcode: string | null
+          status: string
+          total_parcelas: number
+          updated_at: string
+          user_id: string
+          valor: number
+          valor_pago: number | null
+          vencimento: string
+          venda_id: string
+        }
+        Insert: {
+          codigo_barras?: string | null
+          company_id?: string | null
+          contrato_id?: string | null
+          cora_invoice_id?: string | null
+          created_at?: string
+          emitido_em?: string | null
+          erro_mensagem?: string | null
+          id?: string
+          linha_digitavel?: string | null
+          numero_parcela: number
+          pago_em?: string | null
+          pdf_url?: string | null
+          pix_emv?: string | null
+          pix_qrcode?: string | null
+          status?: string
+          total_parcelas: number
+          updated_at?: string
+          user_id: string
+          valor: number
+          valor_pago?: number | null
+          vencimento: string
+          venda_id: string
+        }
+        Update: {
+          codigo_barras?: string | null
+          company_id?: string | null
+          contrato_id?: string | null
+          cora_invoice_id?: string | null
+          created_at?: string
+          emitido_em?: string | null
+          erro_mensagem?: string | null
+          id?: string
+          linha_digitavel?: string | null
+          numero_parcela?: number
+          pago_em?: string | null
+          pdf_url?: string | null
+          pix_emv?: string | null
+          pix_qrcode?: string | null
+          status?: string
+          total_parcelas?: number
+          updated_at?: string
+          user_id?: string
+          valor?: number
+          valor_pago?: number | null
+          vencimento?: string
+          venda_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crediario_parcelas_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "crediario_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crediario_parcelas_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crediario_parcelas_venda_id_fkey"
+            columns: ["venda_id"]
+            isOneToOne: false
+            referencedRelation: "crediario_vendas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crediario_relatorios_diarios: {
+        Row: {
+          company_id: string | null
+          concluido_em: string | null
+          concluido_por: string | null
+          created_at: string
+          data_referencia: string
+          id: string
+          pagamentos: Json
+          status: string
+          total_pagamentos: number
+          updated_at: string
+          valor_total: number
+        }
+        Insert: {
+          company_id?: string | null
+          concluido_em?: string | null
+          concluido_por?: string | null
+          created_at?: string
+          data_referencia: string
+          id?: string
+          pagamentos?: Json
+          status?: string
+          total_pagamentos?: number
+          updated_at?: string
+          valor_total?: number
+        }
+        Update: {
+          company_id?: string | null
+          concluido_em?: string | null
+          concluido_por?: string | null
+          created_at?: string
+          data_referencia?: string
+          id?: string
+          pagamentos?: Json
+          status?: string
+          total_pagamentos?: number
+          updated_at?: string
+          valor_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crediario_relatorios_diarios_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crediario_settings: {
+        Row: {
+          cora_discount_percent: number
+          cora_fine_percent: number
+          cora_interest_monthly_percent: number
+          good_score: number
+          id: string
+          installment_rates: Json
+          maintenance_message: string
+          maintenance_mode: boolean
+          maintenance_title: string
+          max_installments: number
+          min_entry_percent: number
+          min_score: number
+          renegociacao_juros_percent: number
+          renegociacao_max_parcelas: number
+          score_tiers: Json
+          updated_at: string
+        }
+        Insert: {
+          cora_discount_percent?: number
+          cora_fine_percent?: number
+          cora_interest_monthly_percent?: number
+          good_score?: number
+          id?: string
+          installment_rates?: Json
+          maintenance_message?: string
+          maintenance_mode?: boolean
+          maintenance_title?: string
+          max_installments?: number
+          min_entry_percent?: number
+          min_score?: number
+          renegociacao_juros_percent?: number
+          renegociacao_max_parcelas?: number
+          score_tiers?: Json
+          updated_at?: string
+        }
+        Update: {
+          cora_discount_percent?: number
+          cora_fine_percent?: number
+          cora_interest_monthly_percent?: number
+          good_score?: number
+          id?: string
+          installment_rates?: Json
+          maintenance_message?: string
+          maintenance_mode?: boolean
+          maintenance_title?: string
+          max_installments?: number
+          min_entry_percent?: number
+          min_score?: number
+          renegociacao_juros_percent?: number
+          renegociacao_max_parcelas?: number
+          score_tiers?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      crediario_vendas: {
+        Row: {
+          aprovacao_admin: string | null
+          aprovacao_em: string | null
+          aprovacao_motivo: string | null
+          aprovacao_por: string | null
+          cidade: string
+          company_id: string | null
+          consulta_id: string | null
+          cpf: string
+          created_at: string
+          id: string
+          nome: string | null
+          parcelas: number
+          primeiro_vencimento: string | null
+          score: number | null
+          status: string
+          taxa_juros: number
+          tipo: string
+          user_id: string
+          valor_entrada: number
+          valor_entrada_entrega: number | null
+          valor_financiado: number
+          valor_parcela: number
+          valor_promissoria: number | null
+          valor_total: number
+          valor_venda: number | null
+        }
+        Insert: {
+          aprovacao_admin?: string | null
+          aprovacao_em?: string | null
+          aprovacao_motivo?: string | null
+          aprovacao_por?: string | null
+          cidade?: string
+          company_id?: string | null
+          consulta_id?: string | null
+          cpf: string
+          created_at?: string
+          id?: string
+          nome?: string | null
+          parcelas: number
+          primeiro_vencimento?: string | null
+          score?: number | null
+          status?: string
+          taxa_juros: number
+          tipo?: string
+          user_id: string
+          valor_entrada: number
+          valor_entrada_entrega?: number | null
+          valor_financiado: number
+          valor_parcela: number
+          valor_promissoria?: number | null
+          valor_total: number
+          valor_venda?: number | null
+        }
+        Update: {
+          aprovacao_admin?: string | null
+          aprovacao_em?: string | null
+          aprovacao_motivo?: string | null
+          aprovacao_por?: string | null
+          cidade?: string
+          company_id?: string | null
+          consulta_id?: string | null
+          cpf?: string
+          created_at?: string
+          id?: string
+          nome?: string | null
+          parcelas?: number
+          primeiro_vencimento?: string | null
+          score?: number | null
+          status?: string
+          taxa_juros?: number
+          tipo?: string
+          user_id?: string
+          valor_entrada?: number
+          valor_entrada_entrega?: number | null
+          valor_financiado?: number
+          valor_parcela?: number
+          valor_promissoria?: number | null
+          valor_total?: number
+          valor_venda?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crediario_vendas_consulta_id_fkey"
+            columns: ["consulta_id"]
+            isOneToOne: false
+            referencedRelation: "crediario_consultas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crediario_vendas_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_appointment_history: {
         Row: {
           action: string

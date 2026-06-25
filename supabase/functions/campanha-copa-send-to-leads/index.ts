@@ -69,7 +69,8 @@ Deno.serve(async (req) => {
       .in("id", ids);
 
     if (rowsErr) {
-      return new Response(JSON.stringify({ error: rowsErr.message }), {
+      console.error("[campanha-copa-send-to-leads] erro ao buscar submissions:", rowsErr);
+      return new Response(JSON.stringify({ error: "Erro ao buscar inscrições" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -126,7 +127,8 @@ Deno.serve(async (req) => {
         .single();
 
       if (leadErr || !lead) {
-        results.push({ submissionId: id, status: "error", error: leadErr?.message ?? "Erro ao criar lead" });
+        console.error("[campanha-copa-send-to-leads] erro ao criar lead:", leadErr);
+        results.push({ submissionId: id, status: "error", error: "Erro ao criar lead" });
         continue;
       }
 
@@ -136,7 +138,8 @@ Deno.serve(async (req) => {
         .eq("id", id);
 
       if (updErr) {
-        results.push({ submissionId: id, status: "error", error: updErr.message });
+        console.error("[campanha-copa-send-to-leads] erro ao vincular submission:", updErr);
+        results.push({ submissionId: id, status: "error", error: "Erro ao vincular inscrição" });
         continue;
       }
 

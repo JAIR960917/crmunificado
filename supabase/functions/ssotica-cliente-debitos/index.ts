@@ -72,6 +72,13 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const admin = createClient(supabaseUrl, serviceKey);
+
+    const { user, response: authResp } = await getUserFromRequest(req, supabaseUrl, serviceKey);
+    if (authResp) return authResp;
+
     const { ssoticaClienteId, ssoticaCompanyId, cpf, monthsBack } = await req.json();
     if (!ssoticaClienteId || !ssoticaCompanyId) {
       return new Response(
@@ -79,13 +86,6 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const admin = createClient(supabaseUrl, serviceKey);
-
-    const { user, response: authResp } = await getUserFromRequest(req, supabaseUrl, serviceKey);
-    if (authResp) return authResp;
 
     const allowedCompanies = await getAllowedCompanyIds(admin, user!.id);
     if (!companyAllowed(allowedCompanies, String(ssoticaCompanyId))) {

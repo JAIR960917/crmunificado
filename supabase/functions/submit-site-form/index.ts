@@ -91,27 +91,31 @@ serve(async (req) => {
     return json({ error: "Muitas solicitações recentes. Tente novamente em alguns minutos." }, 429);
   }
 
-  // Verifica duplicata por e-mail ou telefone
+  // Verifica duplicata por e-mail ou telefone usando queries parametrizadas separadas
+  // (evita injeção PostgREST via interpolação de string em .or())
   if (email || telefone) {
-    const orParts: string[] = [];
-    if (email) orParts.push(`email.eq.${email}`);
-    if (telefone) {
-      // Compara apenas dígitos para evitar problema de formatação
-      const digits = telefone.replace(/\D/g, "");
-      if (digits) orParts.push(`telefone.eq.${telefone}`);
-    }
-    if (orParts.length > 0) {
-      const { data: existing } = await supabase
+    let duplicate = false;
+    if (email) {
+      const { data } = await supabase
         .from("site_form_submissions")
         .select("id")
-        .or(orParts.join(","))
+        .eq("email", email)
         .limit(1);
-      if (existing && existing.length > 0) {
-        return json({
-          error: "Já recebemos uma candidatura com este e-mail ou telefone. Nossa equipe entrará em contato em breve!",
-          duplicate: true,
-        }, 409);
-      }
+      if (data && data.length > 0) duplicate = true;
+    }
+    if (!duplicate && telefone) {
+      const { data } = await supabase
+        .from("site_form_submissions")
+        .select("id")
+        .eq("telefone", telefone)
+        .limit(1);
+      if (data && data.length > 0) duplicate = true;
+    }
+    if (duplicate) {
+      return json({
+        error: "Já recebemos uma candidatura com este e-mail ou telefone. Nossa equipe entrará em contato em breve!",
+        duplicate: true,
+      }, 409);
     }
   }
 

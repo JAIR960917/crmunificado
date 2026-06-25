@@ -87,7 +87,11 @@ Deno.serve(async (req) => {
       .eq("user_id", caller.id)
       .single();
 
-    if (!callerProfile?.company_id || callerProfile.company_id !== targetProfile.company_id) {
+    if (
+      !callerProfile?.company_id ||
+      !targetProfile.company_id ||
+      callerProfile.company_id !== targetProfile.company_id
+    ) {
       return jsonResponse({ error: "Usuário não pertence à sua empresa" }, 403);
     }
   }

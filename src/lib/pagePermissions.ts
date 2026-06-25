@@ -49,7 +49,27 @@ export const APP_PAGES: AppPage[] = [
   { key: "site_leads",           label: "Leads do Site",          path: "/site-leads" },
   { key: "site_config",          label: "Configurações do Site",  path: "/site-configuracoes" },
   { key: "configuracoes",        label: "Configurações",          path: "/configuracoes" },
+
+  // Crediário (módulo absorvido do antigo app de venda no boleto)
+  { key: "crediario_dashboard",            label: "Painel / Dashboard do Crediário", path: "/crediario" },
+  { key: "crediario_consulta",             label: "Vender no boleto",            path: "/crediario/consulta" },
+  { key: "crediario_pagamento_entrega",    label: "Pagamento na Entrega",        path: "/crediario/pagamento-entrega" },
+  { key: "crediario_consultas_pg_entrega", label: "Consultas Salvas PG Entrega", path: "/crediario/consultas-salvas-pg-entrega" },
+  { key: "crediario_renegociacao",         label: "Renegociação",                path: "/crediario/renegociacao" },
+  { key: "crediario_contratos",            label: "Contratos",                   path: "/crediario/contratos" },
+  { key: "crediario_historico",            label: "Histórico",                   path: "/crediario/historico" },
+  { key: "crediario_consultas_salvas",     label: "Consultas Salvas",            path: "/crediario/consultas-salvas" },
+  { key: "crediario_relatorios_pagamentos", label: "Relatórios de Pagamentos",   path: "/crediario/relatorios-pagamentos" },
+  { key: "crediario_relatorios_uso",       label: "Relatórios de Uso",           path: "/crediario/relatorios-uso" },
+  { key: "crediario_resumo_vendas_risco",  label: "Resumo de Vendas por Risco",  path: "/crediario/resumo-vendas-risco" },
+  { key: "crediario_credenciais",          label: "Credenciais",                 path: "/crediario/credenciais" },
+  { key: "crediario_contratos_importados", label: "Contratos Assertiva",         path: "/crediario/contratos-importados" },
+  { key: "crediario_codigos_autorizacao",  label: "Códigos de Autorização",      path: "/crediario/codigos-autorizacao" },
+  { key: "crediario_configuracoes",        label: "Configurações do Crediário",  path: "/crediario/configuracoes" },
 ];
+
+/** Prefixo usado para separar as páginas do Crediário na tela de permissões. */
+export const CREDIARIO_PAGE_PREFIX = "crediario_";
 
 /** Rotas sempre liberadas (perfil pessoal, notificações, instalação do PWA). */
 export const ALWAYS_ALLOWED_PATHS = new Set<string>([

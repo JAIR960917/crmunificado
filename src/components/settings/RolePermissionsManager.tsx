@@ -18,7 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { APP_PAGES } from "@/lib/pagePermissions";
+import { APP_PAGES, CREDIARIO_PAGE_PREFIX } from "@/lib/pagePermissions";
 import { Plus, Trash2, Save, Shield } from "lucide-react";
 
 type RoleDef = {
@@ -317,14 +317,39 @@ export default function RolePermissionsManager() {
 
               <Tabs defaultValue="pages">
                 <TabsList>
-                  <TabsTrigger value="pages">Páginas</TabsTrigger>
+                  <TabsTrigger value="pages">Páginas CRM</TabsTrigger>
+                  <TabsTrigger value="crediario">Crediário</TabsTrigger>
                   <TabsTrigger value="leads">Colunas — Leads</TabsTrigger>
                   <TabsTrigger value="renov">Colunas — Renovação</TabsTrigger>
                 </TabsList>
                 <TabsContent value="pages">
                   <Label className="text-xs">Páginas permitidas</Label>
                   <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {APP_PAGES.map((pg) => (
+                    {APP_PAGES.filter((pg) => !pg.key.startsWith(CREDIARIO_PAGE_PREFIX)).map((pg) => (
+                      <label
+                        key={pg.key}
+                        className={`flex items-center gap-2 rounded border px-3 py-2 text-sm ${
+                          isAdminNative ? "opacity-60" : "cursor-pointer hover:bg-muted/50"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={isAllowed(pg.key)}
+                          onCheckedChange={(v) => togglePage(pg.key, !!v)}
+                          disabled={isAdminNative}
+                        />
+                        <span className="flex-1">{pg.label}</span>
+                        <code className="text-[10px] text-muted-foreground">{pg.path}</code>
+                      </label>
+                    ))}
+                  </div>
+                </TabsContent>
+                <TabsContent value="crediario">
+                  <Label className="text-xs">Telas do módulo Crediário (Painel, Vender no boleto, Contratos...)</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Marque aqui o que vendedores e gerentes podem ver no menu Crediário. O item "Painel / Dashboard do Crediário" corresponde à tela inicial do Crediário (/crediario).
+                  </p>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {APP_PAGES.filter((pg) => pg.key.startsWith(CREDIARIO_PAGE_PREFIX)).map((pg) => (
                       <label
                         key={pg.key}
                         className={`flex items-center gap-2 rounded border px-3 py-2 text-sm ${

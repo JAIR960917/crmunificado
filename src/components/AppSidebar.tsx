@@ -25,6 +25,7 @@ import {
   History, BarChart3, FileBarChart, RefreshCw, Workflow, Activity,
   ChevronDown, SlidersHorizontal, CalendarClock,
   Trophy, Boxes, Package, Banknote, TrendingUp, TrendingDown, Globe,
+  Wallet, FileSignature, ShieldCheck, KeyRound, FileBarChart2, AlertTriangle, ScanLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -118,6 +119,31 @@ function isFinanceiroPath(path: string) {
   return FINANCEIRO_PATHS.has(path);
 }
 
+/** Submenu Crediário (venda no boleto, contratos, renegociação, relatórios). */
+const crediarioNavItems: NavItem[] = [
+  { path: "/crediario",                          label: "Dashboard",                  icon: LayoutDashboard },
+  { path: "/crediario/consulta",                 label: "Vender no boleto",           icon: ScanLine },
+  { path: "/crediario/pagamento-entrega",        label: "Pagamento na Entrega",       icon: Receipt },
+  { path: "/crediario/consultas-salvas-pg-entrega", label: "Consultas Salvas PG Entrega", icon: History },
+  { path: "/crediario/renegociacao",             label: "Renegociação",               icon: RefreshCw },
+  { path: "/crediario/contratos",                label: "Contratos",                  icon: FileSignature },
+  { path: "/crediario/historico",                label: "Histórico",                  icon: History },
+  { path: "/crediario/consultas-salvas",         label: "Consultas Salvas",           icon: FileBarChart },
+  { path: "/crediario/relatorios-pagamentos",    label: "Relatórios de Pagamentos",   icon: FileBarChart2 },
+  { path: "/crediario/relatorios-uso",           label: "Relatórios de Uso",          icon: BarChart3 },
+  { path: "/crediario/resumo-vendas-risco",      label: "Resumo de Vendas por Risco", icon: AlertTriangle },
+  { path: "/crediario/credenciais",              label: "Credenciais",                icon: KeyRound },
+  { path: "/crediario/contratos-importados",     label: "Contratos Assertiva",        icon: ShieldCheck },
+  { path: "/crediario/codigos-autorizacao",      label: "Códigos de Autorização",     icon: FileText },
+  { path: "/crediario/configuracoes",            label: "Configurações",              icon: Settings },
+];
+
+const CREDIARIO_PATHS = new Set(crediarioNavItems.map((i) => i.path));
+
+function isCrediarioPath(path: string) {
+  return CREDIARIO_PATHS.has(path) || path.startsWith("/crediario/contratos/") || path.startsWith("/crediario/contratos-importados/");
+}
+
 interface Props {
   /** Callback chamado após navegação — usado pelo mobile para fechar o drawer. */
   onNavigate?: () => void;
@@ -133,6 +159,7 @@ export default function AppSidebar({ onNavigate }: Props) {
   const [estoqueFiscalOpen, setEstoqueFiscalOpen] = useState(false);
   const [financeiroOpen, setFinanceiroOpen] = useState(false);
   const [siteOficialOpen, setSiteOficialOpen] = useState(false);
+  const [crediarioOpen, setCrediarioOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { canInstall, install, isStandalone } = usePwaInstall();
@@ -158,11 +185,15 @@ export default function AppSidebar({ onNavigate }: Props) {
   const visibleSiteOficialItems = siteOficialNavItems.filter(canSee);
   const siteOficialSectionActive = visibleSiteOficialItems.some((i) => location.pathname === i.path);
 
+  const visibleCrediarioItems = crediarioNavItems.filter(canSee);
+  const crediarioSectionActive = visibleCrediarioItems.some((i) => location.pathname === i.path) || isCrediarioPath(location.pathname);
+
   useEffect(() => {
     if (isConfigPath(location.pathname)) setConfigOpen(true);
     if (isEstoqueFiscalPath(location.pathname)) setEstoqueFiscalOpen(true);
     if (isFinanceiroPath(location.pathname)) setFinanceiroOpen(true);
     if (isSiteOficialPath(location.pathname)) setSiteOficialOpen(true);
+    if (isCrediarioPath(location.pathname)) setCrediarioOpen(true);
   }, [location.pathname]);
 
   /** Navega para a rota e (no mobile) fecha o drawer. */
@@ -388,6 +419,45 @@ export default function AppSidebar({ onNavigate }: Props) {
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-0.5 pt-0.5 pl-2">
               {visibleFinanceiroItems.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => handleNav(item.path)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg py-2 pl-5 pr-3 text-sm font-medium transition-colors",
+                    location.pathname === item.path
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+                  )}
+                >
+                  <item.icon className="h-4 w-4 shrink-0 opacity-90" />
+                  {item.label}
+                </button>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
+        {visibleCrediarioItems.length > 0 && (
+          <Collapsible open={crediarioOpen} onOpenChange={setCrediarioOpen} className="pt-1">
+            <CollapsibleTrigger
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                crediarioSectionActive && !crediarioOpen
+                  ? "bg-sidebar-accent/70 text-sidebar-accent-foreground"
+                  : "hover:bg-sidebar-accent/50"
+              )}
+            >
+              <Wallet className="h-4 w-4 shrink-0" />
+              <span className="flex-1 text-left">Crediário</span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 opacity-70 transition-transform duration-200",
+                  crediarioOpen && "rotate-180"
+                )}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-0.5 pt-0.5 pl-2">
+              {visibleCrediarioItems.map((item) => (
                 <button
                   key={item.path}
                   onClick={() => handleNav(item.path)}

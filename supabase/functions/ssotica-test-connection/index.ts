@@ -97,22 +97,14 @@ Deno.serve(async (req) => {
       const res = await fetch(urlReceber, {
         headers: { Authorization: `Bearer ${integ.bearer_token}`, Accept: "application/json" },
       });
-      const text = await res.text();
       results.push({
         endpoint: "contas-a-receber",
-        url: urlReceber,
         status: res.status,
         ok: res.ok,
-        response: text.slice(0, 500),
       });
     } catch (e) {
-      results.push({
-        endpoint: "contas-a-receber",
-        url: urlReceber,
-        status: 0,
-        ok: false,
-        response: e instanceof Error ? e.message : String(e),
-      });
+      console.error("[ssotica-test-connection] contas-a-receber:", e);
+      results.push({ endpoint: "contas-a-receber", status: 0, ok: false });
     }
 
     // Teste 2: Vendas (usa cnpj= e exige CNPJ puro)
@@ -121,37 +113,24 @@ Deno.serve(async (req) => {
       const res = await fetch(urlVendas, {
         headers: { Authorization: `Bearer ${integ.bearer_token}`, Accept: "application/json" },
       });
-      const text = await res.text();
       results.push({
         endpoint: "vendas",
-        url: urlVendas,
         status: res.status,
         ok: res.ok,
-        response: text.slice(0, 500),
       });
     } catch (e) {
-      results.push({
-        endpoint: "vendas",
-        url: urlVendas,
-        status: 0,
-        ok: false,
-        response: e instanceof Error ? e.message : String(e),
-      });
+      console.error("[ssotica-test-connection] vendas:", e);
+      results.push({ endpoint: "vendas", status: 0, ok: false });
     }
 
     const allOk = results.every((r) => r.ok);
     return new Response(
-      JSON.stringify({
-        ok: allOk,
-        empresa_param: empresaReceber,
-        cnpj_vendas: cnpjVendas,
-        results,
-      }),
+      JSON.stringify({ ok: allOk, results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return new Response(JSON.stringify({ ok: false, error: msg }), {
+    console.error("[ssotica-test-connection] erro interno:", e);
+    return new Response(JSON.stringify({ ok: false, error: "Erro ao testar conexão" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

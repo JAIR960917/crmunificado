@@ -95,6 +95,11 @@ WHERE to_regprocedure('public.manage_whatsapp_cron()') IS NOT NULL
 
 SELECT public.manage_ssotica_cron()
 WHERE to_regprocedure('public.manage_ssotica_cron()') IS NOT NULL;
+
+SELECT public.manage_crediario_cron()
+WHERE to_regprocedure('public.manage_crediario_cron()') IS NOT NULL
+  AND NULLIF(:'backend_service_key', '') IS NOT NULL
+  AND NULLIF(:'backend_cron_secret', '') IS NOT NULL;
 SQL
 }
 
@@ -349,6 +354,10 @@ SQL
 
   if ! db_exec "SELECT public.manage_ssotica_cron();"; then
     warn "Não foi possível reagendar os crons da SSÓtica automaticamente (verifique as configs backend_public_url/backend_anon_key)."
+  fi
+
+  if ! db_exec "SELECT public.manage_crediario_cron() WHERE to_regprocedure('public.manage_crediario_cron()') IS NOT NULL;"; then
+    warn "Não foi possível reagendar os crons do Crediário automaticamente (verifique as configs backend_public_url/backend_service_role_key/backend_cron_secret)."
   fi
 
   ok "Migrations aplicadas: $count"

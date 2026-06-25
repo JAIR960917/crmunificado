@@ -72,6 +72,25 @@ import SiteConfigPage from "./pages/SiteConfigPage";
 import MaintenancePage from "./pages/MaintenancePage";
 import NotFound from "./pages/NotFound";
 
+// ----- Crediário (módulo absorvido do antigo app de venda no boleto) -----
+import CrediarioDashboardPage from "./pages/crediario/CrediarioDashboardPage";
+import CrediarioConsultaPage from "./pages/crediario/CrediarioConsultaPage";
+import CrediarioPagamentoEntregaPage from "./pages/crediario/CrediarioPagamentoEntregaPage";
+import CrediarioConsultasSalvasPgEntregaPage from "./pages/crediario/CrediarioConsultasSalvasPgEntregaPage";
+import CrediarioRenegociacaoPage from "./pages/crediario/CrediarioRenegociacaoPage";
+import CrediarioContratosPage from "./pages/crediario/CrediarioContratosPage";
+import CrediarioContratoDetalhePage from "./pages/crediario/CrediarioContratoDetalhePage";
+import CrediarioHistoricoPage from "./pages/crediario/CrediarioHistoricoPage";
+import CrediarioConsultasSalvasPage from "./pages/crediario/CrediarioConsultasSalvasPage";
+import CrediarioRelatoriosDiariosPage from "./pages/crediario/CrediarioRelatoriosDiariosPage";
+import CrediarioRelatoriosUsoPage from "./pages/crediario/CrediarioRelatoriosUsoPage";
+import CrediarioResumoVendasRiscoPage from "./pages/crediario/CrediarioResumoVendasRiscoPage";
+import CrediarioCredenciaisPage from "./pages/crediario/CrediarioCredenciaisPage";
+import CrediarioContratosImportadosPage from "./pages/crediario/CrediarioContratosImportadosPage";
+import CrediarioContratoAssertivaDetalhePage from "./pages/crediario/CrediarioContratoAssertivaDetalhePage";
+import CrediarioCodigosAutorizacaoPage from "./pages/crediario/CrediarioCodigosAutorizacaoPage";
+import CrediarioConfiguracoesPage from "./pages/crediario/CrediarioConfiguracoesPage";
+
 /** Cliente React Query — cache compartilhado de chamadas ao backend. */
 const queryClient = new QueryClient();
 
@@ -187,6 +206,25 @@ const AppRoutes = () => {
       <Route path="/site-formulario" element={<RoleGate><SiteFormBuilderPage /></RoleGate>} />
       <Route path="/site-leads" element={<RoleGate><SiteLeadsPage /></RoleGate>} />
       <Route path="/site-configuracoes" element={<RoleGate><SiteConfigPage /></RoleGate>} />
+
+      {/* Crediário (venda no boleto, contratos, renegociação, relatórios) */}
+      <Route path="/crediario" element={<RoleGate><CrediarioDashboardPage /></RoleGate>} />
+      <Route path="/crediario/consulta" element={<RoleGate><CrediarioConsultaPage /></RoleGate>} />
+      <Route path="/crediario/pagamento-entrega" element={<RoleGate><CrediarioPagamentoEntregaPage /></RoleGate>} />
+      <Route path="/crediario/consultas-salvas-pg-entrega" element={<RoleGate><CrediarioConsultasSalvasPgEntregaPage /></RoleGate>} />
+      <Route path="/crediario/renegociacao" element={<RoleGate><CrediarioRenegociacaoPage /></RoleGate>} />
+      <Route path="/crediario/contratos" element={<RoleGate><CrediarioContratosPage /></RoleGate>} />
+      <Route path="/crediario/contratos/:id" element={<RoleGate><CrediarioContratoDetalhePage /></RoleGate>} />
+      <Route path="/crediario/historico" element={<RoleGate><CrediarioHistoricoPage /></RoleGate>} />
+      <Route path="/crediario/consultas-salvas" element={<RoleGate><CrediarioConsultasSalvasPage /></RoleGate>} />
+      <Route path="/crediario/relatorios-pagamentos" element={<RoleGate><CrediarioRelatoriosDiariosPage /></RoleGate>} />
+      <Route path="/crediario/relatorios-uso" element={<RoleGate><CrediarioRelatoriosUsoPage /></RoleGate>} />
+      <Route path="/crediario/resumo-vendas-risco" element={<RoleGate><CrediarioResumoVendasRiscoPage /></RoleGate>} />
+      <Route path="/crediario/credenciais" element={<RoleGate><CrediarioCredenciaisPage /></RoleGate>} />
+      <Route path="/crediario/contratos-importados" element={<RoleGate><CrediarioContratosImportadosPage /></RoleGate>} />
+      <Route path="/crediario/contratos-importados/:id" element={<RoleGate><CrediarioContratoAssertivaDetalhePage /></RoleGate>} />
+      <Route path="/crediario/codigos-autorizacao" element={<RoleGate><CrediarioCodigosAutorizacaoPage /></RoleGate>} />
+      <Route path="/crediario/configuracoes" element={<RoleGate><CrediarioConfiguracoesPage /></RoleGate>} />
 
       {/* /instalar é semipública (orienta a instalar PWA) */}
       <Route path="/instalar" element={<InstallPage />} />
