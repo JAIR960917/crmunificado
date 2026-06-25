@@ -29,18 +29,29 @@ AS $$
   FROM auth.users u;
 $$;
 
-CREATE OR REPLACE FUNCTION public._export_auth_identities_full()
-RETURNS TABLE(
-  provider_id text, user_id uuid, identity_data jsonb, provider text,
-  last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz, email text
-)
-LANGUAGE sql SECURITY DEFINER SET search_path = public, auth
-AS $$
-  SELECT i.provider_id, i.user_id, i.identity_data, i.provider,
-    i.last_sign_in_at, i.created_at, i.updated_at,
-    coalesce(to_jsonb(i)->>'email', '')
-  FROM auth.identities i;
-$$;
+-- auth.identities não existe em todas as versões do GoTrue self-hosted.
+-- Cria a função via SQL dinâmico, só se a tabela existir, para não quebrar
+-- esta migration em instalações onde ela está ausente.
+DO $do$
+BEGIN
+  IF to_regclass('auth.identities') IS NOT NULL THEN
+    EXECUTE $sql$
+      CREATE OR REPLACE FUNCTION public._export_auth_identities_full()
+      RETURNS TABLE(
+        provider_id text, user_id uuid, identity_data jsonb, provider text,
+        last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz, email text
+      )
+      LANGUAGE sql SECURITY DEFINER SET search_path = public, auth
+      AS $body$
+        SELECT i.provider_id, i.user_id, i.identity_data, i.provider,
+          i.last_sign_in_at, i.created_at, i.updated_at,
+          coalesce(to_jsonb(i)->>'email', '')
+        FROM auth.identities i;
+      $body$;
+    $sql$;
+    EXECUTE 'REVOKE ALL ON FUNCTION public._export_auth_identities_full() FROM PUBLIC, anon, authenticated';
+  END IF;
+END;
+$do$;
 
 REVOKE ALL ON FUNCTION public._export_auth_users_full() FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public._export_auth_identities_full() FROM PUBLIC, anon, authenticated;
