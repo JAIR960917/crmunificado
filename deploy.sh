@@ -265,10 +265,15 @@ SQL
   }
 
   db_file() {
+    # --single-transaction garante que o arquivo aplica tudo ou nada: se uma
+    # statement no meio falhar, as anteriores são desfeitas. Sem isso, uma
+    # falha parcial deixa tabelas/políticas criadas mas a migration não é
+    # marcada como aplicada — na próxima tentativa ela tenta criar de novo e
+    # quebra com "already exists".
     if [ "$use_docker_fallback" -eq 1 ]; then
-      docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 >/dev/null < "$1"
+      docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 --single-transaction >/dev/null < "$1"
     else
-      psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$1" >/dev/null
+      psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$1" >/dev/null
     fi
   }
 
