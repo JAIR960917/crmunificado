@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * Exporta dados do Lovable Cloud (origem) via API REST do PostgREST
- * e gera um arquivo data.sql com INSERTs prontos para o self-hosted.
+ * Exporta dados da origem (qualquer projeto Supabase — cloud ou self-hosted)
+ * via API REST do PostgREST e gera um arquivo data.sql com INSERTs prontos
+ * para aplicar no destino (self-hosted novo).
  *
- * USO NA VPS:
- *   export SOURCE_URL="https://flhycgllttqeczrpmfoc.supabase.co"
- *   export SOURCE_SERVICE_KEY="eyJhbGc...service_role..."
+ * USO NA VPS NOVA, migrando da produção atual (api.joonker.com.br):
+ *   export SOURCE_URL="https://api.joonker.com.br"
+ *   export SOURCE_SERVICE_KEY="<SERVICE_ROLE_KEY do .env da VPS atual>"
  *   node 02_export_data.mjs
  *
- * Saída: ./data.sql + ./auth_users.sql + ./storage_objects.sql
+ * Saída: ./data.sql
  */
 
 import fs from 'node:fs';
@@ -24,11 +25,21 @@ if (!SOURCE_URL || !SOURCE_KEY) {
 }
 
 // Ordem de export respeitando dependências (mesmo sem FKs explícitas, evita confusão)
+// Lista atualizada para o schema completo do crm-my-way unificado (sem as
+// tabelas crediario_* — essas não existem na origem, vêm só do consultasjoonker,
+// ver migration-tools/README.md "Parte 2").
 const TABLES = [
   'companies',
   'profiles',
   'user_roles',
   'manager_companies',
+  'role_definitions',
+  'role_page_permissions',
+  'role_status_permissions',
+  'company_business_hours',
+  'company_eye_exam_days',
+  'eye_exam_specialists',
+  'company_eye_exam_day_specialists',
   'crm_statuses',
   'crm_columns',
   'crm_form_fields',
@@ -37,9 +48,11 @@ const TABLES = [
   'crm_cobranca_statuses',
   'crm_cobranca_status_checklist',
   'crm_cobranca_column_flow',
+  'crm_cobranca_situacao_mapping',
   'crm_leads',
   'crm_lead_notes',
   'crm_appointments',
+  'crm_appointment_history',
   'crm_renovacoes',
   'crm_renovacao_notes',
   'renovacao_activities',
@@ -59,10 +72,24 @@ const TABLES = [
   'ssotica_sync_logs',
   'ssotica_user_mappings',
   'system_settings',
+  'campanha_copa_cidade_lojas',
+  'campanha_copa_round_robin',
+  'campanha_copa_submissions',
+  'campanha_copa_history',
+  'site_web_config',
+  'site_form_fields',
+  'site_form_submissions',
+  'site_page_views',
+  'site_button_clicks',
+  'whatsapp_instances',
+  'whatsapp_instance_assignments',
+  'whatsapp_conversations',
+  'whatsapp_messages',
+  'whatsapp_opt_ins',
+  'whatsapp_send_locks',
   'whatsapp_campaigns',
   'whatsapp_campaign_sends',
   'whatsapp_completion_logs',
-  'whatsapp_instances',
   'whatsapp_trigger_campaigns',
   'whatsapp_trigger_steps',
   'whatsapp_trigger_sends',
@@ -82,17 +109,19 @@ function sqlEscape(v) {
   return `'${String(v).replace(/'/g, "''")}'`;
 }
 
-// Tabelas que NÃO têm coluna created_at — usar ordenação por id
-const TABLES_WITHOUT_CREATED_AT = new Set([
-  'user_roles',
-  'crm_cobranca_checklist_completions',
-  'lead_card_opens',
-  'ssotica_sync_logs',
-  'system_settings',
-]);
+// Tabelas que NÃO têm coluna created_at — usar outra coluna para ordenar a paginação
+const ORDER_COLUMN_OVERRIDES = {
+  user_roles: 'id',
+  crm_cobranca_checklist_completions: 'id',
+  lead_card_opens: 'id',
+  ssotica_sync_logs: 'id',
+  system_settings: 'id',
+  campanha_copa_round_robin: 'company_id', // PK é company_id, sem coluna id/created_at
+  whatsapp_opt_ins: 'id', // tem opted_in_at, não created_at
+};
 
 async function fetchPage(table, from, to) {
-  const orderCol = TABLES_WITHOUT_CREATED_AT.has(table) ? 'id' : 'created_at';
+  const orderCol = ORDER_COLUMN_OVERRIDES[table] || 'created_at';
   const url = `${SOURCE_URL}/rest/v1/${table}?select=*&order=${orderCol}.asc.nullslast`;
   const res = await fetch(url, {
     headers: {

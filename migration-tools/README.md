@@ -1,151 +1,65 @@
-# Migração Lovable Cloud → Supabase Self-Hosted
+# Migração de dados para o sistema unificado
 
-Pacote completo para migrar o CRM do Lovable Cloud (origem) para o seu Supabase self-hosted (`api.joonker.com.br`).
+Pacote para trazer os dados das suas duas instalações atuais em produção
+para a VPS nova do sistema unificado (`crmunificado`):
 
-## 📋 Visão geral
+- **Parte 1** — CRM atual (`crm-my-way`, self-hosted em `api.joonker.com.br`) → VPS nova.
+- **Parte 2** — Crediário atual (`consultasjoonker`, Supabase cloud) → VPS nova,
+  remapeando empresas (por CNPJ) e usuários (por e-mail) para os registros
+  que já existem no sistema unificado.
 
-```
-┌─────────────────┐         ┌─────────────────┐
-│  Lovable Cloud  │ ──────► │  Self-Hosted    │
-│  (origem)       │         │  api.joonker... │
-│  ~34k linhas    │         │                 │
-│  57 usuários    │         │                 │
-│  3 buckets      │         │                 │
-└─────────────────┘         └─────────────────┘
-```
-
-**Etapas:**
-1. Aplicar schema (140 migrations consolidadas)
-2. Exportar dados via REST do PostgREST
-3. Importar dados no self-hosted
-4. Migrar usuários do auth (sem senhas — usuários resetam)
-5. Recriar buckets de Storage
-6. Trocar o client do app
+Faça a **Parte 1 primeiro**, confirme que os números bateram, e só depois
+rode a **Parte 2**.
 
 ---
 
-## 🔑 Pré-requisitos na VPS
+## 🔑 Pré-requisitos na VPS nova
 
 ```bash
-# Node.js 18+ (já vem com fetch nativo)
-node --version  # deve ser >= 18
-
-# Acesso ao container do Postgres self-hosted
+node --version  # >= 18
 docker exec supabase-db psql -U postgres -c "SELECT 1"
-
-# Pasta de trabalho
-mkdir -p /opt/migration && cd /opt/migration
+cd /opt/crm/migration-tools
 ```
 
-## 🔐 Pegar as chaves necessárias
+## 🔐 Chaves necessárias
 
-Você precisa de **4 chaves** antes de começar:
+### CRM atual (origem da Parte 1)
+- `SOURCE_URL` = `https://api.joonker.com.br`
+- `SOURCE_SERVICE_KEY` = `SERVICE_ROLE_KEY` do `.env` da VPS de produção atual
 
-### Da origem (Lovable Cloud)
-1. **`SOURCE_URL`** = `https://flhycgllttqeczrpmfoc.supabase.co`
-2. **`SOURCE_SERVICE_KEY`** = service role do Lovable Cloud
-   - No Lovable: **Cloud → Secrets → SUPABASE_SERVICE_ROLE_KEY** (clique pra revelar)
+### Crediário atual (origem da Parte 2)
+- `SOURCE_URL` = `https://vtiimbbrxsfqgmscqdnl.supabase.co`
+- `SOURCE_SERVICE_KEY` = service_role do projeto Supabase cloud do consultasjoonker
+  (no painel do Supabase: Project Settings → API → service_role)
 
-### Do destino (self-hosted)
-3. **`TARGET_URL`** = `https://api.joonker.com.br` (ou onde está seu Supabase)
-4. **`TARGET_SERVICE_KEY`** = service_role do self-hosted
-   - Está no `docker-compose.yml` ou `.env` do seu Supabase self-hosted
+### VPS nova (destino das duas partes)
+- `TARGET_URL` = `https://api-crmunificado.joonker.com.br`
+- `TARGET_SERVICE_KEY` = `SERVICE_ROLE_KEY` do `/opt/crm/.env` da VPS nova
 
 ---
 
-## 📦 Passo 1: Baixar este pacote para a VPS
+## Parte 1 — Dados do CRM (crm-my-way)
 
-Como o repositório do Lovable já está conectado ao seu GitHub, basta clonar:
-
-```bash
-cd /opt
-git clone https://github.com/SEU_USUARIO/SEU_REPO.git lovable-app
-cd lovable-app/migration-tools
-ls -lh
-```
-
-(Substitua pela URL real do seu repo no GitHub.)
-
-Você deve ver:
-```
-01_schema.sql                  # 140 migrations consolidadas
-02_export_data.mjs             # exporta dados via REST
-03_migrate_auth_users.mjs      # migra usuários
-README.md                      # este arquivo
-```
-
----
-
-## 🏗️ Passo 2: Aplicar o schema no self-hosted
+### Passo 1: Exportar da produção atual
 
 ```bash
-cd /opt/lovable-app/migration-tools
-
-# Copia o schema para dentro do container e roda
-docker cp 01_schema.sql supabase-db:/tmp/01_schema.sql
-docker exec supabase-db psql -U postgres -d postgres -f /tmp/01_schema.sql 2>&1 | tee schema_apply.log
-
-# Confere se as tabelas foram criadas
-docker exec supabase-db psql -U postgres -d postgres -c "\dt public.*"
-```
-
-**Erros esperados (pode ignorar):**
-- `extension "..." already exists`
-- `function "..." already exists`
-- `policy "..." already exists`
-
-**Erros graves (precisam ser tratados):**
-- `relation does not exist` em FOREIGN KEY → confira a ordem
-- `permission denied` → rode como `postgres` mesmo
-
-Se algum CREATE FUNCTION der erro de role inexistente (ex: `service_role`, `authenticated`, `anon`), garanta que essas roles existem (já vêm no Supabase self-hosted oficial).
-
----
-
-## 📤 Passo 3: Exportar os dados da origem
-
-```bash
-cd /opt/lovable-app/migration-tools
-
-export SOURCE_URL="https://flhycgllttqeczrpmfoc.supabase.co"
-export SOURCE_SERVICE_KEY="COLE_A_SERVICE_ROLE_DO_LOVABLE_CLOUD_AQUI"
+cd /opt/crm/migration-tools
+export SOURCE_URL="https://api.joonker.com.br"
+export SOURCE_SERVICE_KEY="COLE_A_SERVICE_ROLE_DA_VPS_ATUAL"
 
 node 02_export_data.mjs
 ```
 
-Saída esperada:
-```
-📦 Exportando dados de https://flhycgllttqeczrpmfoc.supabase.co
+Gera `./data.sql`. Confira o tamanho (`ls -lh data.sql`) e dê uma olhada
+rápida no arquivo antes de aplicar.
 
-  → companies                                9/9 linhas
-  → profiles                                 57/57 linhas
-  → user_roles                               57/57 linhas
-  → crm_leads                                6775/6775 linhas
-  → crm_renovacoes                           13449/13449 linhas
-  → crm_cobrancas                            1650/1650 linhas
-  → ssotica_sync_logs                        9166/9166 linhas
-  ...
-✅ Concluído. Arquivo: ./data.sql
-```
-
-Confira o tamanho:
-```bash
-ls -lh data.sql
-# esperado: ~30-80 MB
-```
-
----
-
-## 📥 Passo 4: Importar os dados no self-hosted
+### Passo 2: Aplicar no destino
 
 ```bash
-cd /opt/lovable-app/migration-tools
-
-# Copia para o container e aplica
 docker cp data.sql supabase-db:/tmp/data.sql
 docker exec supabase-db psql -U postgres -d postgres -f /tmp/data.sql 2>&1 | tee data_apply.log
 
-# Confere os totais
+# Confere alguns totais
 docker exec supabase-db psql -U postgres -d postgres -c "
   SELECT 'crm_leads' AS t, count(*) FROM public.crm_leads
   UNION ALL SELECT 'crm_renovacoes', count(*) FROM public.crm_renovacoes
@@ -155,63 +69,103 @@ docker exec supabase-db psql -U postgres -d postgres -c "
 "
 ```
 
-Os números devem bater com a origem.
+Compare com os totais da produção atual (Studio → Table Editor, ou a mesma
+query no `api.joonker.com.br`). Se um número não bater, veja `data_apply.log`
+por erros antes de seguir.
 
----
-
-## 👥 Passo 5: Migrar usuários do auth
+### Passo 3: Migrar usuários (auth)
 
 ```bash
-export SOURCE_URL="https://flhycgllttqeczrpmfoc.supabase.co"
-export SOURCE_SERVICE_KEY="..."  # mesma de antes
-export TARGET_URL="https://api.joonker.com.br"
-export TARGET_SERVICE_KEY="COLE_A_SERVICE_ROLE_DO_SELF_HOSTED_AQUI"
+export SOURCE_URL="https://api.joonker.com.br"
+export SOURCE_SERVICE_KEY="..."   # mesma de antes
+export TARGET_URL="https://api-crmunificado.joonker.com.br"
+export TARGET_SERVICE_KEY="$(grep '^SERVICE_ROLE_KEY=' /opt/crm/.env | cut -d= -f2-)"
 
 node 03_migrate_auth_users.mjs
 ```
 
-⚠️ **Importante:** Os hashes de senha NÃO são migráveis via Admin API. Os usuários precisarão clicar em "Esqueci minha senha" no novo sistema. Como alternativa, você pode definir uma senha temporária no script.
+⚠️ Os hashes de senha não são migráveis pela Admin API — cada usuário vai
+precisar clicar em "Esqueci minha senha" no sistema novo (ou você define uma
+senha temporária e avisa o time).
+
+### Passo 4: Storage (logos, avatars, whatsapp-media)
+
+Poucos arquivos normalmente. Baixe manualmente da origem (Studio → Storage)
+e suba nos buckets equivalentes da VPS nova, ou ignore — as URLs antigas
+continuam funcionando enquanto a VPS de produção atual existir.
 
 ---
 
-## 🗂️ Passo 6: Recriar buckets de Storage
+## Parte 2 — Dados do Crediário (consultasjoonker)
 
-Você tem 3 buckets: `logos`, `avatars`, `whatsapp-media`. Crie eles no Studio do self-hosted (`https://api.joonker.com.br`):
+Diferente da Parte 1, aqui os IDs de empresa e usuário **não coincidem**
+entre os dois bancos — o script `06_migrate_crediario_data.mjs` remapeia:
 
-1. Acesse **Storage** no painel
-2. Clique **New bucket** → marque como **Public**
-3. Crie os 3 buckets
+- `empresas` (origem) → `companies` (destino): casadas por **CNPJ**
+  (e por nome, se o CNPJ não bater).
+- usuários (origem) → `profiles` (destino): casados por **e-mail**.
 
-Os arquivos antigos (apenas 6 objetos no total) você pode baixar manualmente da origem e fazer upload no destino, ou ignorar (URLs antigas continuarão funcionando enquanto o Lovable Cloud existir).
+Registros cuja empresa ou usuário não for encontrado no destino são
+**ignorados** (não quebram a migração) e listados no terminal — confira essa
+lista; se faltar alguém, crie a empresa/usuário no sistema novo primeiro e
+rode o script de novo.
 
----
+### Passo 1: Gerar o SQL remapeado
 
-## 🔄 Passo 7: Trocar o client do app
+```bash
+cd /opt/crm/migration-tools
+export SOURCE_URL="https://vtiimbbrxsfqgmscqdnl.supabase.co"
+export SOURCE_SERVICE_KEY="COLE_A_SERVICE_ROLE_DO_CONSULTASJOONKER"
+export TARGET_URL="https://api-crmunificado.joonker.com.br"
+export TARGET_SERVICE_KEY="$(grep '^SERVICE_ROLE_KEY=' /opt/crm/.env | cut -d= -f2-)"
 
-Depois que tudo estiver migrado e validado, me avise no chat para eu atualizar o código:
-- `src/integrations/supabase/client.ts` para apontar para `https://api.joonker.com.br`
-- `.env` com a nova `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`
-- Deploy das edge functions no self-hosted
+node 06_migrate_crediario_data.mjs
+```
+
+Leia o resumo no terminal (quantas empresas/usuários casaram, quais não) e
+abra `./crediario_data.sql` para revisar antes de aplicar.
+
+### Passo 2: Aplicar no destino
+
+```bash
+docker cp crediario_data.sql supabase-db:/tmp/crediario_data.sql
+docker exec supabase-db psql -U postgres -d postgres -f /tmp/crediario_data.sql 2>&1 | tee crediario_apply.log
+
+docker exec supabase-db psql -U postgres -d postgres -c "
+  SELECT 'crediario_vendas' AS t, count(*) FROM public.crediario_vendas
+  UNION ALL SELECT 'crediario_parcelas', count(*) FROM public.crediario_parcelas
+  UNION ALL SELECT 'crediario_contracts', count(*) FROM public.crediario_contracts
+  UNION ALL SELECT 'crediario_consultas', count(*) FROM public.crediario_consultas;
+"
+```
+
+### Passo 3: Credenciais Cora por empresa
+
+`empresa_credenciais` → `crediario_company_credentials` já migra junto (se a
+empresa bateu). Confira em **Crediário → Credenciais** no sistema novo se
+os certificados de cada loja aparecem certos.
 
 ---
 
 ## 🆘 Troubleshooting
 
 ### "value too long for type character varying(N)"
-Algum campo está maior no Cloud que no schema. Verifique e ajuste o limite na migration correspondente.
+Algum campo está maior na origem que no schema do destino. Ajuste o limite
+na migration correspondente em `supabase/migrations/`.
 
 ### "duplicate key value violates unique constraint"
-Você está rodando o import 2x. O `ON CONFLICT DO NOTHING` já trata isso na maioria das tabelas; em outras, limpe a tabela antes:
+Script rodando 2x. O `ON CONFLICT DO NOTHING` já trata a maioria dos casos;
+se precisar refazer do zero uma tabela específica:
 ```sql
 TRUNCATE public.crm_leads CASCADE;
 ```
 
-### Schema não aplica por causa de `auth.users`
-Algumas FKs apontam para `auth.users`. Garanta que o `auth.users` existe antes de aplicar — o Supabase self-hosted oficial já cria essa tabela na inicialização. Se não tiver, rode primeiro a migration do GoTrue.
-
-### PostgREST não enxerga novas tabelas
+### PostgREST não enxerga tabelas/colunas novas
 ```bash
-docker exec supabase-rest curl -X POST http://localhost:3000/rpc/pgrst_reload
-# ou simplesmente reinicie:
 docker restart supabase-rest
 ```
+
+### Quero conferir uma empresa/usuário que não bateu na Parte 2
+O script imprime a lista completa no terminal. Cadastre a empresa (com o
+mesmo CNPJ) ou o usuário (com o mesmo e-mail) no sistema novo e rode o
+script de novo — ele é seguro para rodar mais de uma vez.
