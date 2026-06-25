@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Plus, Filter, X, Search, ArrowRightLeft, Users } from "lucide-react";
+import { Plus, Filter, X, Search, ArrowRightLeft, Users, Copy, Trash2, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -16,6 +16,7 @@ import LeadFormDialog from "@/components/leads/LeadFormDialog";
 import ScheduleLeadDialog from "@/components/leads/ScheduleLeadDialog";
 import LeadHistoryDialog from "@/components/leads/LeadHistoryDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -621,6 +622,69 @@ export default function LeadsPage() {
     setDeleteConfirmLead(null);
   };
 
+  // Leads duplicados (mesmo telefone) — agrupa por sufixo de 8 dígitos do
+  // telefone resolvido (mesma lógica de is_phone_field/rótulo usada pra
+  // exibir o card). NÃO varre todo o JSON procurando "qualquer string com
+  // 8+ dígitos" — isso confunde datas guardadas como AAAAMMDD com telefone.
+  type DuplicateGroup = { phoneSuffix: string; phone: string; leads: Lead[] };
+  const [duplicatesDialogOpen, setDuplicatesDialogOpen] = useState(false);
+  const [scanningDuplicates, setScanningDuplicates] = useState(false);
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
+
+  const phoneSuffix = (telefone: string): string | null => {
+    const digits = (telefone || "").replace(/\D/g, "");
+    return digits.length >= 8 ? digits.slice(-8) : null;
+  };
+
+  const scanDuplicateLeads = async () => {
+    setScanningDuplicates(true);
+    try {
+      const { data, error } = await supabase
+        .from("crm_leads")
+        .select("id, data, assigned_to, created_by, status, created_at")
+        .neq("status", "excluidos")
+        .limit(10000);
+      if (error) throw error;
+
+      const groups = new Map<string, { phone: string; leads: Lead[] }>();
+      (data || []).forEach((l: any) => {
+        const leadData = (l.data || {}) as Record<string, any>;
+        const identity = resolveLeadIdentity(leadData, formFields);
+        const suffix = phoneSuffix(identity.telefone);
+        if (!suffix) return;
+        const group = groups.get(suffix) || { phone: identity.telefone || suffix, leads: [] };
+        group.leads.push(l as Lead);
+        groups.set(suffix, group);
+      });
+
+      const result: DuplicateGroup[] = Array.from(groups.entries())
+        .filter(([, g]) => g.leads.length >= 2)
+        .map(([suffix, g]) => ({
+          phoneSuffix: suffix,
+          phone: g.phone,
+          leads: g.leads.sort((a, b) => a.created_at.localeCompare(b.created_at)),
+        }))
+        .sort((a, b) => b.leads.length - a.leads.length);
+
+      setDuplicateGroups(result);
+      const totalLeads = result.reduce((acc, g) => acc + g.leads.length, 0);
+      toast.success(
+        result.length > 0
+          ? `${result.length} telefone(s) duplicado(s) — ${totalLeads} leads no total.`
+          : "Nenhum lead duplicado encontrado.",
+      );
+    } catch (err: any) {
+      toast.error(`Erro ao verificar duplicados: ${err.message || err}`);
+    } finally {
+      setScanningDuplicates(false);
+    }
+  };
+
+  const leadDisplayName = (lead: Lead) => {
+    const identity = resolveLeadIdentity(lead.data || {}, formFields);
+    return identity.nome || "Sem nome";
+  };
+
   const openRestore = (lead: Lead) => {
     setRestoreLead(lead);
     setRestoreAssignee(lead.assigned_to || "");
@@ -963,6 +1027,20 @@ export default function LeadsPage() {
             >
               <Users className="mr-1 h-4 w-4" />
               Alocar sem usuário
+            </Button>
+          )}
+          {(isAdmin || isGerente) && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDuplicatesDialogOpen(true);
+                void scanDuplicateLeads();
+              }}
+              className="shrink-0"
+            >
+              <Copy className="mr-1 h-4 w-4" />
+              Duplicados
             </Button>
           )}
           {(isAdmin || isGerente) && (
@@ -1341,6 +1419,63 @@ export default function LeadsPage() {
         />
       )}
 
+      <Dialog open={duplicatesDialogOpen} onOpenChange={setDuplicatesDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Leads duplicados (mesmo telefone)</DialogTitle>
+            <DialogDescription>
+              Agrupado pelos últimos 8 dígitos do telefone do lead. Confira antes de excluir — pode ser duas
+              pessoas com números parecidos por coincidência.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-between gap-2">
+            <Button size="sm" variant="secondary" onClick={() => void scanDuplicateLeads()} disabled={scanningDuplicates}>
+              {scanningDuplicates ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verificando...</>
+              ) : (
+                <><Search className="mr-2 h-4 w-4" />Verificar agora</>
+              )}
+            </Button>
+            {duplicateGroups && (
+              <span className="text-xs text-muted-foreground">
+                {duplicateGroups.length} telefone(s) duplicado(s)
+              </span>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {duplicateGroups && duplicateGroups.length === 0 && (
+              <p className="text-sm text-muted-foreground py-6 text-center">Nenhum lead duplicado encontrado.</p>
+            )}
+            {duplicateGroups?.map((group) => (
+              <div key={group.phoneSuffix} className="rounded-lg border p-3 space-y-2">
+                <p className="text-sm font-medium">{group.phone} <span className="text-muted-foreground">({group.leads.length} leads)</span></p>
+                <div className="space-y-1.5">
+                  {group.leads.map((lead) => (
+                    <div key={lead.id} className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5">
+                      <div className="min-w-0">
+                        <p className="text-sm truncate">{leadDisplayName(lead)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {statuses.find((s) => s.key === lead.status)?.label || lead.status} ·{" "}
+                          {profiles.find((p) => p.user_id === lead.assigned_to)?.full_name || "Sem responsável"} ·{" "}
+                          {new Date(lead.created_at).toLocaleDateString("pt-BR")}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(lead)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
