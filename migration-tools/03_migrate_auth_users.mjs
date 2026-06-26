@@ -66,7 +66,13 @@ async function createUserOnTarget(user) {
 
   if (!res.ok) {
     const txt = await res.text();
-    if (txt.includes('already been registered') || txt.includes('duplicate')) {
+    // Só trata como "já existe" se o destino confirmar que o e-mail já está
+    // cadastrado (evita falso positivo por outro erro que also contém a
+    // palavra "duplicate", ex.: violação de unicidade em phone="").
+    const isRealDuplicate =
+      /email.*(already|exists|registered)/i.test(txt) ||
+      /duplicate key value violates unique constraint "users_email/i.test(txt);
+    if (isRealDuplicate) {
       return { skipped: true };
     }
     throw new Error(`${res.status}: ${txt}`);
