@@ -142,7 +142,6 @@ async function main() {
   out.write(`-- Dump do Crediário gerado em ${new Date().toISOString()}\n`);
   out.write(`-- Origem: ${SOURCE_URL}\n\n`);
   out.write(`SET session_replication_role = 'replica';\n`);
-  out.write(`BEGIN;\n`);
 
   let skippedNoCompany = 0;
   let skippedNoUser = 0;
@@ -171,7 +170,10 @@ async function main() {
   async function dumpRemapped(srcTable, targetTable, columns, opts) {
     process.stdout.write(`  → ${srcTable.padEnd(28)} → ${targetTable.padEnd(32)}`);
     const rows = await restSelect(SOURCE_URL, SOURCE_KEY, srcTable, columns);
+    // Cada tabela é sua própria transação: um erro numa linha só desfaz essa
+    // tabela, sem perder o que já tiver sido confirmado nas anteriores.
     out.write(`\n-- ============ ${srcTable} → ${targetTable} ============\n`);
+    out.write(`BEGIN;\n`);
     let written = 0;
     for (const row of rows) {
       const mapped = remapRow(row, opts);
@@ -183,6 +185,7 @@ async function main() {
       out.write(insertStmt(targetTable, mapped) + '\n');
       written++;
     }
+    out.write(`COMMIT;\n`);
     console.log(`${written}/${rows.length} linhas`);
     return written;
   }
@@ -258,8 +261,7 @@ async function main() {
   await dumpSingletonIfEmpty('contract_template', 'crediario_contract_template', '*');
   await dumpSingletonIfEmpty('settings', 'crediario_settings', '*');
 
-  out.write(`\nCOMMIT;\n`);
-  out.write(`SET session_replication_role = 'origin';\n`);
+  out.write(`\nSET session_replication_role = 'origin';\n`);
   out.end();
 
   console.log(`\n✅ Concluído. Arquivo: ./crediario_data.sql`);
