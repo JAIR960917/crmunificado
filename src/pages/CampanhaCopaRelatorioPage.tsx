@@ -179,6 +179,8 @@ export default function CampanhaCopaRelatorioPage() {
   const [empresaOptions, setEmpresaOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [empresa, setEmpresa] = useState(ALL);
   const [converteu, setConverteu] = useState(ALL);
+  const [trackingSlug, setTrackingSlug] = useState(ALL);
+  const [trackingLinkOptions, setTrackingLinkOptions] = useState<Array<{ slug: string; name: string }>>([]);
 
   const placarFiltro = useMemo(
     () => normalizePlacarInput(placarHome, placarAway),
@@ -205,7 +207,8 @@ export default function CampanhaCopaRelatorioPage() {
     placar: placarFiltro,
     company_id: empresa === ALL ? null : empresa === NO_COMPANY ? NO_COMPANY : empresa,
     converteu: converteu === ALL ? null : converteu === "sim",
-  }), [ultimoExame, cidade, jogo, dataInicio, dataFim, leadsFiltro, assignedTo, placarFiltro, empresa, converteu]);
+    tracking_slug: trackingSlug === ALL ? null : trackingSlug,
+  }), [ultimoExame, cidade, jogo, dataInicio, dataFim, leadsFiltro, assignedTo, placarFiltro, empresa, converteu, trackingSlug]);
 
   const loadMeta = useCallback(async () => {
     const [profRes, meta] = await Promise.all([
@@ -216,6 +219,7 @@ export default function CampanhaCopaRelatorioPage() {
     setCidadeOptions(meta.cities);
     setJogoOptions(meta.jogos);
     setEmpresaOptions(meta.companies);
+    setTrackingLinkOptions(meta.trackingLinks);
   }, []);
 
   const loadReport = useCallback(async () => {
@@ -512,7 +516,7 @@ export default function CampanhaCopaRelatorioPage() {
               Filtros
             </CardTitle>
             <CardDescription>
-              Refine por último exame, cidade, jogo, placar, período, status em Leads/Renovação, responsável e empresa.
+              Refine por último exame, cidade, jogo, placar, período, status em Leads/Renovação, responsável, empresa e link de rastreamento.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -641,6 +645,23 @@ export default function CampanhaCopaRelatorioPage() {
                     <SelectItem value={ALL}>Todos</SelectItem>
                     <SelectItem value="sim">Sim — comprou após a inscrição</SelectItem>
                     <SelectItem value="nao">Não — ainda não comprou</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Link de rastreamento</Label>
+                <Select value={trackingSlug} onValueChange={setTrackingSlug}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>Todos</SelectItem>
+                    {trackingLinkOptions.map((l) => (
+                      <SelectItem key={l.slug} value={l.slug}>
+                        {l.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

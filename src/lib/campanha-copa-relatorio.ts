@@ -30,6 +30,7 @@ export type CampanhaCopaRelatorioFilters = {
   placar?: string | null;
   company_id?: string | null;
   converteu?: boolean | null;
+  tracking_slug?: string | null;
 };
 
 export type CampanhaCopaRelatorioMetrics = {
@@ -69,6 +70,7 @@ export type CampanhaCopaRelatorioRow = {
   consentimento_marketing: boolean;
   assigned_to: string | null;
   created_at: string;
+  tracking_slug: string | null;
   company_id: string | null;
   company_name: string | null;
   renovacao_match: RenovacaoMatch;
@@ -112,6 +114,7 @@ type SubmissionRaw = {
   consentimento_marketing: boolean;
   assigned_to: string | null;
   created_at: string;
+  tracking_slug: string | null;
 };
 
 type RenovacaoLite = {
@@ -379,7 +382,7 @@ async function fetchSubmissions(filters: CampanhaCopaRelatorioFilters): Promise<
   let query = supabase
     .from("campanha_copa_submissions")
     .select(
-      "id, lead_id, nome, cpf, idade, cidade, telefone, usa_oculos, ultimo_exame_vista, jogo, jogo_label, palpite_brasil, palpite_marrocos, palpite_texto, consentimento_marketing, assigned_to, created_at",
+      "id, lead_id, nome, cpf, idade, cidade, telefone, usa_oculos, ultimo_exame_vista, jogo, jogo_label, palpite_brasil, palpite_marrocos, palpite_texto, consentimento_marketing, assigned_to, created_at, tracking_slug",
     )
     .order("created_at", { ascending: false })
     .limit(MAX_SUBMISSIONS);
@@ -390,6 +393,7 @@ async function fetchSubmissions(filters: CampanhaCopaRelatorioFilters): Promise<
   if (filters.data_inicio) query = query.gte("created_at", toIsoStart(filters.data_inicio)!);
   if (filters.data_fim) query = query.lte("created_at", toIsoEnd(filters.data_fim)!);
   if (filters.assigned_to) query = query.eq("assigned_to", filters.assigned_to);
+  if (filters.tracking_slug) query = query.eq("tracking_slug", filters.tracking_slug);
 
   const placarScores = parsePlacarScores(filters.placar);
   if (placarScores) {
@@ -558,6 +562,7 @@ export async function fetchCampanhaCopaRelatorio(
       consentimento_marketing: sub.consentimento_marketing,
       assigned_to: sub.assigned_to,
       created_at: sub.created_at,
+      tracking_slug: sub.tracking_slug ?? null,
       company_id: companyId,
       company_name: companyId ? companyNameById.get(companyId) ?? null : null,
       renovacao_match,
@@ -614,8 +619,9 @@ export async function fetchCampanhaCopaRelatorioMeta(): Promise<{
   cities: string[];
   jogos: string[];
   companies: Array<{ id: string; name: string }>;
+  trackingLinks: Array<{ slug: string; name: string }>;
 }> {
-  const [subRes, routesRes] = await Promise.all([
+  const [subRes, routesRes, trackingRes] = await Promise.all([
     supabase
       .from("campanha_copa_submissions")
       .select("cidade, jogo, jogo_label")
@@ -624,6 +630,10 @@ export async function fetchCampanhaCopaRelatorioMeta(): Promise<{
     supabase
       .from("campanha_copa_cidade_lojas" as never)
       .select("company_id"),
+    supabase
+      .from("campanha_copa_tracking_links" as never)
+      .select("slug, name")
+      .order("name"),
   ]);
 
   if (subRes.error) throw new Error(subRes.error.message);
@@ -650,10 +660,13 @@ export async function fetchCampanhaCopaRelatorioMeta(): Promise<{
     companies = (companiesData ?? []) as Array<{ id: string; name: string }>;
   }
 
+  const trackingLinks = ((trackingRes.data ?? []) as Array<{ slug: string; name: string }>);
+
   return {
     cities: Array.from(cities).sort((a, b) => a.localeCompare(b, "pt-BR")),
     jogos: Array.from(jogos.keys()).sort(),
     companies,
+    trackingLinks,
   };
 }
 

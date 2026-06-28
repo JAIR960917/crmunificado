@@ -92,6 +92,7 @@ export default function LeadsPage() {
 
   // Filters (admin/gerente only)
   const [filterVendedor, setFilterVendedor] = useState<string>("all");
+  const [filterCompany, setFilterCompany] = useState<string>("all");
   const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>();
   const [filterDateTo, setFilterDateTo] = useState<Date | undefined>();
   const [showFilters, setShowFilters] = useState(false);
@@ -132,6 +133,13 @@ export default function LeadsPage() {
   const statusKeys = useMemo(() => visibleStatuses.map(s => s.key), [visibleStatuses]);
 
 
+  // User IDs belonging to the selected company (used to filter leads by company for gerente)
+  const filterCompanyUserIds = useMemo(() => {
+    if (filterCompany === "all") return null;
+    const ids = fullProfiles.filter((p) => p.company_id === filterCompany).map((p) => p.user_id);
+    return ids;
+  }, [filterCompany, fullProfiles]);
+
   const columnFilter = useMemo(() => ({
     apply: (q: any, statusKey?: string) => {
       let res = q;
@@ -148,6 +156,16 @@ export default function LeadsPage() {
         && statusKey !== "excluidos"
       ) {
         res = res.eq("assigned_to", filterVendedor);
+      } else if (
+        filterCompanyUserIds !== null
+        && filterVendedor === "all"
+        && statusKey !== "excluidos"
+      ) {
+        if (filterCompanyUserIds.length === 0) {
+          res = res.eq("assigned_to", "00000000-0000-0000-0000-000000000000");
+        } else {
+          res = res.in("assigned_to", filterCompanyUserIds);
+        }
       }
       if (filterDateFrom) {
         const from = new Date(filterDateFrom); from.setHours(0, 0, 0, 0);
@@ -159,7 +177,7 @@ export default function LeadsPage() {
       }
       return res;
     },
-  }), [isAdmin, isGerente, filterVendedor, filterDateFrom, filterDateTo]);
+  }), [isAdmin, isGerente, filterVendedor, filterCompanyUserIds, filterDateFrom, filterDateTo]);
 
   const buildSearchOr = useCallback((q: string) => {
     const safe = q.replace(/[%,()]/g, "");
@@ -1006,15 +1024,19 @@ export default function LeadsPage() {
   };
 
 
-  // Vendedor options for the filter (gerente sees only same company, admin sees all)
+  // Vendedor options for the filter (gerente sees all managed companies, admin sees all)
   const vendedorOptions = useMemo(() => {
     if (!isAdmin && !isGerente) return [];
     if (isAdmin) return fullProfiles;
-    // Gerente: find my company_id
-    const myProfile = fullProfiles.find(p => p.user_id === user?.id);
-    if (!myProfile?.company_id) return [];
-    return fullProfiles.filter(p => p.company_id === myProfile.company_id);
-  }, [fullProfiles, isAdmin, isGerente, user?.id]);
+    // Gerente: show users from all managed companies, further narrowed by selected company filter
+    const base = assignableUserIds
+      ? fullProfiles.filter((p) => assignableUserIds.has(p.user_id))
+      : fullProfiles;
+    if (filterCompany !== "all") {
+      return base.filter((p) => p.company_id === filterCompany);
+    }
+    return base;
+  }, [fullProfiles, isAdmin, isGerente, assignableUserIds, filterCompany]);
 
   const vendedorIds = useMemo(
     () => new Set(userRoles.filter((r) => r.role === "vendedor").map((r) => r.user_id)),
@@ -1122,8 +1144,8 @@ export default function LeadsPage() {
 
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
 
-  const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo || searchQuery.trim();
-  const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSearchQuery(""); };
+  const hasActiveFilters = filterVendedor !== "all" || filterCompany !== "all" || filterDateFrom || filterDateTo || searchQuery.trim();
+  const clearFilters = () => { setFilterVendedor("all"); setFilterCompany("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSearchQuery(""); };
 
   const getSyncStatus = (leadId: string): "offline" | "synced" | null => {
     if (offlineIds.has(leadId)) return "offline";
@@ -1151,7 +1173,7 @@ export default function LeadsPage() {
               Transferir
             </Button>
           )}
-          {(isAdmin || isGerente) && (
+          {isAdmin && (
             <Button
               size="sm"
               variant="outline"
@@ -1162,7 +1184,7 @@ export default function LeadsPage() {
               Alocar sem usuário
             </Button>
           )}
-          {(isAdmin || isGerente) && (
+          {isAdmin && (
             <Button
               size="sm"
               variant="outline"
@@ -1231,6 +1253,25 @@ export default function LeadsPage() {
       {/* Filter bar */}
       {(isAdmin || isGerente) && showFilters && (
         <div className="mb-4 p-3 bg-muted/50 rounded-lg border flex flex-wrap items-end gap-3">
+          {isGerente && !isAdmin && companies.length > 1 && (
+            <div className="flex-1 min-w-[180px] max-w-[250px]">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Empresa</label>
+              <Select
+                value={filterCompany}
+                onValueChange={(v) => { setFilterCompany(v); setFilterVendedor("all"); }}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Todas as empresas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  {companies.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="flex-1 min-w-[180px] max-w-[250px]">
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Vendedor</label>
             <Select value={filterVendedor} onValueChange={setFilterVendedor}>

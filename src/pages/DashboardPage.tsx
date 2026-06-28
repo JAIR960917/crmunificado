@@ -78,9 +78,10 @@ export default function DashboardPage() {
   const [sellerFilter, setSellerFilter] = useState<string[]>([]); // empty = all
   const [vendedorIds, setVendedorIds] = useState<Set<string>>(new Set());
   const [gerenteCompanyId, setGerenteCompanyId] = useState<string | null>(null);
+  const [gerenteCompanyIds, setGerenteCompanyIds] = useState<Set<string>>(new Set());
 
   const canSee = isAdmin || isGerente;
-  const showCompanyFilter = isAdmin;
+  const showCompanyFilter = isAdmin || (isGerente && gerenteCompanyIds.size > 1);
   const showSellerFilter = isAdmin || isGerente;
 
   useEffect(() => {
@@ -324,18 +325,23 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isGerente || isAdmin || !user) return;
-    supabase
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        const cid = (data as { company_id?: string | null } | null)?.company_id;
-        if (cid) {
-          setGerenteCompanyId(cid);
-          setCompanyFilter(cid);
-        }
+    Promise.all([
+      supabase.from("profiles").select("company_id").eq("user_id", user.id).maybeSingle(),
+      supabase.from("manager_companies").select("company_id").eq("user_id", user.id),
+    ]).then(([{ data: profileData }, { data: managerCos }]) => {
+      const allIds = new Set<string>();
+      const primaryId = (profileData as { company_id?: string | null } | null)?.company_id;
+      if (primaryId) allIds.add(primaryId);
+      (managerCos || []).forEach((mc: { company_id?: string | null }) => {
+        if (mc.company_id) allIds.add(mc.company_id);
       });
+      setGerenteCompanyIds(allIds);
+      if (primaryId) setGerenteCompanyId(primaryId);
+      // Auto-select company only when managing a single one; with multiple, let the user choose
+      if (allIds.size === 1 && primaryId) {
+        setCompanyFilter(primaryId);
+      }
+    });
   }, [isGerente, isAdmin, user?.id]);
 
   useEffect(() => {
@@ -344,26 +350,27 @@ export default function DashboardPage() {
 
   const availableSellers = useMemo(() => {
     let list = profiles;
-    if (isGerente && !isAdmin && gerenteCompanyId) {
+    if (isGerente && !isAdmin && gerenteCompanyIds.size > 0) {
       list = list.filter(
-        (p) => p.company_id === gerenteCompanyId && (p.user_id === user?.id || vendedorIds.has(p.user_id)),
+        (p) =>
+          gerenteCompanyIds.has(p.company_id ?? "") &&
+          (p.user_id === user?.id || vendedorIds.has(p.user_id)),
       );
-    } else {
-      list = list.filter((p) => companyFilter === ALL || p.company_id === companyFilter);
     }
+    list = list.filter((p) => companyFilter === ALL || p.company_id === companyFilter);
     return list
       .map((p) => ({ user_id: p.user_id, full_name: p.full_name || "(sem nome)" }))
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
-  }, [profiles, companyFilter, isGerente, isAdmin, gerenteCompanyId, user?.id, vendedorIds]);
+  }, [profiles, companyFilter, isGerente, isAdmin, gerenteCompanyIds, user?.id, vendedorIds]);
 
   const filteredRows = useMemo(() => {
     return allRows.filter((r) => {
-      if (isGerente && !isAdmin && gerenteCompanyId && r.company_id !== gerenteCompanyId) return false;
+      if (isGerente && !isAdmin && gerenteCompanyIds.size > 0 && !gerenteCompanyIds.has(r.company_id ?? "")) return false;
       if (companyFilter !== ALL && r.company_id !== companyFilter) return false;
       if (sellerFilter.length > 0 && !sellerFilter.includes(r.user_id)) return false;
       return true;
     });
-  }, [allRows, companyFilter, sellerFilter, isGerente, isAdmin, gerenteCompanyId]);
+  }, [allRows, companyFilter, sellerFilter, isGerente, isAdmin, gerenteCompanyIds]);
 
   const reportTotals = useMemo(() => {
     return filteredRows.reduce(
