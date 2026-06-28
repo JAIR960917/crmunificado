@@ -78,9 +78,19 @@ export default function DashboardPage() {
   const [sellerFilter, setSellerFilter] = useState<string[]>([]); // empty = all
   const [vendedorIds, setVendedorIds] = useState<Set<string>>(new Set());
   const [gerenteCompanyId, setGerenteCompanyId] = useState<string | null>(null);
-  const [gerenteCompanyIds, setGerenteCompanyIds] = useState<Set<string>>(new Set());
 
   const canSee = isAdmin || isGerente;
+
+  // Deriva as empresas do gerente diretamente dos profiles retornados pelo fetchReport.
+  // A RLS de profiles já usa is_my_company (que considera manager_companies), então
+  // profiles contém todos os usuários de todas as empresas gerenciadas.
+  const gerenteCompanyIds = useMemo(() => {
+    if (!isGerente || isAdmin) return new Set<string>();
+    return new Set(
+      profiles.map((p) => p.company_id).filter((id): id is string => !!id)
+    );
+  }, [profiles, isGerente, isAdmin]);
+
   const showCompanyFilter = isAdmin || (isGerente && gerenteCompanyIds.size > 1);
   const showSellerFilter = isAdmin || isGerente;
 
@@ -323,26 +333,24 @@ export default function DashboardPage() {
     };
   }, [canSee, user, dateMode, selectedDate, startDate, endDate, companyFilter, cobDateMode, cobSelectedDate, cobStartDate, cobEndDate]);
 
+  // Carrega a empresa principal do gerente para uso em fetchTotals
   useEffect(() => {
     if (!isGerente || isAdmin || !user) return;
-    Promise.all([
-      supabase.from("profiles").select("company_id").eq("user_id", user.id).maybeSingle(),
-      supabase.from("manager_companies").select("company_id").eq("user_id", user.id),
-    ]).then(([{ data: profileData }, { data: managerCos }]) => {
-      const allIds = new Set<string>();
-      const primaryId = (profileData as { company_id?: string | null } | null)?.company_id;
-      if (primaryId) allIds.add(primaryId);
-      (managerCos || []).forEach((mc: { company_id?: string | null }) => {
-        if (mc.company_id) allIds.add(mc.company_id);
+    supabase.from("profiles").select("company_id").eq("user_id", user.id).maybeSingle()
+      .then(({ data }) => {
+        const primaryId = (data as { company_id?: string | null } | null)?.company_id;
+        if (primaryId) setGerenteCompanyId(primaryId);
       });
-      setGerenteCompanyIds(allIds);
-      if (primaryId) setGerenteCompanyId(primaryId);
-      // Auto-select company only when managing a single one; with multiple, let the user choose
-      if (allIds.size === 1 && primaryId) {
-        setCompanyFilter(primaryId);
-      }
-    });
   }, [isGerente, isAdmin, user?.id]);
+
+  // Auto-seleciona a empresa quando o gerente gerencia apenas uma
+  useEffect(() => {
+    if (!isGerente || isAdmin) return;
+    if (gerenteCompanyIds.size === 1) {
+      const [id] = gerenteCompanyIds;
+      setCompanyFilter(id);
+    }
+  }, [gerenteCompanyIds, isGerente, isAdmin]);
 
 
   const availableSellers = useMemo(() => {
