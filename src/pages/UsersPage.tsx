@@ -135,12 +135,21 @@ export default function UsersPage() {
     const errMsg = data?.error || (error as any)?.context?.body ? JSON.parse((error as any)?.context?.body)?.error : error?.message;
     if (error || data?.error) {
       toast.error(errMsg || "Erro ao criar usuário");
-    } else {
-      toast.success("Usuário criado com sucesso. Copie a senha antes de fechar.", { duration: 8000 });
-      setOpenCreate(false);
-      setName(""); setEmail(""); setRole("vendedor"); setCreatePassword(""); setCreateCompanyId("__none__"); setCreateExtraCompanyIds([]);
-      fetchData();
+      setCreating(false);
+      return;
     }
+
+    // Sync manager_companies diretamente se o novo usuario for gerente com empresas extras
+    if (isAdmin && role === "gerente" && createExtraCompanyIds.length > 0 && data?.user_id) {
+      await supabase.from("manager_companies").insert(
+        createExtraCompanyIds.map((cid) => ({ user_id: data.user_id as string, company_id: cid }))
+      );
+    }
+
+    toast.success("Usuário criado com sucesso. Copie a senha antes de fechar.", { duration: 8000 });
+    setOpenCreate(false);
+    setName(""); setEmail(""); setRole("vendedor"); setCreatePassword(""); setCreateCompanyId("__none__"); setCreateExtraCompanyIds([]);
+    fetchData();
     setCreating(false);
   };
 
@@ -174,11 +183,25 @@ export default function UsersPage() {
     const { data, error } = await supabase.functions.invoke("manage-user", { body });
     if (error || data?.error) {
       toast.error(data?.error || "Erro ao atualizar");
-    } else {
-      toast.success("Usuário atualizado");
-      setOpenEdit(false);
-      fetchData();
+      setSaving(false);
+      return;
     }
+
+    // Sync manager_companies directly via client (admin has full RLS access).
+    // This guarantees the data is correct regardless of edge function version.
+    if (isAdmin) {
+      await supabase.from("manager_companies").delete().eq("user_id", editTarget.user_id);
+      const extraIds = editRole === "gerente" ? editExtraCompanyIds : [];
+      if (extraIds.length > 0) {
+        await supabase.from("manager_companies").insert(
+          extraIds.map((cid) => ({ user_id: editTarget.user_id, company_id: cid }))
+        );
+      }
+    }
+
+    toast.success("Usuário atualizado");
+    setOpenEdit(false);
+    fetchData();
     setSaving(false);
   };
 
