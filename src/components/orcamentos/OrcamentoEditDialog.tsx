@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -129,7 +129,9 @@ export default function OrcamentoEditDialog({ open, onOpenChange, orcamento, onS
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] p-0 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b">
-          <h2 className="text-base font-semibold">Editar Orçamento</h2>
+          <DialogTitle asChild>
+            <h2 className="text-base font-semibold">Editar Orçamento</h2>
+          </DialogTitle>
           <button onClick={() => onOpenChange(false)} className="rounded-md p-1 hover:bg-muted">
             <X className="h-4 w-4" />
           </button>

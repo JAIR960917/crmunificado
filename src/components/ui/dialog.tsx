@@ -28,15 +28,24 @@ const DialogOverlay = React.forwardRef<
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const DIALOG_DESCRIPTION_DISPLAY_NAME = "DialogDescription";
+const DIALOG_TITLE_DISPLAY_NAME = "DialogTitle";
 
-function includesDialogDescription(node: React.ReactNode): boolean {
+function includesDisplayName(node: React.ReactNode, displayNameToFind: string): boolean {
   for (const child of React.Children.toArray(node)) {
     if (!React.isValidElement(child)) continue;
     const displayName = (child.type as { displayName?: string })?.displayName;
-    if (displayName === DIALOG_DESCRIPTION_DISPLAY_NAME) return true;
-    if (includesDialogDescription(child.props.children)) return true;
+    if (displayName === displayNameToFind) return true;
+    if (includesDisplayName(child.props.children, displayNameToFind)) return true;
   }
   return false;
+}
+
+function includesDialogDescription(node: React.ReactNode): boolean {
+  return includesDisplayName(node, DIALOG_DESCRIPTION_DISPLAY_NAME);
+}
+
+function includesDialogTitle(node: React.ReactNode): boolean {
+  return includesDisplayName(node, DIALOG_TITLE_DISPLAY_NAME);
 }
 
 const DialogTitle = React.forwardRef<
@@ -49,7 +58,7 @@ const DialogTitle = React.forwardRef<
     {...props}
   />
 ));
-DialogTitle.displayName = DialogPrimitive.Title.displayName;
+DialogTitle.displayName = DIALOG_TITLE_DISPLAY_NAME;
 
 const DialogDescription = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Description>,
@@ -73,6 +82,9 @@ const DialogContent = React.forwardRef<
       )}
       {...props}
     >
+      {!includesDialogTitle(children) ? (
+        <DialogTitle className="sr-only">Janela de diálogo</DialogTitle>
+      ) : null}
       {children}
       {!includesDialogDescription(children) ? (
         <DialogDescription className="sr-only">Conteúdo da janela de diálogo</DialogDescription>

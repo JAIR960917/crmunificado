@@ -51,12 +51,31 @@ interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
     VariantProps<typeof sheetVariants> {}
 
+const SHEET_TITLE_DISPLAY_NAME = "SheetTitle";
+const SHEET_DESCRIPTION_DISPLAY_NAME = "SheetDescription";
+
+function includesDisplayName(node: React.ReactNode, displayNameToFind: string): boolean {
+  for (const child of React.Children.toArray(node)) {
+    if (!React.isValidElement(child)) continue;
+    const displayName = (child.type as { displayName?: string })?.displayName;
+    if (displayName === displayNameToFind) return true;
+    if (includesDisplayName(child.props.children, displayNameToFind)) return true;
+  }
+  return false;
+}
+
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
   ({ side = "right", className, children, ...props }, ref) => (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+        {!includesDisplayName(children, SHEET_TITLE_DISPLAY_NAME) ? (
+          <SheetTitle className="sr-only">Painel</SheetTitle>
+        ) : null}
         {children}
+        {!includesDisplayName(children, SHEET_DESCRIPTION_DISPLAY_NAME) ? (
+          <SheetDescription className="sr-only">Conteúdo do painel</SheetDescription>
+        ) : null}
         <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-secondary hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
@@ -83,7 +102,7 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Title ref={ref} className={cn("text-lg font-semibold text-foreground", className)} {...props} />
 ));
-SheetTitle.displayName = SheetPrimitive.Title.displayName;
+SheetTitle.displayName = SHEET_TITLE_DISPLAY_NAME;
 
 const SheetDescription = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Description>,
@@ -91,7 +110,7 @@ const SheetDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Description ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />
 ));
-SheetDescription.displayName = SheetPrimitive.Description.displayName;
+SheetDescription.displayName = SHEET_DESCRIPTION_DISPLAY_NAME;
 
 export {
   Sheet,
