@@ -680,12 +680,17 @@ function isRemocaoCobrancaJuridica(situacao: string): boolean {
 }
 
 // Situações SSÓtica (parcela ou cliente) que não devem entrar na Cobrança.
+// "Escritório de Cobrança Currais Novos" já foi definitivamente repassado a
+// esse escritório externo — não deve aparecer nem em Cobrança nem ser
+// "resolvido" para Renovação pela auditoria de sem-dívida-ativa.
 function isSituacaoCobrancaExcluida(situacao: string): boolean {
   if (!situacao) return false;
   return situacao === "folha de pagamento"
     || situacao.includes("folha de pagamento")
     || situacao === "acerta com walyson"
-    || situacao.includes("acerta com walyson");
+    || situacao.includes("acerta com walyson")
+    || situacao.startsWith("escritorio de cobranca currais novos")
+    || situacao.startsWith("escritorio cobranca currais novos");
 }
 
 function getClienteSituacaoNormalizada(cliente: any): string {
