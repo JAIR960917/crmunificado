@@ -21,6 +21,7 @@ export const JWT_EXEMPT_SERVICES = new Set([
   "ai-agent-reply",
   "ai-agent-schedule-appointment",
   "ai-agent-lookup-appointment",
+  "get-company-links",
 ]);
 
 /** Bloqueia uso da chave anon em funções que exigem usuário ou bootstrap. */
