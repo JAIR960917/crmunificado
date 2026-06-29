@@ -1,21 +1,30 @@
 /**
- * Converte a faixa informada no formulário público da Copa em data fixa (ISO)
- * para o campo de último exame do CRM — necessário para o funil de leads por coluna.
+ * Converte a faixa informada no formulário público da Copa numa data
+ * aproximada (ISO) para o campo de último exame do CRM — necessário para o
+ * funil de leads por coluna. A data é aleatória dentro da janela da faixa,
+ * sempre relativa a hoje (não fixa), para que a coluna continue coerente com
+ * o período informado conforme o tempo passa.
  */
-const EXAME_VISTA_OPTION_DATES: Record<string, string> = {
-  "Menos de 6 meses": "2026-02-01",
-  "6 meses a 1 ano": "2025-10-01",
-  "1 a 2 anos": "2024-03-01",
-  "Mais de 2 anos": "2022-01-01",
+const EXAME_VISTA_OPTION_RANGES_DAYS: Record<string, [number, number]> = {
+  "Menos de 6 meses": [1, 180],
+  "6 meses a 1 ano": [181, 365],
+  "1 a 2 anos": [366, 730],
+  "Mais de 2 anos": [731, 1825],
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SupabaseAdmin = any;
 
-export function mapUltimoExameVistaToIsoDate(option: string): string | null {
+export function mapUltimoExameVistaToIsoDate(option: string, now: Date = new Date()): string | null {
   const key = (option || "").trim();
   if (!key || key === "Nunca fiz") return null;
-  return EXAME_VISTA_OPTION_DATES[key] ?? null;
+  const range = EXAME_VISTA_OPTION_RANGES_DAYS[key];
+  if (!range) return null;
+  const [minDays, maxDays] = range;
+  const daysAgo = minDays + Math.floor(Math.random() * (maxDays - minDays + 1));
+  const date = new Date(now);
+  date.setDate(date.getDate() - daysAgo);
+  return date.toISOString().slice(0, 10);
 }
 
 export async function loadLeadLastVisitFieldId(supabase: SupabaseAdmin): Promise<string | null> {
