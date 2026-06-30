@@ -32,7 +32,7 @@ serve(async (req) => {
     supabase
       .from("system_settings")
       .select("setting_key, setting_value")
-      .in("setting_key", ["system_name", "logo_url", "links_logo_url", "links_bg_color", "links_card_color"]),
+      .in("setting_key", ["system_name", "logo_url", "links_logo_url", "links_bg_color", "links_card_color", "links_meta_pixel_id"]),
   ]);
 
   const settingsMap = new Map((settingsRows || []).map((r) => [r.setting_key, r.setting_value || ""]));
@@ -42,6 +42,7 @@ serve(async (req) => {
     logo_url: settingsMap.get("links_logo_url") || settingsMap.get("logo_url") || "",
     bg_color: settingsMap.get("links_bg_color") || "",
     card_color: settingsMap.get("links_card_color") || "",
+    meta_pixel_id: settingsMap.get("links_meta_pixel_id") || "",
     links: links || [],
   });
 });

@@ -17,12 +17,13 @@ async function loadLinksSettings() {
   const { data } = await supabase
     .from("system_settings")
     .select("setting_key, setting_value")
-    .in("setting_key", ["links_logo_url", "links_bg_color", "links_card_color"]);
+    .in("setting_key", ["links_logo_url", "links_bg_color", "links_card_color", "links_meta_pixel_id"]);
   const map = new Map((data || []).map((r: any) => [r.setting_key, r.setting_value || ""]));
   return {
     linksLogoUrl: map.get("links_logo_url") || "",
     bgColor: map.get("links_bg_color") || DEFAULT_BG_COLOR,
     cardColor: map.get("links_card_color") || DEFAULT_CARD_COLOR,
+    metaPixelId: map.get("links_meta_pixel_id") || "",
   };
 }
 
@@ -39,12 +40,14 @@ export default function LinksAdminPage() {
   const [linksLogoUploading, setLinksLogoUploading] = useState(false);
   const [bgColor, setBgColor] = useState(DEFAULT_BG_COLOR);
   const [cardColor, setCardColor] = useState(DEFAULT_CARD_COLOR);
+  const [metaPixelId, setMetaPixelId] = useState("");
 
   useEffect(() => {
-    loadLinksSettings().then(({ linksLogoUrl: logo, bgColor: bg, cardColor: card }) => {
+    loadLinksSettings().then(({ linksLogoUrl: logo, bgColor: bg, cardColor: card, metaPixelId: pixel }) => {
       setLinksLogoUrl(logo);
       setBgColor(bg);
       setCardColor(card);
+      setMetaPixelId(pixel);
     });
   }, []);
 
@@ -178,6 +181,28 @@ export default function LinksAdminPage() {
               />
               <div className="h-9 w-9 rounded border shrink-0" style={{ backgroundColor: cardColor }} />
             </div>
+          </div>
+        </div>
+
+        {/* Meta Pixel */}
+        <div className="space-y-2 border rounded-lg p-4">
+          <p className="font-semibold text-sm">Meta Pixel (Facebook)</p>
+          <p className="text-[11px] text-muted-foreground">
+            O ID numérico do seu Pixel da Meta (ex.: <span className="font-mono">123456789012345</span>).
+            Quando preenchido, o código de rastreamento é injetado automaticamente na página /links.
+          </p>
+          <div className="space-y-1">
+            <Label>ID do Pixel</Label>
+            <Input
+              value={metaPixelId}
+              placeholder="Ex.: 123456789012345"
+              className="h-9 font-mono"
+              onChange={(e) => setMetaPixelId(e.target.value.replace(/\D/g, ""))}
+              onBlur={async () => {
+                await saveColorSetting("links_meta_pixel_id", metaPixelId);
+                toast.success(metaPixelId ? "Pixel ID salvo" : "Pixel ID removido");
+              }}
+            />
           </div>
         </div>
 
