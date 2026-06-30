@@ -58,7 +58,7 @@ export function evaluateCampanhaCopaPeriodo(
   if (fim && now > fim) {
     return {
       aberto: false,
-      mensagem: `O período para envio de palpites foi encerrado em ${fmt(fim)}.`,
+      mensagem: "O período para envio de palpites foi encerrado.",
       inicio: inicio?.toISOString() || null,
       fim: fim.toISOString(),
     };

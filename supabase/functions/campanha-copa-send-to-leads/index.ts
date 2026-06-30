@@ -6,6 +6,7 @@ import { assertAdminOrGerente, getUserFromRequest } from "../_shared/staffAuth.t
 import { loadCampanhaCopaJogoConfig } from "../_shared/campanhaCopaJogo.ts";
 import {
   applyUltimoExameVistaToLeadData,
+  loadJaFezExameVistaFieldId,
   loadLeadLastVisitFieldId,
 } from "../_shared/campanhaCopaExameVista.ts";
 import {
@@ -97,6 +98,7 @@ Deno.serve(async (req) => {
 
     const jogoCfg = await loadCampanhaCopaJogoConfig(admin);
     const lastVisitFieldId = await loadLeadLastVisitFieldId(admin);
+    const jaFezExameVistaField = await loadJaFezExameVistaFieldId(admin);
     const formaCaptacaoFieldId = await loadFormaCaptacaoFieldId(admin);
 
     const results: { submissionId: string; status: "sent" | "already_sent" | "error"; leadId?: string; error?: string }[] = [];
@@ -174,7 +176,7 @@ Deno.serve(async (req) => {
         team_away_name: jogoCfg.team_away_name,
         consentimento_marketing: !!sub.consentimento_marketing,
       };
-      applyUltimoExameVistaToLeadData(leadData, sub.ultimo_exame_vista || "", lastVisitFieldId);
+      applyUltimoExameVistaToLeadData(leadData, sub.ultimo_exame_vista || "", lastVisitFieldId, jaFezExameVistaField);
       applyFormaCaptacaoToLeadData(leadData, formaCaptacaoFieldId);
 
       // Inscrições do jogo ATUAL entram na coluna "Participando da campanha

@@ -46,10 +46,34 @@ export async function loadLeadLastVisitFieldId(supabase: SupabaseAdmin): Promise
   return null;
 }
 
+/**
+ * Campo "Já fez exame de vista?" (Sim/Não) — controla a exibição do campo de
+ * data acima. Sem marcar "Sim" aqui, a data do último exame fica preenchida
+ * nos bastidores mas escondida na tela, porque o campo de data só aparece
+ * condicionado a essa resposta.
+ */
+export async function loadJaFezExameVistaFieldId(supabase: SupabaseAdmin): Promise<{ id: string; simValue: string } | null> {
+  const { data: fields } = await supabase
+    .from("crm_form_fields")
+    .select("id, label, options");
+
+  for (const field of (fields || []) as { id: string; label: string | null; options: unknown }[]) {
+    const label = (field.label || "").toLowerCase();
+    if (/j[áa]\s+fez\s+exame\s+de\s+vista/.test(label)) {
+      const options = Array.isArray(field.options) ? (field.options as unknown[]).map(String) : [];
+      const simValue = options.find((o) => o.trim().toLowerCase() === "sim") ?? "Sim";
+      return { id: field.id, simValue };
+    }
+  }
+
+  return null;
+}
+
 export function applyUltimoExameVistaToLeadData(
   leadData: Record<string, unknown>,
   option: string,
   lastVisitFieldId: string | null,
+  jaFezExameVistaField: { id: string; simValue: string } | null = null,
 ): void {
   const isoDate = mapUltimoExameVistaToIsoDate(option);
   leadData.ultimo_exame_vista = option;
@@ -57,6 +81,9 @@ export function applyUltimoExameVistaToLeadData(
     leadData.ultimo_exame_vista_data = isoDate;
     if (lastVisitFieldId) {
       leadData[`field_${lastVisitFieldId}`] = isoDate;
+    }
+    if (jaFezExameVistaField) {
+      leadData[`field_${jaFezExameVistaField.id}`] = jaFezExameVistaField.simValue;
     }
   }
 }

@@ -9,6 +9,7 @@ import {
 import { loadCampanhaCopaSuccessConfig } from "../_shared/campanhaCopaSuccess.ts";
 import {
   applyUltimoExameVistaToLeadData,
+  loadJaFezExameVistaFieldId,
   loadLeadLastVisitFieldId,
 } from "../_shared/campanhaCopaExameVista.ts";
 import {
@@ -260,6 +261,7 @@ serve(async (req) => {
     }
 
     const lastVisitFieldId = await loadLeadLastVisitFieldId(supabase);
+    const jaFezExameVistaField = await loadJaFezExameVistaFieldId(supabase);
     const formaCaptacaoFieldId = await loadFormaCaptacaoFieldId(supabase);
     const leadData: Record<string, unknown> = {
       origem_campanha: "copa",
@@ -283,7 +285,7 @@ serve(async (req) => {
       consentimento_marketing: true,
       ...(trackingSlug ? { tracking_slug: trackingSlug } : {}),
     };
-    applyUltimoExameVistaToLeadData(leadData, ultimoExame, lastVisitFieldId);
+    applyUltimoExameVistaToLeadData(leadData, ultimoExame, lastVisitFieldId, jaFezExameVistaField);
     applyFormaCaptacaoToLeadData(leadData, formaCaptacaoFieldId);
 
     const { data: lead, error: leadErr } = await supabase
