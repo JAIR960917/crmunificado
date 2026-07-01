@@ -119,6 +119,7 @@
       if (type === "title") {
         var t = document.createElement("p");
         t.className = "link-title";
+        if (link.bold) t.style.fontWeight = "700";
         t.textContent = link.label || "";
         listEl.appendChild(t);
         return;
@@ -127,6 +128,7 @@
       if (type === "paragraph") {
         var p = document.createElement("p");
         p.className = "link-paragraph";
+        if (link.bold) p.style.fontWeight = "700";
         p.textContent = link.label || "";
         listEl.appendChild(p);
         return;

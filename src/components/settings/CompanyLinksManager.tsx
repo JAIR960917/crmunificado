@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { toast } from "sonner";
-import { Plus, Trash2, GripVertical, ExternalLink, Heading, ImagePlus, Type, AlignLeft, Upload } from "lucide-react";
+import { Plus, Trash2, GripVertical, ExternalLink, Heading, ImagePlus, Type, AlignLeft, Upload, Bold } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveStoragePublicUrl } from "@/lib/storage-url";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,6 +27,7 @@ type CompanyLink = {
   link_type: LinkType;
   position: number;
   active: boolean;
+  bold: boolean;
 };
 
 function fileToBase64(file: File): Promise<string> {
@@ -51,7 +52,7 @@ export default function CompanyLinksManager() {
   const fetchLinks = useCallback(async () => {
     const { data, error } = await supabase
       .from("company_links")
-      .select("id, label, url, link_type, position, active")
+      .select("id, label, url, link_type, position, active, bold")
       .order("position", { ascending: true });
     if (error) {
       toast.error("Erro ao carregar links");
@@ -87,8 +88,8 @@ export default function CompanyLinksManager() {
     };
     const { data, error } = await supabase
       .from("company_links")
-      .insert({ ...defaults[type], link_type: type, position: nextPosition, active: true })
-      .select("id, label, url, link_type, position, active")
+      .insert({ ...defaults[type], link_type: type, position: nextPosition, active: true, bold: false })
+      .select("id, label, url, link_type, position, active, bold")
       .single();
     if (error || !data) {
       toast.error("Erro ao criar item");
@@ -245,24 +246,50 @@ export default function CompanyLinksManager() {
 
                             {/* Title */}
                             {link.link_type === "title" && (
-                              <Input
-                                value={link.label}
-                                placeholder="Texto do título"
-                                className="h-9"
-                                onChange={(e) => patchLocal(link.id, { label: e.target.value })}
-                                onBlur={(e) => void persist(link.id, { label: e.target.value })}
-                              />
+                              <div className="flex flex-col gap-2">
+                                <Input
+                                  value={link.label}
+                                  placeholder="Texto do título"
+                                  className="h-9"
+                                  onChange={(e) => patchLocal(link.id, { label: e.target.value })}
+                                  onBlur={(e) => void persist(link.id, { label: e.target.value })}
+                                />
+                                <div className="flex items-center gap-2">
+                                  <Bold className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <Label className="text-xs text-muted-foreground">Negrito</Label>
+                                  <Switch
+                                    checked={link.bold}
+                                    onCheckedChange={(checked) => {
+                                      patchLocal(link.id, { bold: checked });
+                                      void persist(link.id, { bold: checked });
+                                    }}
+                                  />
+                                </div>
+                              </div>
                             )}
 
                             {/* Paragraph */}
                             {link.link_type === "paragraph" && (
-                              <Textarea
-                                value={link.label}
-                                placeholder="Texto do parágrafo..."
-                                className="min-h-[72px] resize-y"
-                                onChange={(e) => patchLocal(link.id, { label: e.target.value })}
-                                onBlur={(e) => void persist(link.id, { label: e.target.value })}
-                              />
+                              <div className="flex flex-col gap-2">
+                                <Textarea
+                                  value={link.label}
+                                  placeholder="Texto do parágrafo..."
+                                  className="min-h-[72px] resize-y"
+                                  onChange={(e) => patchLocal(link.id, { label: e.target.value })}
+                                  onBlur={(e) => void persist(link.id, { label: e.target.value })}
+                                />
+                                <div className="flex items-center gap-2">
+                                  <Bold className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <Label className="text-xs text-muted-foreground">Negrito</Label>
+                                  <Switch
+                                    checked={link.bold}
+                                    onCheckedChange={(checked) => {
+                                      patchLocal(link.id, { bold: checked });
+                                      void persist(link.id, { bold: checked });
+                                    }}
+                                  />
+                                </div>
+                              </div>
                             )}
 
                             {/* Header (category) */}

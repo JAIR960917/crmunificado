@@ -26,7 +26,7 @@ serve(async (req) => {
   const [{ data: links }, { data: settingsRows }] = await Promise.all([
     supabase
       .from("company_links")
-      .select("id, label, url, icon, color, link_type")
+      .select("id, label, url, icon, color, link_type, bold")
       .eq("active", true)
       .order("position", { ascending: true }),
     supabase
