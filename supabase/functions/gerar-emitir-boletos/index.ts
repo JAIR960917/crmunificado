@@ -250,19 +250,29 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Salva bank slip já disponível no POST; Pix será buscado no GET abaixo
         const bankSlipPost = invJson?.payment_options?.bank_slip ?? invJson?.bank_slip ?? {};
+        const pixPost = invJson?.payment_options?.pix ?? invJson?.pix ?? {};
+        const pixEmvPost = pixPost?.emv ?? pixPost?.copy_paste ?? null;
+        const pixQrPost  = pixPost?.qr_code ?? pixPost?.qrcode ?? pixPost?.image ?? null;
+
+        // Log diagnóstico — visível no Supabase Edge Logs
+        console.log(`[POST] parcela ${p.numero_parcela} payment_options keys: ${Object.keys(invJson?.payment_options ?? {}).join(", ")}`);
+        console.log(`[POST] pix keys: ${Object.keys(pixPost).join(", ")} | emv=${pixEmvPost ? "ok" : "null"}`);
+
         await admin.from("crediario_parcelas").update({
           cora_invoice_id: invJson?.id ?? null,
           linha_digitavel: bankSlipPost?.digitable ?? bankSlipPost?.digitable_line ?? bankSlipPost?.typed_bar_code ?? null,
           codigo_barras: bankSlipPost?.barcode ?? bankSlipPost?.bar_code ?? null,
           pdf_url: bankSlipPost?.url ?? bankSlipPost?.pdf_url ?? invJson?.pdf ?? null,
+          pix_emv: pixEmvPost,
+          pix_qrcode: pixQrPost,
           status: "emitido",
           emitido_em: new Date().toISOString(),
           erro_mensagem: null,
         }).eq("id", p.id);
 
-        created.push({ parcela: p, invJson });
+        // Só precisa do GET se o POST não trouxe Pix
+        if (!pixEmvPost) created.push({ parcela: p, invJson });
         results.push({ numero: p.numero_parcela, ok: true, invoice_id: invJson?.id });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
