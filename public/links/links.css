@@ -3,7 +3,7 @@
 }
 
 :root {
-  --pg-bg: #6b1212;
+  --pg-bg: #000000;
   --pg-card: #9c1c1c;
 }
 
@@ -154,6 +154,37 @@ h1 {
   margin: 0;
   line-height: 1.55;
   white-space: pre-line;
+}
+
+/* ── Botão Canal Oficial WhatsApp ── */
+.link-whatsapp-channel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px 22px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #25d366;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(37, 211, 102, 0.4);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.link-whatsapp-channel:hover,
+.link-whatsapp-channel:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(37, 211, 102, 0.55);
+}
+
+.link-whatsapp-channel svg {
+  flex-shrink: 0;
 }
 
 .empty-state {

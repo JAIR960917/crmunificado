@@ -10,20 +10,21 @@ import { toast } from "sonner";
 import { Upload, Trash2, ExternalLink } from "lucide-react";
 import CompanyLinksManager from "@/components/settings/CompanyLinksManager";
 
-const DEFAULT_BG_COLOR = "#6b1212";
+const DEFAULT_BG_COLOR = "#000000";
 const DEFAULT_CARD_COLOR = "#9c1c1c";
 
 async function loadLinksSettings() {
   const { data } = await supabase
     .from("system_settings")
     .select("setting_key, setting_value")
-    .in("setting_key", ["links_logo_url", "links_bg_color", "links_card_color", "links_meta_pixel_id"]);
+    .in("setting_key", ["links_logo_url", "links_bg_color", "links_card_color", "links_meta_pixel_id", "links_whatsapp_channel_url"]);
   const map = new Map((data || []).map((r: any) => [r.setting_key, r.setting_value || ""]));
   return {
     linksLogoUrl: map.get("links_logo_url") || "",
     bgColor: map.get("links_bg_color") || DEFAULT_BG_COLOR,
     cardColor: map.get("links_card_color") || DEFAULT_CARD_COLOR,
     metaPixelId: map.get("links_meta_pixel_id") || "",
+    whatsappChannelUrl: map.get("links_whatsapp_channel_url") || "",
   };
 }
 
@@ -41,13 +42,15 @@ export default function LinksAdminPage() {
   const [bgColor, setBgColor] = useState(DEFAULT_BG_COLOR);
   const [cardColor, setCardColor] = useState(DEFAULT_CARD_COLOR);
   const [metaPixelId, setMetaPixelId] = useState("");
+  const [whatsappChannelUrl, setWhatsappChannelUrl] = useState("");
 
   useEffect(() => {
-    loadLinksSettings().then(({ linksLogoUrl: logo, bgColor: bg, cardColor: card, metaPixelId: pixel }) => {
+    loadLinksSettings().then(({ linksLogoUrl: logo, bgColor: bg, cardColor: card, metaPixelId: pixel, whatsappChannelUrl: wppUrl }) => {
       setLinksLogoUrl(logo);
       setBgColor(bg);
       setCardColor(card);
       setMetaPixelId(pixel);
+      setWhatsappChannelUrl(wppUrl);
     });
   }, []);
 
@@ -201,6 +204,28 @@ export default function LinksAdminPage() {
               onBlur={async () => {
                 await saveColorSetting("links_meta_pixel_id", metaPixelId);
                 toast.success(metaPixelId ? "Pixel ID salvo" : "Pixel ID removido");
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Canal Oficial WhatsApp */}
+        <div className="space-y-2 border rounded-lg p-4">
+          <p className="font-semibold text-sm">Botão Canal Oficial no WhatsApp</p>
+          <p className="text-[11px] text-muted-foreground">
+            Quando preenchido, exibe um botão verde fixo no final da página /links com o texto
+            "ACESSAR CANAL OFICIAL NO WHATSAPP", apontando para o link informado.
+          </p>
+          <div className="space-y-1">
+            <Label>Link do canal/grupo do WhatsApp</Label>
+            <Input
+              value={whatsappChannelUrl}
+              placeholder="Ex.: https://whatsapp.com/channel/..."
+              className="h-9"
+              onChange={(e) => setWhatsappChannelUrl(e.target.value)}
+              onBlur={async () => {
+                await saveColorSetting("links_whatsapp_channel_url", whatsappChannelUrl);
+                toast.success(whatsappChannelUrl ? "Link do canal salvo" : "Link do canal removido");
               }}
             />
           </div>
