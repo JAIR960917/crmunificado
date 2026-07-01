@@ -212,23 +212,40 @@ Deno.serve(async (req) => {
       };
 
       try {
-        const invResp = await fetch(CORA_INVOICES_URL, {
-          method: "POST",
-          // @ts-ignore
-          client: httpClient,
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            "Idempotency-Key": p.id, // garante não duplicar
-          },
-          body: JSON.stringify(payload),
-        });
-        const invText = await invResp.text();
+        // Tenta emitir com 1 retry automático para o erro de CIP async da Cora.
+        // "Bank slip not registered in CIP" = boleto criado mas registro CIP ainda pendente.
+        // A Cora garante idempotência pelo p.id, então retentar retorna o mesmo boleto já registrado.
+        let invResp: Response | null = null;
+        let invText = "";
         let invJson: any = null;
-        try { invJson = JSON.parse(invText); } catch {}
 
-        if (!invResp.ok) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 4000)); // aguarda CIP registrar
+          invResp = await fetch(CORA_INVOICES_URL, {
+            method: "POST",
+            // @ts-ignore
+            client: httpClient,
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              "Idempotency-Key": p.id,
+            },
+            body: JSON.stringify(payload),
+          });
+          invText = await invResp.text();
+          try { invJson = JSON.parse(invText); } catch { invJson = null; }
+
+          if (invResp.ok) break;
+
+          // Só retenta para erro de registro CIP — outros erros são definitivos
+          const errMsg = (invJson?.message || invJson?.errors?.[0]?.message || invText).toLowerCase();
+          const isCipError = errMsg.includes("not registered in cip") || errMsg.includes("cip");
+          if (!isCipError) break;
+          console.log(`parcela ${p.id} attempt ${attempt + 1} CIP error, retrying...`);
+        }
+
+        if (!invResp!.ok) {
           const errMsg = invJson?.message || invJson?.errors?.[0]?.message || invText.slice(0, 300);
           await admin.from("crediario_parcelas").update({
             status: "erro",
@@ -238,16 +255,29 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Log da resposta completa para diagnóstico de campos Pix
+        console.log(`cora invoice response keys: ${Object.keys(invJson ?? {}).join(", ")}`);
+        if (invJson?.payment_options) {
+          console.log(`payment_options keys: ${Object.keys(invJson.payment_options).join(", ")}`);
+          if (invJson.payment_options.pix) {
+            console.log(`pix keys: ${Object.keys(invJson.payment_options.pix).join(", ")}`);
+          }
+        }
+
         const bankSlip = invJson?.payment_options?.bank_slip ?? invJson?.bank_slip ?? {};
-        const pix = invJson?.payment_options?.pix ?? invJson?.pix ?? {};
+        const pix = invJson?.payment_options?.pix
+          ?? invJson?.pix
+          ?? invJson?.payment_forms?.pix
+          ?? {};
 
         await admin.from("crediario_parcelas").update({
           cora_invoice_id: invJson?.id ?? null,
-          linha_digitavel: bankSlip?.digitable ?? bankSlip?.digitable_line ?? null,
-          codigo_barras: bankSlip?.barcode ?? null,
-          pdf_url: bankSlip?.url ?? invJson?.pdf ?? null,
-          pix_emv: pix?.emv ?? null,
-          pix_qrcode: pix?.qr_code ?? null,
+          linha_digitavel: bankSlip?.digitable ?? bankSlip?.digitable_line ?? bankSlip?.typed_bar_code ?? null,
+          codigo_barras: bankSlip?.barcode ?? bankSlip?.bar_code ?? null,
+          pdf_url: bankSlip?.url ?? bankSlip?.pdf_url ?? invJson?.pdf ?? null,
+          // Cora pode retornar o EMV Pix em vários campos dependendo da versão da API
+          pix_emv: pix?.emv ?? pix?.copy_paste ?? pix?.emv_code ?? pix?.payload ?? pix?.key ?? null,
+          pix_qrcode: pix?.qr_code ?? pix?.qr_code_url ?? pix?.qrcode ?? pix?.image ?? pix?.image_url ?? null,
           status: "emitido",
           emitido_em: new Date().toISOString(),
           erro_mensagem: null,
