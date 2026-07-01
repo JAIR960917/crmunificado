@@ -101,7 +101,7 @@ export function ParcelasContrato({ contratoId, contratoAssinado, vendaAutorizada
 
   const baixarCarne = async () => {
     const emitidas = parcelas.filter((p) =>
-      p.cora_invoice_id && (p.linha_digitavel || p.codigo_barras) && (p.pix_emv || p.pix_qrcode)
+      p.cora_invoice_id && (p.linha_digitavel || p.codigo_barras)
     );
     if (emitidas.length === 0) {
       toast.error("Nenhum boleto com código de barras e Pix disponível para gerar o carnê");
