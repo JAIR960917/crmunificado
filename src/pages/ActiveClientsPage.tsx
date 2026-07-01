@@ -129,15 +129,28 @@ export default function ActiveClientsPage() {
 
   const confirmBulkDelete = async () => {
     setBulkDeleting(true);
-    let q = supabase.from("crm_renovacoes").delete().not("id", "is", null);
-    if (filterCompanyId !== "all") q = q.eq("ssotica_company_id", filterCompanyId);
-    const { error } = await q;
-    setBulkDeleting(false);
     setBulkDeleteOpen(false);
-    if (error) toast.error("Erro ao excluir todos");
-    else {
-      toast.success("Renovações excluídas");
+    try {
+      // Exclui em lotes de 500 para evitar timeout em tabelas grandes
+      let deleted = 0;
+      while (true) {
+        let idQ = supabase.from("crm_renovacoes").select("id").limit(500);
+        if (filterCompanyId !== "all") idQ = idQ.eq("ssotica_company_id", filterCompanyId);
+        const { data: batch, error: selErr } = await idQ;
+        if (selErr) throw selErr;
+        if (!batch || batch.length === 0) break;
+        const ids = batch.map((r: { id: string }) => r.id);
+        const { error: delErr } = await supabase.from("crm_renovacoes").delete().in("id", ids);
+        if (delErr) throw delErr;
+        deleted += ids.length;
+        if (ids.length < 500) break;
+      }
+      toast.success(`${deleted} renovação(ões) excluída(s)`);
       setRefreshKey((k) => k + 1);
+    } catch (err: any) {
+      toast.error("Erro ao excluir", { description: err?.message ?? String(err) });
+    } finally {
+      setBulkDeleting(false);
     }
   };
   const [autoAssigning, setAutoAssigning] = useState(false);
@@ -257,7 +270,10 @@ export default function ActiveClientsPage() {
       return (result.value.data ?? fallback) as T;
     };
 
-    const sts = unwrap(stsRes, "status", [] as CrmStatus[]);
+    const rawSts = unwrap(stsRes, "status", [] as CrmStatus[]);
+    // Deduplica por key (pode haver duplicatas na tabela caso a migration rode mais de uma vez)
+    const seenSts = new Set<string>();
+    const sts = rawSts.filter((s) => { if (seenSts.has(s.key)) return false; seenSts.add(s.key); return true; });
     const profs = unwrap(profsRes, "perfis", [] as Profile[]);
     const roles = unwrap(rolesRes, "papéis", [] as UserRole[]);
     const comps = unwrap(compsRes, "empresas", [] as Company[]);
