@@ -3,9 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Loader2, Target, Store, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { Loader2, Target, Store, Users, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 
 type Scope = "user" | "company";
@@ -32,13 +36,19 @@ type GoalWithProgress = SalesGoal & { atingido: number; pct: number };
 export default function MetasPage() {
   const { user, isAdmin, isGerente } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [goals, setGoals] = useState<SalesGoal[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [progressByGoal, setProgressByGoal] = useState<Record<string, number>>({});
 
+  // Só carrega os dados cadastrais (metas, empresas, usuários) — leve e rápido.
+  // O cálculo de "atingido" via SSótica é manual (botão "Atualizar vendas"),
+  // para não ficar refazendo chamadas pesadas toda vez que a tela é aberta.
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
     (async () => {
       setLoading(true);
 
@@ -62,24 +72,33 @@ export default function MetasPage() {
       const companyIds = Array.from(new Set(gs.map((g) => g.company_id)));
       const userIds = Array.from(new Set(gs.map((g) => g.user_id).filter((x): x is string => !!x)));
 
-      const [compRes, profRes, mapRes] = await Promise.all([
+      const [compRes, profRes] = await Promise.all([
         supabase.from("companies").select("id, name").in("id", companyIds),
         userIds.length > 0
           ? supabase.from("profiles").select("user_id, full_name").in("user_id", userIds)
           : Promise.resolve({ data: [] as Profile[] }),
-        supabase
-          .from("ssotica_user_mappings")
-          .select("company_id, user_id, ssotica_funcionario_id")
-          .in("company_id", companyIds),
       ]);
       setCompanies((compRes.data as Company[]) || []);
       setProfiles((profRes.data as Profile[]) || []);
-      const mappings = (mapRes.data as Mapping[]) || [];
+      setLoading(false);
+    })();
+  }, [user?.id]);
 
-      // Um chamada por combinação única de empresa+período (evita repetir para
+  const handleRefreshVendas = async () => {
+    if (goals.length === 0) return;
+    setRefreshing(true);
+    try {
+      const companyIds = Array.from(new Set(goals.map((g) => g.company_id)));
+      const { data: mapRes } = await supabase
+        .from("ssotica_user_mappings")
+        .select("company_id, user_id, ssotica_funcionario_id")
+        .in("company_id", companyIds);
+      const mappings = (mapRes as Mapping[]) || [];
+
+      // Uma chamada por combinação única de empresa+período (evita repetir para
       // metas individuais que compartilham a mesma loja/período).
       const uniquePeriods = new Map<string, { companyId: string; start: string; end: string }>();
-      gs.forEach((g) => {
+      goals.forEach((g) => {
         const key = `${g.company_id}::${g.period_start}::${g.period_end}`;
         if (!uniquePeriods.has(key)) {
           uniquePeriods.set(key, { companyId: g.company_id, start: g.period_start, end: g.period_end });
@@ -87,6 +106,7 @@ export default function MetasPage() {
       });
 
       const vendasByKey = new Map<string, any[]>();
+      let hadError = false;
       await Promise.all(
         Array.from(uniquePeriods.entries()).map(async ([key, p]) => {
           try {
@@ -96,6 +116,7 @@ export default function MetasPage() {
             if (fnErr || data?.error) throw fnErr || new Error(data?.error);
             vendasByKey.set(key, data?.vendas || []);
           } catch (err) {
+            hadError = true;
             console.error(`[metas] falha ao buscar vendas de ${p.companyId}`, err);
             vendasByKey.set(key, []);
           }
@@ -103,7 +124,7 @@ export default function MetasPage() {
       );
 
       const progress: Record<string, number> = {};
-      gs.forEach((g) => {
+      goals.forEach((g) => {
         const key = `${g.company_id}::${g.period_start}::${g.period_end}`;
         const vendas = vendasByKey.get(key) || [];
         if (g.scope === "company") {
@@ -120,9 +141,17 @@ export default function MetasPage() {
         }
       });
       setProgressByGoal(progress);
-      setLoading(false);
-    })();
-  }, [user]);
+      setProgressLoaded(true);
+      setLastUpdated(new Date());
+      if (hadError) {
+        toast.warning("Vendas atualizadas com algum erro — alguns valores podem estar incompletos");
+      } else {
+        toast.success("Vendas atualizadas com sucesso");
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const companyName = (id: string) => companies.find((c) => c.id === id)?.name || "—";
   const userName = (id: string | null) => profiles.find((p) => p.user_id === id)?.full_name || "—";
@@ -147,48 +176,77 @@ export default function MetasPage() {
     [goals, progressByGoal, user],
   );
 
-  const GoalCard = ({ g, title }: { g: GoalWithProgress; title: string }) => {
-    const pctClamped = Math.min(100, Math.max(0, g.pct));
-    return (
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <div className="font-medium">{title}</div>
-            <div className="text-xs text-muted-foreground">
-              {companyName(g.company_id)} · {fmtDate(g.period_start)} a {fmtDate(g.period_end)}
-            </div>
-          </div>
-          <Badge className="bg-primary/10 text-primary border-primary/30">
-            {g.pct.toFixed(2)}%
-          </Badge>
-        </div>
-        <Progress value={pctClamped} />
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            Atingido: <span className="font-medium text-foreground">{fmtBRL(g.atingido)}</span>
-          </span>
-          <span className="text-muted-foreground">
-            Meta: <span className="font-medium text-foreground">{fmtBRL(g.target_amount)}</span>
-          </span>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Falta {fmtBRL(Math.max(0, g.target_amount - g.atingido))} para atingir a meta.
-        </div>
-      </div>
-    );
-  };
+  const nomeDaLinha = (g: GoalWithProgress) =>
+    g.scope === "company" ? (g.label || companyName(g.company_id)) : userName(g.user_id);
+
+  const GoalsTable = ({ list }: { list: GoalWithProgress[] }) => (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Nome</TableHead>
+            <TableHead>Empresa</TableHead>
+            <TableHead>Período</TableHead>
+            <TableHead className="text-right">Meta</TableHead>
+            <TableHead className="text-right">Atingido</TableHead>
+            <TableHead className="text-right">Progresso</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {list.map((g) => (
+            <TableRow key={g.id}>
+              <TableCell className="font-medium">
+                {nomeDaLinha(g)}
+                {g.scope === "user" && g.label && (
+                  <div className="text-[11px] text-muted-foreground font-normal">{g.label}</div>
+                )}
+              </TableCell>
+              <TableCell className="text-muted-foreground text-sm">{companyName(g.company_id)}</TableCell>
+              <TableCell className="whitespace-nowrap text-muted-foreground text-xs">
+                {fmtDate(g.period_start)} a {fmtDate(g.period_end)}
+              </TableCell>
+              <TableCell className="text-right whitespace-nowrap">{fmtBRL(g.target_amount)}</TableCell>
+              <TableCell className="text-right whitespace-nowrap">
+                {progressLoaded ? fmtBRL(g.atingido) : "—"}
+              </TableCell>
+              <TableCell className="text-right">
+                <Badge className="bg-primary/10 text-primary border-primary/30">
+                  {progressLoaded ? `${g.pct.toFixed(2)}%` : "—"}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
 
   return (
     <AppLayout>
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Target className="h-6 w-6" />
-            Metas
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Acompanhe suas metas de venda e o quanto já foi realizado no período.
-          </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <Target className="h-6 w-6" />
+              Metas
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Acompanhe as metas de venda e o quanto já foi realizado no período.
+            </p>
+          </div>
+          {goals.length > 0 && (
+            <div className="flex flex-col items-end gap-1">
+              <Button onClick={handleRefreshVendas} disabled={refreshing}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+                {refreshing ? "Atualizando..." : "Atualizar vendas (SSótica)"}
+              </Button>
+              {lastUpdated && (
+                <span className="text-xs text-muted-foreground">
+                  Atualizado às {format(lastUpdated, "HH:mm")}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -204,6 +262,12 @@ export default function MetasPage() {
           </Card>
         ) : (
           <>
+            {!progressLoaded && (
+              <div className="text-sm text-muted-foreground rounded-lg border border-dashed p-3">
+                Clique em "Atualizar vendas (SSótica)" para calcular o quanto já foi vendido no período.
+              </div>
+            )}
+
             {minhasMetas.length > 0 && (
               <Card>
                 <CardHeader>
@@ -212,10 +276,8 @@ export default function MetasPage() {
                     Minha meta
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {minhasMetas.map((g) => (
-                    <GoalCard key={g.id} g={g} title={g.label || "Minha meta"} />
-                  ))}
+                <CardContent>
+                  <GoalsTable list={minhasMetas} />
                 </CardContent>
               </Card>
             )}
@@ -228,10 +290,8 @@ export default function MetasPage() {
                     Meta da loja
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {metasDaLoja.map((g) => (
-                    <GoalCard key={g.id} g={g} title={g.label || companyName(g.company_id)} />
-                  ))}
+                <CardContent>
+                  <GoalsTable list={metasDaLoja} />
                 </CardContent>
               </Card>
             )}
@@ -244,10 +304,8 @@ export default function MetasPage() {
                     {isGerente ? "Metas da equipe" : "Todas as metas"}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {metasDaEquipe.map((g) => (
-                    <GoalCard key={g.id} g={g} title={g.label || userName(g.user_id)} />
-                  ))}
+                <CardContent>
+                  <GoalsTable list={metasDaEquipe} />
                 </CardContent>
               </Card>
             )}
