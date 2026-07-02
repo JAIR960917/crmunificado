@@ -117,7 +117,13 @@ function sqlEscape(v) {
 function insertStmt(table, row) {
   const cols = Object.keys(row);
   const vals = cols.map((c) => sqlEscape(row[c]));
-  return `INSERT INTO public.${table} (${cols.map((c) => `"${c}"`).join(',')}) VALUES (${vals.join(',')}) ON CONFLICT (id) DO NOTHING;`;
+  // ON CONFLICT DO NOTHING sem alvo (em vez de "ON CONFLICT (id)") absorve
+  // qualquer violação de unicidade, não só duplicata de id — necessário
+  // porque crm_renovacoes/crm_cobrancas têm UNIQUE ligada ao SSótica
+  // (ssotica_cliente_id+company_id / ssotica_parcela_id), e o destino já
+  // pode ter criado essas mesmas linhas via sincronização automática
+  // independente da migração.
+  return `INSERT INTO public.${table} (${cols.map((c) => `"${c}"`).join(',')}) VALUES (${vals.join(',')}) ON CONFLICT DO NOTHING;`;
 }
 
 // Colunas GERADAS (GENERATED ALWAYS AS ... STORED) — não podem ser inseridas.
@@ -272,7 +278,7 @@ async function main() {
   out.write(`-- Origem: ${SOURCE_URL}\n\n`);
   out.write(`SET session_replication_role = 'replica';\n`);
 
-  function remapRow(row, table, { userCols = [], requiredUserCols = [], companyCols = [], forceNull = [] } = {}) {
+  function remapRow(row, table, { userCols = [], requiredUserCols = [], companyCols = [], forceNull = [], idCols = {} } = {}) {
     const r = { ...row };
     const skip = GENERATED_COLUMNS[table];
     if (skip) for (const c of skip) delete r[c];
@@ -287,6 +293,10 @@ async function main() {
     for (const col of companyCols) {
       if (!(col in r) || r[col] == null) continue;
       r[col] = mapCompany(r[col]);
+    }
+    for (const [col, map] of Object.entries(idCols)) {
+      if (!(col in r) || r[col] == null) continue;
+      r[col] = map.get(r[col]) ?? null;
     }
     for (const col of forceNull) {
       if (col in r) r[col] = null;
@@ -325,32 +335,132 @@ async function main() {
   await safe('crm_lead_notes', () => dump('crm_lead_notes', 'crm_lead_notes', { requiredUserCols: ['user_id'] }));
   await safe('lead_activities', () => dump('lead_activities', 'lead_activities', { requiredUserCols: ['created_by'] }));
 
-  // Agendamentos (ligados a leads e/ou renovações)
+  // ------------------------------------------------------------------------
+  // Renovações — crm_renovacoes tem UNIQUE(ssotica_cliente_id, ssotica_company_id)
+  // e o sistema unificado JÁ cria essas linhas sozinho via sync automático da
+  // SSótica. Para não colidir (e não perder notas/atividades/agendamentos
+  // ligados), pré-checa o que já existe no destino: se a renovação da origem
+  // corresponde a uma que já existe lá, NÃO insere de novo — só redireciona
+  // renovacao_id dos registros dependentes para o id que já existe no destino.
+  // ------------------------------------------------------------------------
+  console.log('  → crm_renovacoes: checando o que já existe no destino via SSótica...');
+  const renovacaoIdRemap = new Map(); // id (origem) -> id a usar no destino
+  let renovacoesInseridas = 0, renovacoesRedirecionadas = 0;
+  await safe('crm_renovacoes', async () => {
+    const tgtExisting = await restSelect(TARGET_URL, TARGET_KEY, 'crm_renovacoes', 'id,ssotica_cliente_id,ssotica_company_id');
+    const existingByKey = new Map();
+    for (const t of tgtExisting) {
+      if (t.ssotica_cliente_id != null && t.ssotica_company_id) {
+        existingByKey.set(`${t.ssotica_cliente_id}|${t.ssotica_company_id}`, t.id);
+      }
+    }
+    const rows = await restSelect(SOURCE_URL, SOURCE_KEY, 'crm_renovacoes', '*');
+    out.write(`\n-- ============ crm_renovacoes → crm_renovacoes ============\n`);
+    out.write(`BEGIN;\n`);
+    for (const row of rows) {
+      const mapped = remapRow(row, 'crm_renovacoes', {
+        userCols: ['assigned_to', 'created_by', 'excluded_by', 'previous_assigned_before_exclude'],
+        companyCols: ['ssotica_company_id'],
+      });
+      const key = mapped.ssotica_cliente_id != null && mapped.ssotica_company_id
+        ? `${mapped.ssotica_cliente_id}|${mapped.ssotica_company_id}`
+        : null;
+      const existingTargetId = key ? existingByKey.get(key) : undefined;
+      if (existingTargetId) {
+        renovacaoIdRemap.set(row.id, existingTargetId);
+        renovacoesRedirecionadas++;
+        continue; // já existe no destino (auto-sync) — não insere de novo
+      }
+      renovacaoIdRemap.set(row.id, row.id);
+      // Registra já aqui (não só o que veio do destino) — evita que duas
+      // linhas da PRÓPRIA origem com o mesmo cliente+empresa colidam entre
+      // si sem serem percebidas pelo redirect.
+      if (key) existingByKey.set(key, row.id);
+      out.write(insertStmt('crm_renovacoes', mapped) + '\n');
+      renovacoesInseridas++;
+    }
+    out.write(`COMMIT;\n`);
+    console.log(`     ${renovacoesInseridas} inseridas, ${renovacoesRedirecionadas} já existiam no destino (redirecionadas)`);
+  });
+  await safe('crm_renovacao_notes', () => dump('crm_renovacao_notes', 'crm_renovacao_notes', {
+    requiredUserCols: ['user_id'],
+    idCols: { renovacao_id: renovacaoIdRemap },
+  }));
+  await safe('renovacao_activities', () => dump('renovacao_activities', 'renovacao_activities', {
+    requiredUserCols: ['created_by'],
+    idCols: { renovacao_id: renovacaoIdRemap },
+  }));
+
+  // Agendamentos (ligados a leads e/ou renovações — usa o remap acima)
   await safe('crm_appointments', () => dump('crm_appointments', 'crm_appointments', {
     requiredUserCols: ['scheduled_by'],
     userCols: ['consulta_paga_por', 'deleted_by', 'returned_by'],
+    idCols: { renovacao_id: renovacaoIdRemap },
   }));
   await safe('crm_appointment_history', () => dump('crm_appointment_history', 'crm_appointment_history', {
     requiredUserCols: ['user_id'],
   }));
 
-  // Renovações
-  await safe('crm_renovacoes', () => dump('crm_renovacoes', 'crm_renovacoes', {
-    userCols: ['assigned_to', 'created_by', 'excluded_by', 'previous_assigned_before_exclude'],
-    companyCols: ['ssotica_company_id'],
+  // ------------------------------------------------------------------------
+  // Cobranças — crm_cobrancas tem TRÊS índices únicos parciais ligados à
+  // SSótica (qualquer um pode colidir com o que o sync automático já criou):
+  //   - uq_crm_cobrancas_ssotica_parcela:   (ssotica_parcela_id)
+  //   - crm_cobrancas_one_per_client_idx:   (ssotica_company_id, ssotica_cliente_id)
+  //   - crm_cobrancas_one_per_titulo_idx:   (ssotica_company_id, ssotica_titulo_id)
+  // Se QUALQUER uma bater com uma linha já existente no destino, redireciona
+  // em vez de inserir (mesma lógica do bloco de renovações acima).
+  // ------------------------------------------------------------------------
+  console.log('  → crm_cobrancas: checando o que já existe no destino via SSótica...');
+  const cobrancaIdRemap = new Map();
+  let cobrancasInseridas = 0, cobrancasRedirecionadas = 0;
+  await safe('crm_cobrancas', async () => {
+    const tgtExisting = await restSelect(TARGET_URL, TARGET_KEY, 'crm_cobrancas', 'id,ssotica_parcela_id,ssotica_company_id,ssotica_cliente_id,ssotica_titulo_id');
+    const existingByAnyKey = new Map();
+    for (const t of tgtExisting) {
+      if (t.ssotica_parcela_id != null) existingByAnyKey.set(`parcela|${t.ssotica_parcela_id}`, t.id);
+      if (t.ssotica_company_id && t.ssotica_cliente_id != null) existingByAnyKey.set(`cliente|${t.ssotica_company_id}|${t.ssotica_cliente_id}`, t.id);
+      if (t.ssotica_company_id && t.ssotica_titulo_id != null) existingByAnyKey.set(`titulo|${t.ssotica_company_id}|${t.ssotica_titulo_id}`, t.id);
+    }
+    const rows = await restSelect(SOURCE_URL, SOURCE_KEY, 'crm_cobrancas', '*');
+    out.write(`\n-- ============ crm_cobrancas → crm_cobrancas ============\n`);
+    out.write(`BEGIN;\n`);
+    for (const row of rows) {
+      const mapped = remapRow(row, 'crm_cobrancas', {
+        userCols: ['assigned_to', 'created_by'],
+        companyCols: ['company_id', 'ssotica_company_id'],
+      });
+      const candidateKeys = [
+        mapped.ssotica_parcela_id != null ? `parcela|${mapped.ssotica_parcela_id}` : null,
+        mapped.ssotica_company_id && mapped.ssotica_cliente_id != null ? `cliente|${mapped.ssotica_company_id}|${mapped.ssotica_cliente_id}` : null,
+        mapped.ssotica_company_id && mapped.ssotica_titulo_id != null ? `titulo|${mapped.ssotica_company_id}|${mapped.ssotica_titulo_id}` : null,
+      ].filter(Boolean);
+      const existingTargetId = candidateKeys.map((k) => existingByAnyKey.get(k)).find(Boolean);
+      if (existingTargetId) {
+        cobrancaIdRemap.set(row.id, existingTargetId);
+        cobrancasRedirecionadas++;
+        continue;
+      }
+      cobrancaIdRemap.set(row.id, row.id);
+      // Registra já aqui — evita colisão entre duas linhas da própria
+      // origem com a mesma chave (parcela/cliente/título) não percebida.
+      for (const k of candidateKeys) existingByAnyKey.set(k, row.id);
+      out.write(insertStmt('crm_cobrancas', mapped) + '\n');
+      cobrancasInseridas++;
+    }
+    out.write(`COMMIT;\n`);
+    console.log(`     ${cobrancasInseridas} inseridas, ${cobrancasRedirecionadas} já existiam no destino (redirecionadas)`);
+  });
+  await safe('crm_cobranca_notes', () => dump('crm_cobranca_notes', 'crm_cobranca_notes', {
+    requiredUserCols: ['user_id'],
+    idCols: { cobranca_id: cobrancaIdRemap },
   }));
-  await safe('crm_renovacao_notes', () => dump('crm_renovacao_notes', 'crm_renovacao_notes', { requiredUserCols: ['user_id'] }));
-  await safe('renovacao_activities', () => dump('renovacao_activities', 'renovacao_activities', { requiredUserCols: ['created_by'] }));
-
-  // Cobranças
-  await safe('crm_cobrancas', () => dump('crm_cobrancas', 'crm_cobrancas', {
-    userCols: ['assigned_to', 'created_by'],
-    companyCols: ['company_id', 'ssotica_company_id'],
+  await safe('cobranca_activities', () => dump('cobranca_activities', 'cobranca_activities', {
+    requiredUserCols: ['created_by'],
+    idCols: { cobranca_id: cobrancaIdRemap },
   }));
-  await safe('crm_cobranca_notes', () => dump('crm_cobranca_notes', 'crm_cobranca_notes', { requiredUserCols: ['user_id'] }));
-  await safe('cobranca_activities', () => dump('cobranca_activities', 'cobranca_activities', { requiredUserCols: ['created_by'] }));
 
-  // Transições entre módulos (renovação ↔ cobrança)
+  // Transições entre módulos (renovação ↔ cobrança) — sem FK real (ids
+  // polimórficos), mas redireciona quando possível para manter coerência.
   await safe('crm_module_transition_logs', () => dump('crm_module_transition_logs', 'crm_module_transition_logs', {
     userCols: ['triggered_by'],
     companyCols: ['company_id'],

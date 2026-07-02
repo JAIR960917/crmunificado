@@ -123,6 +123,15 @@ de card, e a instância/conexão do WhatsApp (o sistema novo já tem a própria
 ativa — as conversas migradas ficam como histórico, sem instância vinculada,
 e não é possível responder por elas ali).
 
+**`crm_renovacoes`/`crm_cobrancas` já são preenchidas sozinhas pelo sync
+automático da SSótica no sistema novo** (o mesmo cliente/parcela que existia
+na produção antiga muito provavelmente já tem um card lá, criado
+independentemente). O script detecta isso antes de inserir (casando por
+`ssotica_cliente_id`+`ssotica_company_id` / `ssotica_parcela_id` /
+`ssotica_titulo_id`) e, quando já existe, **não insere de novo** — só
+redireciona as notas/atividades/agendamentos da origem para o card que já
+existe no destino, em vez de duplicar ou perder esse histórico.
+
 ⚠️ **Faça um backup do banco da VPS nova antes de rodar** — a resolução de
 empresas/usuários é aplicada **na hora** (não é só gerar um .sql para
 revisar, como o resto do fluxo):
