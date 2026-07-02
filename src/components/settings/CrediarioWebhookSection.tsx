@@ -29,25 +29,47 @@ export default function CrediarioWebhookSection() {
     });
   }, []);
 
+  const PAGE_LIMIT = 1000;
+
   const sincronizarPagamentos = async (companyId?: string) => {
     const key = companyId || "all";
     setSyncLoading(key);
     setSyncResult(null);
-    const { data, error } = await supabase.functions.invoke("cora-sincronizar-pagamentos", {
-      body: companyId ? { company_id: companyId } : {},
-    });
-    setSyncLoading(null);
-    if (error) {
-      const msg = (data as { error?: string } | null)?.error || error.message || "Erro ao sincronizar";
-      setSyncResult({ ok: false, message: msg });
-      toast.error(msg);
-      return;
+
+    let totalVerificadas = 0;
+    let totalAtualizadas = 0;
+    let ok = true;
+    let lastMsg = "";
+
+    // A função só processa até PAGE_LIMIT parcelas por chamada — repete até
+    // não sobrar mais nada pendente (evita parar em 200 quando o backlog é maior).
+    for (let pagina = 1; pagina <= 50; pagina++) {
+      setSyncResult({
+        ok: true,
+        message: `Sincronizando... ${totalVerificadas} parcela(s) verificada(s) até agora.`,
+      });
+      const { data, error } = await supabase.functions.invoke("cora-sincronizar-pagamentos", {
+        body: { ...(companyId ? { company_id: companyId } : {}), limit: PAGE_LIMIT },
+      });
+      if (error) {
+        lastMsg = (data as { error?: string } | null)?.error || error.message || "Erro ao sincronizar";
+        ok = false;
+        break;
+      }
+      const d = data as { ok?: boolean; total?: number; atualizadas?: number } | null;
+      const total = d?.total ?? 0;
+      totalVerificadas += total;
+      totalAtualizadas += d?.atualizadas ?? 0;
+      if (d?.ok === false) ok = false;
+      if (total < PAGE_LIMIT) break; // menos que uma página cheia = não sobrou pendente
     }
-    const d = data as { ok?: boolean; total?: number; atualizadas?: number } | null;
-    const msg = `Verificadas ${d?.total ?? 0} parcelas, ${d?.atualizadas ?? 0} marcadas como pagas.`;
-    setSyncResult({ ok: d?.ok !== false, message: msg });
-    if (d?.ok !== false) toast.success(msg);
-    else toast.warning(msg);
+
+    setSyncLoading(null);
+    const msg = ok
+      ? `Verificadas ${totalVerificadas} parcela(s), ${totalAtualizadas} marcada(s) como paga(s).`
+      : lastMsg || `Verificadas ${totalVerificadas} parcela(s) antes de um erro.`;
+    setSyncResult({ ok, message: msg });
+    if (ok) toast.success(msg); else toast.error(msg);
   };
 
   const registrarWebhook = async () => {
