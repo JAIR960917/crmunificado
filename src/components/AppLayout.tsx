@@ -21,6 +21,7 @@ import { useLocation } from "react-router-dom";
 import AppSidebar from "./AppSidebar";
 import PwaInstallBanner from "./PwaInstallBanner";
 import NotificationBell from "./NotificationBell";
+import DailyGoalsPopup from "./DailyGoalsPopup";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 import { useCrediarioTheme } from "@/contexts/CrediarioThemeContext";
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-[100dvh] overflow-hidden">
+      <DailyGoalsPopup />
       {/* Sidebar fixa (desktop apenas) */}
       <div className="hidden lg:block flex-shrink-0">
         <AppSidebar />
