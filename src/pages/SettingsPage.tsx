@@ -69,8 +69,6 @@ export default function SettingsPage() {
         text_color: settings.text_color,
         button_color: settings.button_color,
         logo_url: settings.logo_url,
-        pwa_icon_192_url: settings.pwa_icon_192_url,
-        pwa_icon_512_url: settings.pwa_icon_512_url,
         pwa_splash_url: settings.pwa_splash_url,
         twilio_whatsapp_number: extra.twilio_whatsapp_number || "",
         whatsapp_cron_interval: extra.whatsapp_cron_interval || "5",
@@ -196,54 +194,6 @@ export default function SettingsPage() {
       .eq("setting_key", "logo_url");
     await refresh();
     toast.success("Logo removida");
-  };
-
-  const [pwaIconUploading, setPwaIconUploading] = useState<"192" | "512" | null>(null);
-
-  const handlePwaIconUpload = async (size: "192" | "512", e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Arquivo muito grande (máx. 5 MB)");
-      e.target.value = "";
-      return;
-    }
-
-    setPwaIconUploading(size);
-    try {
-      const data = await fileToBase64(file);
-      const contentType = file.type || "image/png";
-
-      const { data: result, error } = await supabase.functions.invoke("upload-pwa-icon", {
-        body: { contentType, data, size },
-      });
-
-      if (error) throw new Error(error.message);
-      if (result?.error) throw new Error(result.error);
-
-      const publicUrl = resolveStoragePublicUrl(result.publicUrl as string);
-      setValues((prev) => ({ ...prev, [`pwa_icon_${size}_url`]: publicUrl }));
-      await refresh();
-      toast.success("Ícone do PWA atualizado!");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao enviar ícone";
-      toast.error(msg);
-    } finally {
-      setPwaIconUploading(null);
-      e.target.value = "";
-    }
-  };
-
-  const handleRemovePwaIcon = async (size: "192" | "512") => {
-    const key = `pwa_icon_${size}_url`;
-    setValues((prev) => ({ ...prev, [key]: "" }));
-    await supabase
-      .from("system_settings")
-      .update({ setting_value: "", updated_at: new Date().toISOString() })
-      .eq("setting_key", key);
-    await refresh();
-    toast.success("Ícone removido");
   };
 
   /** Imagem de abertura (splash) do PWA — exibida em tela cheia por um instante ao abrir o app instalado. */
@@ -412,61 +362,6 @@ export default function SettingsPage() {
               </label>
               <p className="text-[11px] text-muted-foreground mt-1">PNG, JPG ou SVG</p>
             </div>
-          </div>
-        </div>
-
-        {/* Ícone do PWA (tela inicial do celular) */}
-        <div className="space-y-2">
-          <Label>Ícone do App (tela inicial do celular)</Label>
-          <p className="text-[11px] text-muted-foreground">
-            Aparece quando alguém instala o CRM como app no celular. Use uma imagem quadrada — 192x192 e 512x512.
-          </p>
-          <div className="flex flex-wrap gap-4">
-            {(["192", "512"] as const).map((size) => {
-              const key = `pwa_icon_${size}_url`;
-              const url = values[key];
-              return (
-                <div key={size} className="flex items-center gap-3">
-                  {url ? (
-                    <div className="relative">
-                      <img
-                        src={resolveStoragePublicUrl(url)}
-                        alt={`Ícone PWA ${size}x${size}`}
-                        className="h-16 w-16 rounded-lg object-contain border bg-card"
-                      />
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute -top-2 -right-2 h-6 w-6"
-                        onClick={() => handleRemovePwaIcon(size)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="h-16 w-16 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
-                      <Upload className="h-5 w-5 text-muted-foreground/50" />
-                    </div>
-                  )}
-                  <div>
-                    <label className="cursor-pointer">
-                      <Button variant="outline" size="sm" asChild disabled={pwaIconUploading === size}>
-                        <span>
-                          <Upload className="mr-1.5 h-3.5 w-3.5" />
-                          {pwaIconUploading === size ? "Enviando..." : `Enviar ${size}x${size}`}
-                        </span>
-                      </Button>
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        onChange={(e) => handlePwaIconUpload(size, e)}
-                      />
-                    </label>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
 
