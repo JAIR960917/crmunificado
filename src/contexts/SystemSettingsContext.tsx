@@ -166,6 +166,18 @@ function applyCSS(s: Settings) {
 let lastManifestBlobUrl: string | null = null;
 let lastManifestSignature: string | null = null;
 
+/** Confirma que a URL realmente carrega como imagem antes de referenciá-la
+ * no manifest — um ícone quebrado (upload corrompido, bucket privado, etc.)
+ * não pode invalidar o manifest inteiro e travar a instalação pra todo mundo. */
+function imageLoads(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
 async function applyManifestIcons(s: Settings) {
   if (!s.pwa_icon_192_url && !s.pwa_icon_512_url) return;
 
@@ -186,8 +198,20 @@ async function applyManifestIcons(s: Settings) {
       manifest.short_name = s.system_name.slice(0, 30);
     }
 
-    const icon192 = s.pwa_icon_192_url || s.pwa_icon_512_url;
-    const icon512 = s.pwa_icon_512_url || s.pwa_icon_192_url;
+    const icon192Candidate = s.pwa_icon_192_url || s.pwa_icon_512_url;
+    const icon512Candidate = s.pwa_icon_512_url || s.pwa_icon_192_url;
+    const [icon192Ok, icon512Ok] = await Promise.all([
+      icon192Candidate ? imageLoads(icon192Candidate) : Promise.resolve(false),
+      icon512Candidate ? imageLoads(icon512Candidate) : Promise.resolve(false),
+    ]);
+    // Nenhum ícone customizado carregou — mantém o manifest estático padrão
+    // (com os ícones já embutidos no build) em vez de publicar um manifest
+    // quebrado via Blob.
+    if (!icon192Ok && !icon512Ok) return;
+    // Caminho relativo do fallback também precisa ser absoluto (mesmo motivo
+    // do start_url/scope abaixo — não resolve contra um Blob URL).
+    const icon192 = new URL(icon192Ok ? icon192Candidate! : "/pwa-192x192.png", location.origin).href;
+    const icon512 = new URL(icon512Ok ? icon512Candidate! : "/pwa-512x512.png", location.origin).href;
     manifest.icons = [
       { src: icon192, sizes: "192x192", type: "image/png", purpose: "any" },
       { src: icon192, sizes: "192x192", type: "image/png", purpose: "maskable" },
