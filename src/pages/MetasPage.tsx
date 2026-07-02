@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Target, Store, Users, RefreshCw } from "lucide-react";
+import { Loader2, Target, Store, Users, RefreshCw, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,6 +40,7 @@ export default function MetasPage() {
   const [goals, setGoals] = useState<SalesGoal[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [mappings, setMappings] = useState<Mapping[]>([]);
 
   // Os valores "atingido" ficam salvos na própria meta (sales_goals.atingido_amount),
   // atualizados só pelo admin (botão abaixo). Vendedores/gerentes apenas leem o que
@@ -63,14 +64,19 @@ export default function MetasPage() {
     const companyIds = Array.from(new Set(gs.map((g) => g.company_id)));
     const userIds = Array.from(new Set(gs.map((g) => g.user_id).filter((x): x is string => !!x)));
 
-    const [compRes, profRes] = await Promise.all([
+    const [compRes, profRes, mapRes] = await Promise.all([
       supabase.from("companies").select("id, name").in("id", companyIds),
       userIds.length > 0
         ? supabase.from("profiles").select("user_id, full_name").in("user_id", userIds)
         : Promise.resolve({ data: [] as Profile[] }),
+      supabase
+        .from("ssotica_user_mappings")
+        .select("company_id, user_id, ssotica_funcionario_id")
+        .in("company_id", companyIds),
     ]);
     setCompanies((compRes.data as Company[]) || []);
     setProfiles((profRes.data as Profile[]) || []);
+    setMappings((mapRes.data as Mapping[]) || []);
     setLoading(false);
   };
 
@@ -88,7 +94,8 @@ export default function MetasPage() {
         .from("ssotica_user_mappings")
         .select("company_id, user_id, ssotica_funcionario_id")
         .in("company_id", companyIds);
-      const mappings = (mapRes as Mapping[]) || [];
+      const freshMappings = (mapRes as Mapping[]) || [];
+      setMappings(freshMappings);
 
       // Uma chamada por combinação única de empresa+período (evita repetir para
       // metas individuais que compartilham a mesma loja/período).
@@ -126,7 +133,7 @@ export default function MetasPage() {
         if (g.scope === "company") {
           atingido = vendas.reduce((acc, v) => acc + Number(v.valor_liquido || 0), 0);
         } else {
-          const mapping = mappings.find((m) => m.company_id === g.company_id && m.user_id === g.user_id);
+          const mapping = freshMappings.find((m) => m.company_id === g.company_id && m.user_id === g.user_id);
           if (mapping) {
             atingido = vendas
               .filter((v) => v.funcionario?.id === mapping.ssotica_funcionario_id)
@@ -193,8 +200,13 @@ export default function MetasPage() {
   const nomeDaLinha = (g: GoalWithPct) =>
     g.scope === "company" ? (g.label || companyName(g.company_id)) : userName(g.user_id);
 
+  const semMapeamento = (g: GoalWithPct) =>
+    g.scope === "user" &&
+    !mappings.some((m) => m.company_id === g.company_id && m.user_id === g.user_id);
+
   const GoalCard = ({ g }: { g: GoalWithPct }) => {
     const pctClamped = Math.min(100, Math.max(0, g.pct));
+    const semMap = semMapeamento(g);
     return (
       <div className="rounded-lg border bg-card p-4 space-y-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -209,6 +221,15 @@ export default function MetasPage() {
             {g.pct.toFixed(2)}%
           </Badge>
         </div>
+        {semMap && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>
+              Sem vínculo com um vendedor da SSótica nesta empresa — o valor "Atingido" fica
+              zerado. Configure em Integrações SSótica → Vendedores.
+            </span>
+          </div>
+        )}
         <Progress value={pctClamped} />
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
