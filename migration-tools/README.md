@@ -96,6 +96,79 @@ continuam funcionando enquanto a VPS de produção atual existir.
 
 ---
 
+## Parte 1B — Conteúdo do CRM quando o destino JÁ TEM empresas/usuários
+
+Use esta parte em vez da Parte 1 acima se a VPS nova **já tem empresas e
+usuários cadastrados de forma independente** (por exemplo, porque você já
+configurou o Crediário/SSótica nela antes de trazer os dados do CRM). Nesse
+caso os UUIDs de `companies`/`profiles` do destino **não coincidem** com os
+da produção antiga, e aplicar `data.sql` da Parte 1 direto criaria empresas
+e usuários **duplicados**.
+
+`07_migrate_crm_content.mjs` resolve isso casando:
+- **empresas** por CNPJ (fallback: nome) — cria a empresa no destino
+  (mantendo o mesmo id) se não achar correspondência;
+- **usuários** por e-mail — cria o usuário no destino (auth + profile +
+  papel, mantendo o mesmo id, **sem senha**) se não achar correspondência.
+
+Depois migra o **conteúdo**: leads, cobranças, renovações (com notas,
+atividades, agendamentos e histórico) e conversas de WhatsApp — remapeando
+toda referência de empresa/usuário para os ids corretos do destino.
+
+**Não migra** (propositalmente, ver comentário no topo do script para o
+motivo de cada um): tabelas de configuração (colunas do Kanban, formulários,
+papéis, horário de funcionamento — você já configurou isso manualmente no
+sistema novo), checklist/eventos de fluxo de cobrança, auditoria de abertura
+de card, e a instância/conexão do WhatsApp (o sistema novo já tem a própria
+ativa — as conversas migradas ficam como histórico, sem instância vinculada,
+e não é possível responder por elas ali).
+
+⚠️ **Faça um backup do banco da VPS nova antes de rodar** — a resolução de
+empresas/usuários é aplicada **na hora** (não é só gerar um .sql para
+revisar, como o resto do fluxo):
+
+```bash
+docker exec supabase-db pg_dump -U postgres -d postgres -Fc -f /tmp/backup_pre_migracao.dump
+docker cp supabase-db:/tmp/backup_pre_migracao.dump ./backup_pre_migracao.dump
+```
+
+### Passo 1: Rodar o script
+
+```bash
+cd /opt/crm/migration-tools
+export SOURCE_URL="https://api.joonker.com.br"
+export SOURCE_SERVICE_KEY="COLE_A_SERVICE_ROLE_DA_VPS_ATUAL"
+export TARGET_URL="https://api-crmunificado.joonker.com.br"
+export TARGET_SERVICE_KEY="$(grep '^SERVICE_ROLE_KEY=' /opt/crm/.env | cut -d= -f2-)"
+
+node 07_migrate_crm_content.mjs
+```
+
+Leia o resumo no terminal: quantas empresas/usuários já bateram, quantos
+foram criados do zero, e se algum falhou. Usuários criados do zero
+precisam usar "Esqueci minha senha" no sistema novo.
+
+Abra `./crm_data.sql` e dê uma olhada antes de aplicar.
+
+### Passo 2: Aplicar no destino
+
+```bash
+docker cp crm_data.sql supabase-db:/tmp/crm_data.sql
+docker exec supabase-db psql -U postgres -d postgres -f /tmp/crm_data.sql 2>&1 | tee crm_data_apply.log
+
+docker exec supabase-db psql -U postgres -d postgres -c "
+  SELECT 'crm_leads' AS t, count(*) FROM public.crm_leads
+  UNION ALL SELECT 'crm_renovacoes', count(*) FROM public.crm_renovacoes
+  UNION ALL SELECT 'crm_cobrancas', count(*) FROM public.crm_cobrancas
+  UNION ALL SELECT 'whatsapp_conversations', count(*) FROM public.whatsapp_conversations
+  UNION ALL SELECT 'whatsapp_messages', count(*) FROM public.whatsapp_messages;
+"
+```
+
+Compare com os totais da produção atual antes de considerar concluído.
+
+---
+
 ## Parte 2 — Dados do Crediário (consultasjoonker)
 
 Diferente da Parte 1, aqui os IDs de empresa e usuário **não coincidem**
