@@ -4,9 +4,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
 import { Loader2, Target, Store, Users, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -179,47 +177,42 @@ export default function MetasPage() {
   const nomeDaLinha = (g: GoalWithProgress) =>
     g.scope === "company" ? (g.label || companyName(g.company_id)) : userName(g.user_id);
 
-  const GoalsTable = ({ list }: { list: GoalWithProgress[] }) => (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Nome</TableHead>
-            <TableHead>Empresa</TableHead>
-            <TableHead>Período</TableHead>
-            <TableHead className="text-right">Meta</TableHead>
-            <TableHead className="text-right">Atingido</TableHead>
-            <TableHead className="text-right">Progresso</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {list.map((g) => (
-            <TableRow key={g.id}>
-              <TableCell className="font-medium">
-                {nomeDaLinha(g)}
-                {g.scope === "user" && g.label && (
-                  <div className="text-[11px] text-muted-foreground font-normal">{g.label}</div>
-                )}
-              </TableCell>
-              <TableCell className="text-muted-foreground text-sm">{companyName(g.company_id)}</TableCell>
-              <TableCell className="whitespace-nowrap text-muted-foreground text-xs">
-                {fmtDate(g.period_start)} a {fmtDate(g.period_end)}
-              </TableCell>
-              <TableCell className="text-right whitespace-nowrap">{fmtBRL(g.target_amount)}</TableCell>
-              <TableCell className="text-right whitespace-nowrap">
-                {progressLoaded ? fmtBRL(g.atingido) : "—"}
-              </TableCell>
-              <TableCell className="text-right">
-                <Badge className="bg-primary/10 text-primary border-primary/30">
-                  {progressLoaded ? `${g.pct.toFixed(2)}%` : "—"}
-                </Badge>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
+  const GoalCard = ({ g }: { g: GoalWithProgress }) => {
+    const pctClamped = Math.min(100, Math.max(0, g.pct));
+    return (
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <div className="font-medium">{nomeDaLinha(g)}</div>
+            <div className="text-xs text-muted-foreground">
+              {companyName(g.company_id)} · {fmtDate(g.period_start)} a {fmtDate(g.period_end)}
+              {g.scope === "user" && g.label ? ` · ${g.label}` : ""}
+            </div>
+          </div>
+          <Badge className="bg-primary/10 text-primary border-primary/30">
+            {progressLoaded ? `${g.pct.toFixed(2)}%` : "—"}
+          </Badge>
+        </div>
+        <Progress value={progressLoaded ? pctClamped : 0} />
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">
+            Atingido:{" "}
+            <span className="font-medium text-foreground">
+              {progressLoaded ? fmtBRL(g.atingido) : "—"}
+            </span>
+          </span>
+          <span className="text-muted-foreground">
+            Meta: <span className="font-medium text-foreground">{fmtBRL(g.target_amount)}</span>
+          </span>
+        </div>
+        {progressLoaded && (
+          <div className="text-xs text-muted-foreground">
+            Falta {fmtBRL(Math.max(0, g.target_amount - g.atingido))} para atingir a meta.
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <AppLayout>
@@ -276,8 +269,10 @@ export default function MetasPage() {
                     Minha meta
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <GoalsTable list={minhasMetas} />
+                <CardContent className="space-y-3">
+                  {minhasMetas.map((g) => (
+                    <GoalCard key={g.id} g={g} />
+                  ))}
                 </CardContent>
               </Card>
             )}
@@ -290,8 +285,10 @@ export default function MetasPage() {
                     Meta da loja
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <GoalsTable list={metasDaLoja} />
+                <CardContent className="space-y-3">
+                  {metasDaLoja.map((g) => (
+                    <GoalCard key={g.id} g={g} />
+                  ))}
                 </CardContent>
               </Card>
             )}
@@ -304,8 +301,10 @@ export default function MetasPage() {
                     {isGerente ? "Metas da equipe" : "Todas as metas"}
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <GoalsTable list={metasDaEquipe} />
+                <CardContent className="space-y-3">
+                  {metasDaEquipe.map((g) => (
+                    <GoalCard key={g.id} g={g} />
+                  ))}
                 </CardContent>
               </Card>
             )}
