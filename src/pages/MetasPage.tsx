@@ -30,7 +30,7 @@ const fmtDate = (d: string) => format(new Date(d + "T00:00:00"), "dd/MM/yyyy");
 type GoalWithProgress = SalesGoal & { atingido: number; pct: number };
 
 export default function MetasPage() {
-  const { user, isGerente } = useAuth();
+  const { user, isAdmin, isGerente } = useAuth();
   const [loading, setLoading] = useState(true);
   const [goals, setGoals] = useState<SalesGoal[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -236,12 +236,12 @@ export default function MetasPage() {
               </Card>
             )}
 
-            {isGerente && metasDaEquipe.length > 0 && (
+            {(isGerente || isAdmin) && metasDaEquipe.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Users className="h-4 w-4" />
-                    Metas da equipe
+                    {isGerente ? "Metas da equipe" : "Todas as metas"}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
