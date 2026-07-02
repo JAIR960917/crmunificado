@@ -437,6 +437,15 @@ Deno.serve(async (req) => {
       return jsonResp({ error: "Sessão inválida" }, 401);
     }
 
+    // Empresa de quem está consultando — usada para separar o relatório de
+    // uso por loja (antes essa coluna nunca era preenchida aqui).
+    const { data: profileRow } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", userData.user.id)
+      .maybeSingle();
+    const companyId = profileRow?.company_id ?? null;
+
     const body = await req.json().catch(() => ({}));
     const cpf = onlyDigits(body?.cpf ?? "");
     if (!isValidCPF(cpf)) return jsonResp({ error: "CPF inválido" }, 400);
@@ -546,6 +555,7 @@ Deno.serve(async (req) => {
 
     const { error: insertErr } = await supabase.from("crediario_consultas").insert({
       user_id: userData.user.id,
+      company_id: companyId,
       cpf,
       nome: serasa.nome,
       score: serasa.score,
